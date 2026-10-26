@@ -1,0 +1,6 @@
+# a Vercel publica só o jogo (arquivos estáticos); o servidor online roda no Render
+server
+package.json
+package-lock.json
+render.yaml
+node_modules
