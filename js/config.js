@@ -23,7 +23,7 @@ window.CFG = {
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)
-  ONLINE_SERVER: '',
+  ONLINE_SERVER: 'wss://kartec.onrender.com/ws',
   COINS_ON: false,              // sistema de moedas mantido no código, desligado por enquanto
   // preenchimento de cenário (scenery.js): densidade relativa e alcance do horizonte
   FILL: { DENSITY: 1, LITE_DENSITY: 0.45, CHUNK: 300, CULL_EVERY: 0.25 },
