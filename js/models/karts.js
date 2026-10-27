@@ -74,12 +74,6 @@
         const lip = new THREE.TorusGeometry(r * rimR * 0.93, r * 0.05, 6, 20); lip.rotateY(Math.PI / 2);
         const ring = new THREE.Mesh(lip, st === 'cyber' ? M.neon : M.chrome); ring.position.x = face; roll.add(ring);
         if (st === 'cyber') { this.neons.push(ring); const in2 = new THREE.Mesh(new THREE.TorusGeometry(r * 0.35, r * 0.04, 5, 16), M.neon); in2.geometry.rotateY(Math.PI / 2); in2.position.x = face; roll.add(in2); }
-        else if (st === 'mag') {   // liga leve clássica: fundo escuro, 5 raios largos prateados, aro e miolo cromados, faixa vermelha no flanco
-          const R = r * rimR, dk = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.95, R * 0.95, 0.05, 24).rotateZ(Math.PI / 2), M.dark); dk.position.x = face; roll.add(dk);
-          for (let i = 0; i < 5; i++) { const a = i / 5 * Math.PI * 2, sp = new THREE.Mesh(GEO.rbox(0.09, R * 0.82, R * 0.3, 0.04, 1), M.gray); sp.geometry.translate(0, R * 0.41, 0); sp.rotation.x = a; sp.position.x = face + s * 0.03; roll.add(sp); }
-          const cap = new THREE.Mesh(new THREE.SphereGeometry(R * 0.26, 14, 8), M.chrome); cap.scale.x = 0.5; cap.position.x = face + s * 0.05; roll.add(cap);
-          const red = new THREE.MeshBasicMaterial({ color: 0xd8262a }); red.userData.unique = true;
-          const rl = new THREE.Mesh(new THREE.TorusGeometry(r * 0.8, r * 0.025, 5, 32).rotateY(Math.PI / 2), red); rl.position.x = s * w * 0.5; roll.add(rl); }
         else if (st === 'spoke') { for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, sp = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, r * rimR * 1.8, 5), M.chrome); sp.rotation.x = a; sp.position.x = face * 0.6; roll.add(sp); } const hb = new THREE.Mesh(new THREE.SphereGeometry(r * 0.16, 14, 10), M.chrome); hb.scale.x = 0.7; hb.position.x = face; roll.add(hb); }
         else {
           const hub = new THREE.Mesh(new THREE.SphereGeometry(r * rimR * (st === 'deep' ? 0.62 : 0.8), 14, 8), M.hub); hub.scale.x = 0.45; hub.position.x = face; roll.add(hub);   // calota em domo (brinquedo)
@@ -259,7 +253,7 @@
       { const sb = bx(1.4, 1.2, 0.26, 0.13, M.seat, 0, 1.75, -1.6); sb.rotation.x = -0.18; bx(1.4, 0.24, 1.0, 0.1, M.seat, 0, 1.28, -1.05); }
       // eixos e rodas: dianteiras pequenas, traseiras de arrancada (liga leve com faixa vermelha)
       k.rod(V(-1.9, 1.28, -2.15), V(1.9, 1.28, -2.15), 0.12, M.dark); k.rod(V(-1.45, 0.66, 2.6), V(1.45, 0.66, 2.6), 0.08, M.dark);
-      [-1, 1].forEach(s => { k.wheel(s * 1.55, 0.66, 2.6, 0.66, 0.62, { steer: true, style: 'mag' }); k.wheel(s * 1.95, 1.28, -2.15, 1.28, 1.35, { style: 'mag' }); });
+      [-1, 1].forEach(s => { k.wheel(s * 1.55, 0.66, 2.6, 0.66, 0.62, { steer: true }); k.wheel(s * 1.95, 1.28, -2.15, 1.28, 1.35, { style: 'deep' }); });
       const sw = at(0, 1.92, 0.0), sb = at(0, 1.45, 0.5);
       const hands = k.steering(sw, 0.95 + RAKE, 0.34, sb);
       const feet = k.pedals([at(0.22, 1.3, 0.45), at(-0.22, 1.3, 0.45)]);
@@ -429,6 +423,7 @@
     if (opts.outline !== false) {
       Toon.outline(body, 0.05); mergeByMaterial(body, { skip: o => !o.userData.outline });
       k.rolls.forEach(r => { Toon.outline(r.g, 0.04, null, 0x0c0c0e); mergeByMaterial(r.g, { skip: o => !o.userData.outline }); });
+    group.traverse(o => { if (o.isMesh || o.isSprite) o.frustumCulled = false; });   // kart inteiro sempre desenhado (são poucos objetos; evita sumir na borda da tela)
     }
     // volante/guidão gira inteiro: agrupa as peças dele dentro do próprio grupo giratório
     if (k.steer) mergeByMaterial(k.steer.spin);

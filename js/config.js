@@ -23,7 +23,7 @@ window.CFG = {
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)
-  ONLINE_SERVER: 'wss://kartec.onrender.com/ws',
+  ONLINE_SERVER: '',
   COINS_ON: false,              // sistema de moedas mantido no código, desligado por enquanto
   // preenchimento de cenário (scenery.js): densidade relativa e alcance do horizonte
   FILL: { DENSITY: 1, LITE_DENSITY: 0.45, CHUNK: 300, CULL_EVERY: 0.25 },
@@ -43,16 +43,16 @@ window.CFG = {
 
   // ---------- física do kart (unidades: metros e segundos) ----------
   PHYS: {
-    MAX: 46,          // velocidade máxima normal (m/s) -> ~120 km/h no velocímetro
+    MAX: 52,          // velocidade máxima normal (m/s) -> ~135 km/h no velocímetro (antes 46 / ~120 km/h)
     MAXREV: 14,       // ré
-    ACC: 26,          // aceleração
-    BRAKE: 40,        // freio
-    TURN: 1.9,        // taxa de giro máxima (rad/s) em baixa velocidade
+    ACC: 30,          // aceleração (acompanha a velocidade nova: chega no máximo no mesmo tempo de antes)
+    BRAKE: 44,        // freio
+    TURN: 2.0,        // taxa de giro máxima (rad/s) em baixa velocidade
     GRAV: 30,         // gravidade dos saltos
     KMH: 2.6,         // fator m/s -> "km/h" exibido
-    DRIFT_R_IN: 38,   // raio do drift segurando para dentro da curva (m)
-    DRIFT_R_MID: 62,  // raio do drift sem direcional
-    DRIFT_R_OUT: 120, // raio do drift segurando para fora
+    DRIFT_R_IN: 40,   // raio do drift segurando para dentro da curva (m)
+    DRIFT_R_MID: 66,  // raio do drift sem direcional
+    DRIFT_R_OUT: 126, // raio do drift segurando para fora
     KART_RADIUS: 1.9  // raio de colisão entre karts
   },
 
@@ -89,6 +89,8 @@ window.CFG = {
   SKIN_TONES: ['#f6cfae', '#f2b48a', '#d99a6c', '#b87a4e', '#8a5634', '#5e3a22'],
 
   // ---------- pistas ----------
+  // Curvas extras (2026): chicanas em "S" nas retas longas; cada S é curva/contracurva/curva com o mesmo
+  // rumo de entrada e saída, então o circuito continua fechando exatamente.
   // segs: traçado em "tartaruga": ['S', comprimento] = reta, ['L'|'R', raio, graus] = curva (esq./dir.).
   // As listas já fecham o circuito (ponto final = inicial). O construtor amostra a cada 14 m e centraliza.
   // N: nós por volta (espaçamento de ~3,5 a 4,3 m, igual à versão anterior: física, IA e adereços continuam calibrados).
@@ -98,22 +100,22 @@ window.CFG = {
     {
       id: 'classic', name: 'Circuito Clássico',
       desc: 'Curvas longas para segurar o drift, rio com duas pontes, cachoeira e laguinhos.',
-      W: 20, N: 850, startIdx: 41, time: 0.34,
-      segs: [['S',474.0],['L',170.0,90],['S',106.2],['L',138.0,75],['S',42.5],['R',148.8,75],['S',127.5],['L',191.2,120],['S',375.0],['R',138.0,60],['S',42.5],['L',159.5,150],['S',421.9],['L',212.5,60],['S',219.0]],
-      bridges: [459, 816],
-      pads: [[102,0],[303,7],[377,-7],[520,0],[595,7],[700,-6],[773,-7]],
+      W: 20, N: 870, startIdx: 41, time: 0.34,
+      segs: [['S',250],['R',70,48],['L',70,96],['R',70,48],['S',15.9],['L',170.0,90],['S',106.2],['L',138.0,75],['S',42.5],['R',148.8,75],['S',8],['L',55,30],['R',55,60],['L',55,30],['S',9.5],['L',191.2,120],['S',278],['R',46,30],['L',46,60],['R',46,30],['S',5.0],['R',138.0,60],['S',42.5],['L',159.5,150],['S',15],['R',60,45],['L',60,90],['R',60,45],['S',30.3],['L',60,45],['R',60,90],['L',60,45],['S',37.2],['L',212.5,60],['S',219.0]],
+      bridges: [468, 836],
+      pads: [[108,0],[310,7],[386,-7],[530,0],[605,7],[715,-6],[793,-7]],
       ramps: [],
-      wall: [136, 255],
+      wall: [143, 262],
       sky: { fog: 0xdbe9f8 }, fogFar: 1500   // névoa mais longe: as montanhas do horizonte aparecem em camadas
     },
     {
       id: 'city', name: 'Cidade Brasileira',
       desc: 'Avenidas em quarteirões, túnel longo sob a linha do trem, calçadão de ondas, prédios coloridos e bandeirinhas. Começa no fim da tarde.',
-      W: 19, N: 970, startIdx: 50, time: 0.72,
-      tunnel: [528, 700],     // túnel longo: a reta inteira (~520 m) e a curva seguinte; o trem passa por cima, no meio dele
-      segs: [['S',636.0],['L',102.0,90],['S',170.0],['L',102.0,90],['S',191.2],['R',102.0,90],['S',148.8],['L',102.0,90],['S',515.8],['L',102.0,90],['S',191.2],['L',102.0,90],['S',70.7],['R',102.0,90],['S',127.5],['L',102.0,90]],
+      W: 19, N: 1000, startIdx: 50, time: 0.72,
+      tunnel: [550, 723],     // túnel longo: a reta inteira (~520 m) e a curva seguinte; o trem passa por cima, no meio dele
+      segs: [['S',250],['L',70,45],['R',70,90],['L',70,45],['S',7.0],['R',60,40],['L',60,80],['R',60,40],['S',26.7],['L',102.0,90],['S',15],['R',55,40],['L',55,80],['R',55,40],['S',13.6],['L',102.0,90],['S',20],['L',60,42],['R',60,84],['L',60,42],['S',10.6],['R',102.0,90],['S',10],['R',50,40],['L',50,80],['R',50,40],['S',10.2],['L',102.0,90],['S',515.8],['L',102.0,90],['S',20],['L',60,42],['R',60,84],['L',60,42],['S',10.6],['L',102.0,90],['S',70.7],['R',102.0,90],['S',8],['R',45,38],['L',45,76],['R',45,38],['S',8.7],['L',102.0,90]],
       bridges: [],
-      pads: [[125,0],[315,6],[451,-6],[600,0],[760,5],[868,6]],
+      pads: [[131,0],[329,6],[472,-6],[622,0],[786,5],[895,6]],
       ramps: [],
       wall: null,
       sky: { fog: 0xe8c9b0 }, fogFar: 1100
@@ -121,10 +123,10 @@ window.CFG = {
     {
       id: 'beach', name: 'Praia',
       desc: 'Orla à beira-mar com coqueiros, quiosques, farol e mar em volta da ilha.',
-      W: 19, N: 850, startIdx: 34, time: 0.47,
-      segs: [['S',562.4],['L',191.2,100],['S',170.0],['R',148.8,60],['L',170.0,140],['S',500.1],['L',233.8,80],['S',253.3],['R',131.8,50],['L',159.5,150],['S',94.9]],
+      W: 19, N: 880, startIdx: 34, time: 0.47,
+      segs: [['S',200],['L',75,45],['R',75,90],['L',75,45],['S',2.9],['R',50,35],['L',50,70],['R',50,35],['S',32.7],['L',191.2,100],['S',20],['L',55,38],['R',55,76],['L',55,38],['S',14.6],['R',148.8,60],['L',170.0,140],['S',20],['R',65,45],['L',65,90],['R',65,45],['S',26.1],['L',65,48],['R',65,96],['L',65,48],['S',76.9],['L',233.8,80],['S',25],['R',60,45],['L',60,90],['R',60,45],['S',58.6],['R',131.8,50],['L',159.5,150],['S',94.9]],
       bridges: [],
-      pads: [[119,6],[348,0],[430,-6],[510,-6],[680,0],[790,6]],
+      pads: [[126,6],[360,0],[443,-6],[532,-6],[709,0],[820,6]],
       ramps: [],
       wall: null,
       sky: { fog: 0xd6ecf8 }, fogFar: 1350

@@ -16,7 +16,7 @@
   document.body.prepend(renderer.domElement);
   TX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
-  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 1.5, CFG.CAMERA_FAR || 2300);
+  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
   renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); console.warn('contexto WebGL perdido — aguardando restauração'); });
   renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -35,7 +35,7 @@
     dayT: 0.35, nightF: 0, SUNDIR: new THREE.Vector3(0.4, 0.7, 0.3).normalize(),
     build(scene, def) {
       this.scene = scene; this.def = def; this.dayT = def.time;
-      this.fogFar = def.fogFar || 820;
+      this.baseFogFar = def.fogFar || 820; this.fogFar = this.baseFogFar * (window.Settings ? Settings.viewMul() : 1);   // distância de visão (configurações)
       scene.fog = new THREE.Fog(0xdbe9f8, 130, this.fogFar); scene.background = new THREE.Color(0xdbe9f8);
       this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x6a9a4a, 0.8); scene.add(this.hemi);
       const sun = this.sun = new THREE.DirectionalLight(0xffe2b0, 0.95); scene.add(sun, sun.target);
@@ -161,7 +161,8 @@
       // agrupa toda a geometria parada por material: de ~1.300 para algumas dezenas de chamadas de desenho
       const st = GEO.mergeByMaterial(root); this.mergeStats = st;
       // preenchimento do mundo até o horizonte (instanciado, em blocos com culling por câmera e por distância)
-      this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY }));
+      const dens = window.Settings ? Settings.sceneryDensity() * (this.lite && Settings.autoPerf() ? 0.6 : 1) : (this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY);
+      this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: dens }));
       Fx.init(scene);
       scene.add(camera); UI.Fairy.build(camera);
       if (opts && opts.online) {
@@ -198,6 +199,7 @@
       UI.Mini.build(this.track, { player: this.spec.color, bot: this.botColor });
       Env.setBlockers(this.track.blockers);
       this.cam.ang = this.player.ang; this.cam.yaw = 0; this.cam.pitch = 0;
+      document.body.classList.toggle('moto', !!(this.player.m && this.player.m.moto));
       this.wrongT = 0;
       if (this.lite) this.setLite(true);
     },
@@ -236,7 +238,7 @@
       else if (ev === 'bump') S.bump(); else if (ev === 'land') S.land(); else if (ev === 'driftStart') S.drift(); else if (ev === 'coin') S.coin();
       else if (ev === 'lap' && this.state === 'race') {
         const l = this.player.lap;
-        if (l === CFG.LAPS) { UI.toast('Última volta!', 1800); S.lap(); } else if (l > 1 && l <= CFG.LAPS) { UI.toast('Volta ' + l, 1200); S.lap(); }
+        if (l === CFG.LAPS) { UI.toast('Última volta!', 1800); S.finalLap(); } else if (l > 1 && l <= CFG.LAPS) { UI.toast('Volta ' + l, 1200); S.lap(); }
       }
     },
 
@@ -386,7 +388,7 @@
       this.kartLod(dt);
       UI.Fairy.step(dt, camera);
       UI.hud(P, this.rivals, this.race);
-      UI.Sfx.step(P, true);
+      UI.Sfx.step(P, true, this.rivals);
       this.updateCamera(dt);
     },
     // vácuo: colado atrás do outro por ~1 s = empurrão
@@ -455,10 +457,8 @@
         if (!k._outl) { k._outl = []; k.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) k._outl.push(o); }); }
         const d2 = k.pos.distanceToSquared(cp), near = !this.lite && (k === this.player || d2 < 55 * 55);
         if (k._near !== near) { k._near = near; k._outl.forEach(o => o.visible = near); }
-        // rival ENTRE a câmera e o jogador (ex.: largando logo atrás): some por um instante em vez de tapar a visão
-        if (k !== this.player) { const px = P.pos.x - cp.x, pz = P.pos.z - cp.z, L = Math.hypot(px, pz) || 1, kx = k.pos.x - cp.x, kz = k.pos.z - cp.z;
-          const along = (kx * px + kz * pz) / L, lat = Math.abs(kx * pz - kz * px) / L;
-          k.m.group.visible = !(along > -1 && along < L - 1.5 && lat < 3.4) && d2 > 4 * 4; }
+        // os karts NUNCA são escondidos por proximidade: perto da câmera, perto do jogador, colados — sempre visíveis
+        if (k !== this.player && !k.gone && !k.m.group.visible) k.m.group.visible = true;
       });
     },
     // vácuo: colado atrás de qualquer kart por ~1 s = empurrão (vale para todos os 8)
@@ -475,7 +475,7 @@
     },
     wrongWay(dt, k) {
       const t = this.track.T[k.idx], dot = Math.sin(k.ang) * t.x + Math.cos(k.ang) * t.z;
-      if (dot < -0.3 && Math.abs(k.speed) > 5) { this.wrongT += dt; if (this.wrongT > 1.2) { UI.toast('Contramão!', 1000); this.wrongT = -1.5; } } else this.wrongT = Math.min(0, this.wrongT + dt);
+      if (dot < -0.3 && Math.abs(k.speed) > 5) { this.wrongT += dt; if (this.wrongT > 1.2) { UI.toast('Contramão!', 1000); UI.Sfx.wrong(); this.wrongT = -1.5; } } else this.wrongT = Math.min(0, this.wrongT + dt);
     },
     orbitCam() {
       const P = this.player, c = this.cam, d = 17;
@@ -486,7 +486,7 @@
       if (this.state === 'finish') { c.ang += dt * 0.6; this.orbitCam(); return; }
       c.ang += wrapA(P.mvAng - c.ang) * Math.min(1, 5 * dt);
       if (!c.drag) { c.yaw *= Math.max(0, 1 - 2 * dt); c.pitch *= Math.max(0, 1 - 2 * dt); }
-      const a = c.ang + c.yaw, dist = (12.5 + Math.abs(P.speed) * 0.04) * c.zoom, h = (5.6 + c.pitch * 8) * c.zoom;
+      const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = (12.5 + Math.abs(P.speed) * 0.04) * c.zoom, h = (5.6 - spN * 0.55 + c.pitch * 8) * c.zoom;   // câmera desce um pouco na velocidade
       const tx = P.pos.x - Math.sin(a) * dist, tz = P.pos.z - Math.cos(a) * dist; let ty = Math.max(P.pos.y + h, 1.5);
       const tr = this.track, ceil = tr.ceilingAt ? Math.min(tr.ceilingAt({ x: tx, z: tz }, P.idx), tr.ceilingAt(camera.position, P.idx)) : Infinity;   // túnel: câmera não passa do teto
       ty = Math.min(ty, ceil);
@@ -495,7 +495,9 @@
       camera.position.y = Math.min(camera.position.y, ceil);
       camera.lookAt(P.pos.x + Math.sin(c.ang) * 4, P.pos.y + 2, P.pos.z + Math.cos(c.ang) * 4);
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
-      const fov = 60 + (P.boostT > 0 ? 9 : 0) + Math.min(6, Math.abs(P.speed) * 0.08);
+      // tremidinha fina acima de 75% da velocidade (sensação de velocidade, sem enjoar)
+      if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
+      const fov = 60 + (P.boostT > 0 ? 9 : 0) + Math.min(8, Math.abs(P.speed) * 0.1);
       camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();
       this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
     },
@@ -528,6 +530,8 @@
   addEventListener('pointermove', e => { const c = Game.cam; if (!c.drag) return; c.yaw -= (e.clientX - c.lx) * 0.006; c.pitch = Math.max(-0.4, Math.min(1, c.pitch + (e.clientY - c.ly) * 0.004)); c.lx = e.clientX; c.ly = e.clientY; });
   addEventListener('pointerup', e => { if (e.button === 2) Game.cam.drag = false; });
   addEventListener('wheel', e => { if (!Game.scene) return; Game.cam.zoom = Math.max(0.6, Math.min(1.8, Game.cam.zoom * (e.deltaY > 0 ? 1.08 : 0.93))); }, { passive: true });
+  // Ctrl+W fecha a aba no navegador e não pode ser bloqueado: durante a corrida o navegador pede confirmação antes
+  addEventListener('beforeunload', e => { if (Game.state === 'race' || Game.state === 'countdown' || Game.state === 'finish' || Game.online) { e.preventDefault(); e.returnValue = ''; } });
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); Podium.resize(); Showroom.resize(); Intro.resize(); });
 
   // ---------------- inicialização (espera as fontes para os textos em canvas saírem certos) ----------------
@@ -559,6 +563,7 @@
       }
     });
     Online.init();
+    Settings.init();
     Podium.build(); Podium.precompile(renderer); Env.initFlare();
     UI.screen('boot'); requestAnimationFrame(loop);
     // carrega o piloto 3D (com barra de progresso); só então monta a vitrine e começa a abertura
@@ -581,10 +586,11 @@
     const raw = Math.max(0, (now - last) / 1000) || 0, dt = Math.min(0.05, raw); last = now;
     if (Game.scene) { acc += raw; cnt++;
       if (acc > 2) { const avg = acc / cnt * 1000; acc = 0; cnt = 0;
-        const target = avg > 21 ? Math.max(CFG.PERF.DPR_MIN, dpr - 0.15) : avg < 15 ? Math.min(CFG.PERF.DPR_MAX, devicePixelRatio, dpr + 0.1) : dpr;
+        const fixed = window.Settings ? Settings.fixedDpr() : 0;   // resolução escolhida nas configurações (0 = automática)
+        const target = fixed ? fixed : avg > 21 ? Math.max(CFG.PERF.DPR_MIN, dpr - 0.15) : avg < 15 ? Math.min(window.Settings ? Settings.dprMax() : CFG.PERF.DPR_MAX, devicePixelRatio, dpr + 0.1) : dpr;
         if (Math.abs(target - dpr) > 0.01) { dpr = target; renderer.setPixelRatio(dpr); }
-        // aparelho muito fraco: já na resolução mínima e ainda lento -> modo leve (sem contornos de tinta)
-        else if (avg > 26 && dpr <= CFG.PERF.DPR_MIN + 0.01 && !Game.lite) Game.setLite(true); } }
+        // aparelho muito fraco (só no modo automático): já na resolução mínima e ainda lento -> sem contornos de tinta
+        else if (avg > 26 && dpr <= CFG.PERF.DPR_MIN + 0.01 && !Game.lite && (!window.Settings || Settings.autoPerf())) Game.setLite(true); } }
     Game.rawDt = raw; safe('jogo', () => Game.update(dt));
     if (Game.player && Game.scene && (!isFinite(Game.player.speed) || !isFinite(Game.player.pos.x))) Game.player.respawn();
     if (Game.bot && Game.scene && (!isFinite(Game.bot.speed) || !isFinite(Game.bot.pos.x))) Game.bot.respawn();

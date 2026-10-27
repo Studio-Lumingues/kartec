@@ -9,59 +9,8 @@
   const fmt = t => { const m = Math.floor(t / 60), s = Math.floor(t % 60), c = Math.floor((t % 1) * 100); return String(m).padStart(2, '0') + '’' + String(s).padStart(2, '0') + '”' + String(c).padStart(2, '0'); };
 
   // ================================ ÁUDIO ================================
-  const Sfx = {
-    on: true, ctx: null, eng: null,
-    unlock() {
-      try { this.ctx = this.ctx || new (window.AudioContext || window.webkitAudioContext)(); if (this.ctx.state === 'suspended') this.ctx.resume(); this.initEngine(); } catch (e) { }
-    },
-    initEngine() {
-      const A = this.ctx; if (!A || this.eng) return;
-      const o1 = A.createOscillator(), o2 = A.createOscillator(), lp = A.createBiquadFilter(), g = A.createGain(), lfo = A.createOscillator(), lfoG = A.createGain();
-      o1.type = 'sawtooth'; o2.type = 'square'; lp.type = 'lowpass'; lp.frequency.value = 500; lp.Q.value = 5; g.gain.value = 0;
-      lfo.frequency.value = 22; lfoG.gain.value = 4; lfo.connect(lfoG); lfoG.connect(o1.frequency);
-      o1.connect(lp); o2.connect(lp); lp.connect(g); g.connect(A.destination); o1.start(); o2.start(); lfo.start();
-      const nb = A.createBuffer(1, A.sampleRate, A.sampleRate), d = nb.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-      const ns = A.createBufferSource(); ns.buffer = nb; ns.loop = true; const bp = A.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2300; bp.Q.value = 7;
-      const ng = A.createGain(); ng.gain.value = 0; ns.connect(bp); bp.connect(ng); ng.connect(A.destination); ns.start();
-      this.eng = { o1, o2, lp, g, ng, bp, nb, lfo };
-    },
-    // motor do jogador: giro sobe dentro de cada marcha e cai na troca
-    step(k, active) {
-      const e = this.eng, A = this.ctx; if (!e || !A || A.state === 'closed') return; const t = A.currentTime;
-      const on = this.on && active && k;
-      const sp = k ? Math.min(1.5, Math.abs(k.speed) / CFG.PHYS.MAX) : 0;
-      const gp = Math.min(sp * 3, 4.49), gear = Math.floor(gp), fr = gp - gear;
-      let f = 46 + gear * 16 + fr * 58 + (k && k.boostT > 0 ? 28 : 0) + (k && k.drifting ? 8 : 0); if (!isFinite(f)) f = 46;
-      e.o1.frequency.setTargetAtTime(f, t, 0.06); e.o2.frequency.setTargetAtTime(f * 0.502, t, 0.06); e.lfo.frequency.setTargetAtTime(14 + f * 0.12, t, 0.1);
-      e.lp.frequency.setTargetAtTime(380 + sp * 1500 + (k && k.boostT > 0 ? 900 : 0), t, 0.08);
-      e.g.gain.setTargetAtTime(on ? 0.035 + 0.04 * Math.min(1, sp) : 0, t, 0.08);
-      const skid = on && (k.drifting || (Math.abs(k.steerVis) > 0.6 && Math.abs(k.speed) > CFG.PHYS.MAX * 0.62 && !k.off && !k.air));
-      e.ng.gain.setTargetAtTime(skid ? (k.drifting ? 0.05 : 0.03) : 0, t, 0.05);
-      e.bp.frequency.setTargetAtTime(k && k.drifting ? (k.driftT > 2 ? 2900 : k.driftT > 1 ? 2600 : 2200) : 2000, t, 0.1);
-    },
-    tone(f0, f1, d, type, vol, delay) {
-      const A = this.ctx; if (!A || !this.on) return;
-      try { const o = A.createOscillator(), g = A.createGain(), t = A.currentTime + (delay || 0);
-        o.type = type || 'square'; o.frequency.setValueAtTime(f0, t); if (f1) o.frequency.exponentialRampToValueAtTime(f1, t + d);
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol || 0.12, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-        o.connect(g); g.connect(A.destination); o.start(t); o.stop(t + d + 0.03); } catch (e) { }
-    },
-    noise(d, f0, f1, vol) {
-      const A = this.ctx; if (!A || !this.on || !this.eng) return;
-      try { const t = A.currentTime, s = A.createBufferSource(), f = A.createBiquadFilter(), g = A.createGain();
-        s.buffer = this.eng.nb; f.type = 'lowpass'; f.Q.value = 3; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + d * 0.7);
-        g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.04); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
-        s.connect(f); f.connect(g); g.connect(A.destination); s.start(t); s.stop(t + d + 0.05); } catch (e) { }
-    },
-    boost() { this.noise(0.7, 400, 4200, 0.22); this.tone(220, 660, 0.45, 'sawtooth', 0.07); },
-    coin() { this.tone(988, 0, 0.08, 'square', 0.11); this.tone(1319, 0, 0.28, 'square', 0.11, 0.075); },
-    bump() { this.tone(110, 70, 0.16, 'sawtooth', 0.14); },
-    land() { this.noise(0.25, 900, 120, 0.25); this.tone(90, 50, 0.2, 'sine', 0.2); },
-    drift() { this.tone(300, 0, 0.08, 'triangle', 0.12); },
-    lap() { [784, 988, 1175].forEach((f, i) => this.tone(f, 0, 0.12, 'square', 0.1, i * 0.09)); },
-    count(go) { this.tone(go ? 880 : 440, 0, go ? 0.8 : 0.28, 'square', 0.14); },
-    fanfare() { [[523, 0], [659, 0.14], [784, 0.28], [1047, 0.42], [784, 0.62], [1047, 0.76]].forEach(([f, d]) => { this.tone(f, 0, 0.3, 'square', 0.1, d); this.tone(f / 2, 0, 0.3, 'triangle', 0.08, d); }); this.tone(1047, 0, 1.2, 'square', 0.1, 0.95); this.tone(1319, 0, 1.2, 'triangle', 0.08, 0.95); }
-  };
+  // som: gravações reais (audio.js)
+  const Sfx = window.Sfx;
 
   // ================================ FATECXIE ================================
   // a fadinha amarela que traz o semáforo na largada (presa à câmera, como o "juiz" voador dos jogos de kart)
@@ -237,7 +186,8 @@
       this.el = $('speedLines'); this.el.style.backgroundImage = 'url(' + c.toDataURL() + ')'; this.v = 0;
     },
     step(k) {
-      if (!this.el) return; const sp = Math.abs(k.speed) / CFG.PHYS.MAX, t = k.boostT > 0 ? 0.85 : Math.max(0, (sp - 0.82) * 2.5);
+      if (!this.el) return; if (window.Settings && !Settings.g.speedFx) { this.el.style.opacity = 0; this.v = 0; return; }
+      const sp = Math.abs(k.speed) / CFG.PHYS.MAX, t = k.boostT > 0 ? 0.85 : Math.min(0.42, Math.max(0, (sp - 0.72) * 1.6));
       this.v += (t - this.v) * 0.15; this.el.style.opacity = this.v.toFixed(2);
       if (this.v > 0.02) this.el.style.transform = 'rotate(' + (Math.random() * 360).toFixed(0) + 'deg) scale(' + (1 + Math.random() * 0.06).toFixed(3) + ')';
     }
@@ -303,7 +253,7 @@
         if (e.code === 'Escape') { if (this.modal) this.closeModal(); else h.onEscape && h.onEscape(); return; }
         if (e.code === 'Enter' && !typing) { e.preventDefault(); Sfx.unlock(); if (this.modal === 'setup') { this.closeModal(true); h.onStart(); } else if (this.modal) this.closeModal(); else h.onEnter && h.onEnter(); return; }
         if (typing) return;
-        if (e.code === 'KeyM') { Sfx.on = !Sfx.on; this.toast(Sfx.on ? 'Som ligado' : 'Som desligado'); }
+        if (e.code === 'KeyM') { Sfx.setOn(!Sfx.on); this.toast(Sfx.on ? 'Som ligado' : 'Som desligado'); }
         if (e.code === 'KeyR' && h.onRestart) h.onRestart();
         if (e.code === 'KeyN' && h.onNextHour) h.onNextHour();
       });
@@ -345,7 +295,9 @@
       SCREENS.forEach(n => { const e = $(n === 'round' ? 'roundUI' : n === 'podium' ? 'podiumUI' : n); if (e && n !== 'race') e.hidden = n !== name; });
       if (name !== 'intro') { document.body.classList.remove('film', 'logoPhase'); if (prev === 'intro') this.introBlur(0); }
       if (name !== 'menu' && this.modal) this.closeModal(true);
-      if (name === 'menu') this.refreshTracks();
+      if (name === 'menu') { this.refreshTracks();
+        // entrada animada dos botões só ao chegar no menu; a classe sai no fim -> nada reinicia depois
+        if (prev !== 'menu') { const nav = document.querySelector('#menu .mainNav'); if (nav) { nav.classList.remove('enter'); void nav.offsetWidth; nav.classList.add('enter'); clearTimeout(this._navT); this._navT = setTimeout(() => nav.classList.remove('enter'), 1500); } } }
     },
     // cortina: escurece, troca a cena por baixo e revela (as trocas de cena 3D ficam invisíveis)
     transition(fn) {

@@ -144,8 +144,8 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 /* ---------- menu principal ---------- */
 #menu { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
 .mainNav { position: absolute; left: calc(32px + env(safe-area-inset-left, 0px)); bottom: calc(44px + env(safe-area-inset-bottom, 0px)); width: min(380px, 40vw); display: grid; gap: 12px; pointer-events: auto; }
-.mainNav > * { animation: navIn .55s cubic-bezier(.2, 1.2, .4, 1) both; }
-.mainNav > :nth-child(1) { animation-delay: .45s; } .mainNav > :nth-child(2) { animation-delay: .55s; } .mainNav > :nth-child(3) { animation-delay: .65s; }
+.mainNav.enter > * { animation: navIn .55s cubic-bezier(.2, 1.2, .4, 1) both; }
+.mainNav.enter > :nth-child(1) { animation-delay: .45s; } .mainNav.enter > :nth-child(2) { animation-delay: .55s; } .mainNav.enter > :nth-child(3) { animation-delay: .65s; } .mainNav.enter > :nth-child(4) { animation-delay: .75s; }
 @keyframes navIn { from { transform: translateX(-40px); opacity: 0; } to { transform: none; opacity: 1; } }
 .cta.big { font-size: 40px; padding: 16px 30px 18px; justify-content: space-between; }
 .navBtn { display: flex; align-items: center; gap: 14px; text-align: left; padding: 11px 18px; border: var(--line); border-radius: var(--r-md); background: var(--white); box-shadow: var(--pop); transition: transform .12s; }
@@ -247,7 +247,7 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 @media (max-width: 860px) {
   body[data-screen="menu"] #brand { left: 50%; width: min(380px, 84vw); transform: translateX(-50%); top: calc(14px + env(safe-area-inset-top, 0px)); }
   .mainNav { left: 50%; transform: translateX(-50%); width: min(420px, calc(100vw - 28px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
-  .mainNav > * { animation-name: fadeIn; }
+  .mainNav.enter > * { animation-name: fadeIn; }
   .cta.big { font-size: 32px; }
   .gTop h2 { font-size: 32px; }
   .gPanel { top: auto; left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); width: auto; height: 52vh; padding: 12px; border-radius: 22px; }
@@ -287,7 +287,7 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 /* ---------- efeito gelatina: qualquer botão "balança" ao ser tocado ---------- */
 .jelly { animation: jelly .5s cubic-bezier(.3, 1.6, .5, 1) !important; }
 @keyframes jelly { 0% { transform: scale(1); } 25% { transform: scale(1.12, .86); } 45% { transform: scale(.92, 1.1); } 65% { transform: scale(1.04, .96); } 82% { transform: scale(.99, 1.01); } 100% { transform: scale(1); } }
-.mainNav > *:hover, .gCard:hover, .navBtn:hover { animation: wobble .6s ease-in-out; }
+.mainNav:not(.enter) > *:hover, .gCard:hover, .mainNav:not(.enter) .navBtn:hover { animation: wobble .6s ease-in-out; }
 @keyframes wobble { 0%, 100% { rotate: 0deg; } 30% { rotate: -1.6deg; } 60% { rotate: 1.2deg; } }
 
 /* ---------- linhas de velocidade (aparecem com o turbo / velocidade alta) ---------- */
@@ -379,3 +379,52 @@ details.adv summary { cursor: pointer; }
 #lobbyReady.on { filter: hue-rotate(160deg); }
 body[data-screen="lobby"] #brand { opacity: 0; }
 @media (max-width: 760px) { #lobby { align-items: flex-end; justify-content: center; padding: 12px; } .lobbyCard { max-height: 62vh; } }
+
+/* botão de grau só aparece quando o kart do jogador é a moto */
+#touch .wh { display: none; }
+body.moto #touch .wh { display: inline-flex; align-items: center; justify-content: center; }
+
+/* ======================= CURSOR PERSONALIZADO =======================
+   Imagens 32 px + versão 2x para telas de alta densidade (image-set). O ponto ativo fica na ponta da seta
+   (3,2) e no centro do volante/texto (16,16). Se o navegador não aceitar uma forma, vale a anterior. */
+html, body, body > canvas, #trackList.cup .trackCard, .row, .card, .sheet, .lobbyCard { cursor: url("assets/cursors/arrow.png?v=202610270007") 3 2, default !important; cursor: -webkit-image-set(url("assets/cursors/arrow.png?v=202610270007") 1x, url("assets/cursors/arrow@2x.png?v=202610270007") 2x) 3 2, default !important; cursor: image-set(url("assets/cursors/arrow.png?v=202610270007") 1x, url("assets/cursors/arrow@2x.png?v=202610270007") 2x) 3 2, default !important; }
+button, a, select, summary, label, [role="button"], [role="tab"], [role="radio"], .navBtn, .cta, .ghost, .gCard, .swatch, .tab,
+.roomItem, .close, .kick, .code, .custom, input[type="color"], input[type="range"], input[type="checkbox"], .trackCard, #touch button { cursor: url("assets/cursors/hand.png?v=202610270007") 3 2, pointer !important; cursor: -webkit-image-set(url("assets/cursors/hand.png?v=202610270007") 1x, url("assets/cursors/hand@2x.png?v=202610270007") 2x) 3 2, pointer !important; cursor: image-set(url("assets/cursors/hand.png?v=202610270007") 1x, url("assets/cursors/hand@2x.png?v=202610270007") 2x) 3 2, pointer !important; }
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], input:not([type]), textarea { cursor: url("assets/cursors/text.png?v=202610270007") 16 16, text !important; cursor: -webkit-image-set(url("assets/cursors/text.png?v=202610270007") 1x, url("assets/cursors/text@2x.png?v=202610270007") 2x) 16 16, text !important; cursor: image-set(url("assets/cursors/text.png?v=202610270007") 1x, url("assets/cursors/text@2x.png?v=202610270007") 2x) 16 16, text !important; }
+button:disabled, select:disabled, input:disabled, [aria-disabled="true"], .roomItem.busy { cursor: url("assets/cursors/no.png?v=202610270007") 3 2, not-allowed !important; cursor: -webkit-image-set(url("assets/cursors/no.png?v=202610270007") 1x, url("assets/cursors/no@2x.png?v=202610270007") 2x) 3 2, not-allowed !important; cursor: image-set(url("assets/cursors/no.png?v=202610270007") 1x, url("assets/cursors/no@2x.png?v=202610270007") 2x) 3 2, not-allowed !important; }
+body[data-screen="garage"] > canvas { cursor: url("assets/cursors/grab.png?v=202610270007") 16 16, grab !important; cursor: -webkit-image-set(url("assets/cursors/grab.png?v=202610270007") 1x, url("assets/cursors/grab@2x.png?v=202610270007") 2x) 16 16, grab !important; cursor: image-set(url("assets/cursors/grab.png?v=202610270007") 1x, url("assets/cursors/grab@2x.png?v=202610270007") 2x) 16 16, grab !important; }
+body.dragging, body.dragging *, body[data-screen="garage"].dragging > canvas { cursor: url("assets/cursors/grabbing.png?v=202610270007") 16 16, grabbing !important; cursor: -webkit-image-set(url("assets/cursors/grabbing.png?v=202610270007") 1x, url("assets/cursors/grabbing@2x.png?v=202610270007") 2x) 16 16, grabbing !important; cursor: image-set(url("assets/cursors/grabbing.png?v=202610270007") 1x, url("assets/cursors/grabbing@2x.png?v=202610270007") 2x) 16 16, grabbing !important; }
+/* durante a corrida o cursor some sozinho depois de 2 s parado (volta ao mexer o mouse) */
+body.cursorIdle, body.cursorIdle * { cursor: none !important; }
+
+/* clique: anel + faíscas na ponta do cursor (camada do compositor, não depende do quadro do jogo) */
+.cBurst { position: fixed; z-index: 10000; width: 0; height: 0; pointer-events: none; }
+.cBurst i { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--c, #ff4d9a); box-shadow: 0 0 0 2px #fff; animation: cRing .42s cubic-bezier(.2, .8, .3, 1) forwards; }
+.cBurst b { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px; background: var(--c, #ffd23f); box-shadow: 0 0 0 1.5px #2a1d4a; transform: rotate(var(--a)) translateY(-6px);
+  animation: cSpark .5s cubic-bezier(.15, .7, .3, 1) forwards; }
+@keyframes cRing { from { transform: scale(.25); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
+@keyframes cSpark { from { transform: rotate(var(--a)) translateY(-6px) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateY(-24px) scale(.3); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cBurst { display: none; } }
+
+/* ======================= CONFIGURAÇÕES ======================= */
+#setTabs { margin: 2px 0 12px; }
+.setPane { display: grid; gap: 12px; max-height: min(58vh, 520px); overflow-y: auto; padding-right: 4px; }
+.setPane[hidden] { display: none; }
+.slider { display: grid; grid-template-columns: minmax(130px, 1fr) minmax(140px, 1.6fr) 48px; align-items: center; gap: 12px; font-weight: 800; color: var(--ink); }
+.slider output { font: 900 15px var(--ui); color: var(--ink-2); text-align: right; font-variant-numeric: tabular-nums; }
+.slider input[type="range"] { -webkit-appearance: none; appearance: none; height: 14px; border-radius: 999px; border: 3px solid var(--ink); outline: none;
+  background: linear-gradient(90deg, #ff4d9a, #ffc93d) 0 0 / var(--p, 50%) 100% no-repeat, var(--mist); }
+.slider input[type="range"]:focus-visible { box-shadow: 0 0 0 4px rgba(255, 77, 154, .35); }
+.slider input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.slider input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid var(--ink); box-shadow: 0 3px 0 var(--ink); }
+.setRow { display: grid; grid-template-columns: minmax(130px, 1fr) 2fr; align-items: center; gap: 12px; font-weight: 800; color: var(--ink); }
+.setRow small { display: block; font-weight: 700; font-size: 12px; color: var(--ink-2); }
+.setRow .seg { flex-wrap: wrap; }
+@media (max-width: 560px) { .slider, .setRow { grid-template-columns: 1fr; gap: 6px; } .slider { grid-template-columns: 1fr 48px; } .slider span { grid-column: span 2; } }
+#setBtn.icon { padding-left: 10px; padding-right: 10px; }
+#fpsPill { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 20; pointer-events: none; font-variant-numeric: tabular-nums; }
+/* opções do menu de configurações: botões compactos lado a lado */
+#setTabs { grid-template-columns: 1fr 1fr; }
+.setRow .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.setRow .seg button { flex: 1 1 auto; padding: 7px 10px; font: 800 14px var(--ui); box-shadow: 0 3px 0 var(--ink); }
+.setRow .seg button.on { box-shadow: 0 3px 0 var(--ink), 0 0 0 3px var(--select); }

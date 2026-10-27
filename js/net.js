@@ -89,7 +89,7 @@
     _out: new DataView(new ArrayBuffer(40)),
     sendState(k, t) {
       if (!this.ws || this.ws.readyState !== 1 || this.ws.bufferedAmount > 32 * 1024) return;
-      const v = this._out, f = (k.drifting ? 1 : 0) | (k.boostT > 0 ? 2 : 0) | (k.air ? 4 : 0) | (k.finished ? 8 : 0);
+      const v = this._out, f = (k.drifting ? 1 : 0) | (k.boostT > 0 ? 2 : 0) | (k.air ? 4 : 0) | (k.finished ? 8 : 0) | (k.wheelT > 0.5 ? 16 : 0);
       v.setUint8(0, T_STATE); v.setUint8(1, 0); v.setUint8(2, f); v.setInt8(3, k.driftDir || 0);
       [t, k.pos.x, k.pos.y, k.pos.z, k.ang, k.mvAng, k.speed, k.steerVis || 0, k.progress].forEach((x, i) => v.setFloat32(4 + i * 4, x, true));
       this.ws.send(v.buffer);

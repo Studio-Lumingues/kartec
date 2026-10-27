@@ -40,7 +40,11 @@
         for (let k = 1; k <= 3; k++) { const j = (i - 6 - k * 3 + N) % N; if (busy[j]) continue; const p = tr.side(j, out * (W + 1.6), 0); p.y = ground(p, j); cones.push(p); }
         cool = 26;
       }
-      // balões na largada (dos dois lados)
+      // balizadores (postinhos brancos com faixa refletiva) a cada ~13 m nas pistas sem calçada: referência visual
+      // perto da câmera que "passa voando" -> dá muito mais sensação de velocidade, a custo de 1 chamada de desenho
+      const posts = [];
+      if (def.id !== 'city') for (let i = 0; i < N; i += Math.max(2, Math.round(13 / (tr.length / N)))) [-1, 1].forEach(sd => {
+        if (busy[i] || curv[i] >= 0.012) return; const p = tr.side(i, sd * (W + 6), 0); p.y = ground(p, i); posts.push(p); tr.obstacles.push({ x: p.x, z: p.z, r: 0.3 }); });   // só nas retas, além do acostamento
       for (let k = -3; k <= 3; k++) [-1, 1].forEach(sd => { const j = (def.startIdx + k * 4 + N) % N, p = tr.side(j, sd * (W + 3.2), 0); p.y = ground(p, j); balloons.push(p); });
 
       const d = new THREE.Object3D(), group = new THREE.Group(); group.userData.dynamic = true; root.add(group);
@@ -68,8 +72,16 @@
           d.scale.set(1, 1, 1); d.position.set(p.x, p.y + 2.2 + (i % 3) * 0.5, p.z); d.updateMatrix(); sm.setMatrixAt(i, d.matrix); });
         bm.userData.outlineInstanced = true; group.add(bm, sm); this.balloons = bm;
       }
+      if (posts.length) {
+        const pg = new THREE.CylinderGeometry(0.12, 0.15, 1.15, 6).toNonIndexed(); pg.translate(0, 0.575, 0); pg.deleteAttribute('uv');
+        const pc = new Float32Array(pg.attributes.position.count * 3); for (let k = 0; k < pg.attributes.position.count; k++) { const y = pg.attributes.position.getY(k), band = y > 0.78 && y < 1.02; pc.set(band ? [1, 0.45, 0.1] : [0.96, 0.96, 0.98], k * 3); }
+        pg.setAttribute('color', new THREE.BufferAttribute(pc, 3));
+        const pm = new THREE.InstancedMesh(pg, new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), posts.length);
+        posts.forEach((p, k) => { d.position.copy(p); d.rotation.set(0, 0, 0); d.scale.set(1, 1, 1); d.updateMatrix(); pm.setMatrixAt(k, d.matrix); });
+        pm.instanceMatrix.needsUpdate = true; pm.userData.noOutline = true; group.add(pm);
+      }
       Toon.outline(group, 0.06);
-      return { tires: tires.length, cones: cones.length };
+      return { tires: tires.length, cones: cones.length, posts: posts.length };
     }
   };
   window.Props = Props;

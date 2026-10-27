@@ -281,13 +281,13 @@
         const parse = buf => { try { new THREE.GLTFLoader().parse(buf, '', ok, fail); } catch (e) { fail(e); } };
         const viaScript = () => {
           if (window.PILOT_GLB_B64) return parse(b64ToBuffer(window.PILOT_GLB_B64));
-          const s = document.createElement('script'); s.src = 'assets/pilot.glb.js'; s.async = true;
+          const s = document.createElement('script'); s.src = 'assets/pilot.glb.js?v=202610270007'; s.async = true;
           s.onload = () => window.PILOT_GLB_B64 ? parse(b64ToBuffer(window.PILOT_GLB_B64)) : fail('base64 vazio');
           s.onerror = () => fail('assets/pilot.glb.js não encontrado'); document.head.appendChild(s);
           let fake = 0; const tick = setInterval(() => { if (this.status !== 'loading') return clearInterval(tick); fake = Math.min(0.9, fake + 0.08); this.progress = fake; onProgress && onProgress(fake); }, 120);
         };
         if (location.protocol === 'file:') viaScript();
-        else new THREE.GLTFLoader().load('assets/pilot.glb', ok, x => { if (x.total) { this.progress = x.loaded / x.total * 0.95; onProgress && onProgress(this.progress); } }, viaScript);
+        else new THREE.GLTFLoader().load('assets/pilot.glb?v=202610270007', ok, x => { if (x.total) { this.progress = x.loaded / x.total * 0.95; onProgress && onProgress(this.progress); } }, viaScript);
       });
       return this._p;
     },

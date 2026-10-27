@@ -105,7 +105,9 @@
       const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < SK; i++) this.skids.setMatrixAt(i, z);
       this.skids.frustumCulled = false; this.skids.renderOrder = 1; scene.add(this.skids); this.skidI = 0; this._d = new THREE.Object3D();
     },
+    rate: 1,   // partículas: 1 = normal, < 1 = menos (configurações)
     puff(kind, x, y, z, vx, vy, vz, col, s0, s1, life, op, up) {
+      if (this.rate < 1 && Math.random() > this.rate) return;
       const pool = this[kind], p = pool.a[pool.i++ % pool.a.length];
       p.s.position.set(x, y, z); p.v.set(vx, vy, vz); p.s.material.color.setHex(col); p.s0 = s0; p.s1 = s1; p.l = p.ml = life; p.o = kind === 'smoke' ? Math.min(1, op * 1.6) : op; p.up = up || 0; p.s.visible = true;
       p.s.material.rotation = Math.random() * 6.28; p.rot = (Math.random() - 0.5) * 2;
@@ -134,7 +136,8 @@
   // ---------- entrada do jogador: teclado e botões de toque ----------
   const Input = {
     keys: {},
-    map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift' },
+    map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift',
+      ControlLeft: 'wheelie', ControlRight: 'wheelie', KeyE: 'wheelie' },   // Ctrl (ou E): dar grau com a moto
     init() {
       addEventListener('keydown', e => { const k = this.map[e.code]; if (k) { this.keys[k] = true; if (window.Game && Game.scene && !/INPUT|TEXTAREA/.test(e.target.tagName)) e.preventDefault(); } });
       addEventListener('keyup', e => { const k = this.map[e.code]; if (k) this.keys[k] = false; });
@@ -145,14 +148,14 @@
         ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { this.keys[k] = false; }));
       });
     },
-    read() { const k = this.keys; return { up: !!k.up, down: !!k.down, steer: (k.left ? 1 : 0) - (k.right ? 1 : 0), drift: !!k.drift }; }
+    read() { const k = this.keys; return { up: !!k.up, down: !!k.down, steer: (k.left ? 1 : 0) - (k.right ? 1 : 0), drift: !!k.drift, wheelie: !!k.wheelie }; }
   };
   window.Input = Input;
 
   // ---------- física ----------
   const P = CFG.PHYS;
   const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
-  const _w = new THREE.Vector3();
+  const _w = new THREE.Vector3(), _w2 = new THREE.Vector3();
 
   class Kart {
     // spec = { model, color, decal, decalColor, number, suit, helmet, skin, accessory } (ver CFG.DEFAULT_SPEC)
@@ -172,7 +175,8 @@
       this.boostT = 0; this.drifting = false; this.driftDir = 0; this.driftT = 0; this.driftSteer = 0; this.hopT = 0; this.slip = 0;
       this.steerVis = 0; this.onPadPrev = false; this.air = false; this.vy = 0; this.vyG = 0; this.squash = 0; this.bumpCool = 0;
       this.smokeCD = 0; this.trailCD = 0; this.off = false; this.wet = false; this.stuckT = 0; this.coins = 0; this.railSide = null;
-      this.pushX = 0; this.pushZ = 0; this.yawV = 0; this.hitRoll = 0; this.hitRollV = 0; this.hitCool = 0;   // reação às batidas (empurrão, giro e balanço)
+      this.pushX = 0; this.pushZ = 0; this.yawV = 0; this.hitRoll = 0; this.hitRollV = 0; this.hitCool = 0; this.wheelT = 0;
+      this.driftCharge = 0; this.driftRot = 0; this.driftCD = 0; this.mtCool = 0;   // reação às batidas (empurrão, giro e balanço)
       this.m.group.rotation.set(0, this.ang, 0); this.m.body.rotation.set(0, 0, 0); this.m.body.position.y = 0;
       this.m.flames.forEach(f => f.visible = false);
     }
@@ -194,7 +198,11 @@
       if (this.boostT > 0) this.boostT -= dt;
       const boosting = this.boostT > 0 && !off;
       // velocidade
-      const MAXE = P.MAX * (1 + 0.012 * this.coins) * (this.topScale || 1);
+      // GRAU (só moto): segurando Ctrl em linha reta a moto empina; empinada de vez dá +6% de velocidade máxima,
+      // mas a direção fica bem mais fraca e não dá para derrapar. Frear, derrapar, sair da pista ou bater desfaz.
+      const wantW = !!(this.m.moto && inp.wheelie && racing && !this.finished && !this.air && !this.drifting && !this.off && this.speed > 10 && !inp.down);
+      this.wheelT = Math.max(0, Math.min(1, (this.wheelT || 0) + (wantW ? dt * 2.2 : -dt * 3.2)));
+      const MAXE = P.MAX * (1 + 0.012 * this.coins) * (this.topScale || 1) * (this.wheelT > 0.9 ? 1.06 : 1);
       const top = boosting ? MAXE * 1.5 : MAXE, maxF = off ? P.MAX * 0.38 : P.MAX;
       if (!this.air) {
         if (up) this.speed += (this.speed < 0 ? P.BRAKE : P.ACC) * dt;
@@ -206,21 +214,31 @@
       else if (this.speed > MAXE && !off) this.speed -= (this.speed - MAXE) * Math.min(1, 1.6 * dt);
       this.speed = Math.max(-P.MAXREV, Math.min(top, this.speed));
       // drift (segura o botão numa curva; solta para o mini-turbo)
-      const wet = this.wet = !this.air && tr.inWater(this.pos), wantD = racing && inp.drift && !this.finished;
-      if (!this.drifting && wantD && steer && this.speed > 14 && !wet) { this.drifting = true; this.driftDir = Math.sign(steer); this.driftSteer = steer; this.driftT = 0; this.hopT = 0.25; this.events('driftStart', this); }
+      const wet = this.wet = !this.air && tr.inWater(this.pos), wantD = racing && inp.drift && !this.finished && !((this.wheelT || 0) > 0.3);
+      if (this.driftCD > 0) this.driftCD -= dt;
+      if (this.mtCool > 0) this.mtCool -= dt;
+      if (!this.drifting && wantD && steer && this.speed > 14 && !wet && !(this.driftCD > 0)) { this.drifting = true; this.driftDir = Math.sign(steer); this.driftSteer = steer; this.driftT = 0; this.driftCharge = 0; this.driftRot = 0; this.hopT = 0.25; this.events('driftStart', this); }
       if (this.drifting && (!wantD || this.speed < 10 || wet)) {
-        if (this.driftT > 1) { this.boostT = Math.max(this.boostT, this.driftT > 2 ? 1.5 : 0.9); this.speed = Math.max(this.speed, P.MAX * 1.02); this.events('miniTurbo', this); }
-        this.drifting = false;
+        // ANTI-ABUSO: o mini-turbo só sai de curva de verdade. Precisa de CARGA (que só cresce rápido quando a
+        // pista curva de fato) E de GIRO real do kart. Depois de um mini-turbo há 2 s em que a carga cresce bem
+        // devagar, e um novo drift só começa 0,35 s depois de soltar -> "spammar" drift em reta não rende nitro.
+        const lvl = this.driftLevel();
+        if (lvl > 0) { this.boostT = Math.max(this.boostT, lvl === 2 ? 1.3 : 0.8); this.speed = Math.max(this.speed, Math.min(P.MAX * 1.02, this.speed + 7)); this.mtCool = 2.0; this.events('miniTurbo', this); }
+        this.drifting = false; this.driftCD = 0.35;
       }
-      let turn = steer * P.TURN * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / P.MAX));
+      let turn = steer * P.TURN * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / P.MAX)) * (1 - 0.45 * (this.wheelT || 0));
       if (this.drifting) {
         // drift = arco de raio definido (dentro ~38 m, neutro ~62 m, fora ~120 m)
         this.driftSteer += (steer - this.driftSteer) * Math.min(1, 7 * dt);
         const rel = this.driftSteer * this.driftDir;
         const Rd = rel >= 0 ? P.DRIFT_R_MID - rel * (P.DRIFT_R_MID - P.DRIFT_R_IN) : P.DRIFT_R_MID - rel * (P.DRIFT_R_OUT - P.DRIFT_R_MID);
         turn = this.driftDir * Math.min(1.5, Math.abs(this.speed) / Rd);
-        this.driftT += dt * (rel > 0.3 ? 1.3 : 1); this.speed -= 3 * dt;
-        if (Math.random() < 0.6) { const sc = this.driftT > 2 ? 0xff8a1a : this.driftT > 1 ? 0x4aa8ff : 0xfff2b0;
+        const corner = tr.cornerAt ? tr.cornerAt(this.idx) : 1;
+        const rate = (rel > 0.3 ? 1.3 : 1) * (0.1 + 0.9 * corner) * (this.mtCool > 0 ? 0.3 : 1) * (this.boostT > 0 ? 0.5 : 1);
+        this.driftT += dt; this.driftCharge = (this.driftCharge || 0) + dt * rate;
+        this.driftRot = (this.driftRot || 0) + Math.abs(turn * dt * Math.max(-1, Math.min(1, this.speed / 10)));
+        this.speed -= 3 * dt;
+        if (Math.random() < 0.6) { const lv = this.driftLevel(), sc = lv === 2 ? 0xff8a1a : lv === 1 ? 0x4aa8ff : 0xfff2b0;   // faísca branca = sem carga
           for (let k = 0; k < 2; k++) { const R = this.m.rear, w = this.m.group.localToWorld(_w.set(k ? R.x : -R.x, 0.2, R.z)); Fx.spark(w.x, w.y, w.z, (Math.random() - 0.5) * 5, 2 + Math.random() * 3, (Math.random() - 0.5) * 5, sc, 0.22, 0.35); } }
       }
       if (this.air) turn *= 0.35;                                       // pouco controle no ar
@@ -281,7 +299,10 @@
       const roll = this.m.lean * this.steerVis * Math.min(1, Math.abs(this.speed) / P.MAX) + (this.drifting ? this.driftDir * (this.m.moto ? 0.25 : -0.1) : 0);
       // balanço da batida: mola amortecida (o kart "chacoalha" para o lado do empurrão e volta)
       this.hitRollV += (-this.hitRoll * 90 - this.hitRollV * 9) * dt; this.hitRoll += this.hitRollV * dt;
-      if (this.m.moto) { this.m.pivot.rotation.z += (-roll - this.m.pivot.rotation.z) * Math.min(1, 6 * dt); this.m.pivot.rotation.z += this.hitRoll * 0.6; b.rotation.z = 0; } else b.rotation.z = roll + this.hitRoll;
+      if (this.m.moto) { this.m.pivot.rotation.z += (-roll - this.m.pivot.rotation.z) * Math.min(1, 6 * dt); this.m.pivot.rotation.z += this.hitRoll * 0.6; b.rotation.z = 0;
+        // grau: gira em torno do ponto de apoio da roda traseira (a traseira continua no chão)
+        const w = this.wheelT || 0, th = -(0.42 * w * w * (3 - 2 * w)) + (w > 0.9 ? Math.sin(performance.now() / 140) * 0.025 : 0), rz = this.m.rear.z;
+        this.m.pivot.rotation.x = th; this.m.pivot.position.set(0, rz * Math.sin(th), rz - rz * Math.cos(th)); } else b.rotation.z = roll + this.hitRoll;
       // volante/guidão e piloto (inclina o corpo e olha para dentro da curva)
       this.m.animate(dt, { steer: this.steerVis, speed: Math.min(1, Math.abs(this.speed) / P.MAX), boost: boosting, drift: this.drifting ? this.driftDir : 0, air: this.air });
       if (this.hopT > 0) this.hopT -= dt;
@@ -297,12 +318,16 @@
       const tr = this.track, N = tr.N;
       this.pos.set(s.x, s.y, s.z); this.ang = s.ang; this.mvAng = s.mvAng; this.speed = s.speed;
       this.drifting = !!(s.flags & 1); this.driftDir = s.driftDir; this.air = !!(s.flags & 4); this.finished = !!(s.flags & 8);
+      this.wheelT = Math.max(0, Math.min(1, (this.wheelT || 0) + ((s.flags & 16 ? 1 : 0) - (this.wheelT || 0)) * Math.min(1, dt * 6)));
       const lap = Math.floor(s.prog / N), rest = s.prog - lap * N, rel = Math.floor(rest);
       this.lap = lap; this.frac = rest - rel; this.prevIdx = this.idx; this.idx = (rel + tr.startIdx) % N;
       if (this.drifting) this.driftSteer = s.steer;
       const gr = tr.groundAt(this.pos, this.idx, this.ang), boosting = !!(s.flags & 2);
       this.pose(dt, s.steer, boosting, false, false, gr);
     }
+
+    // nível do mini-turbo: carga (tempo ponderado pela curva da pista) + giro acumulado de verdade (radianos)
+    driftLevel() { const c = this.driftCharge || 0, r = this.driftRot || 0; return c > 2.0 && r > 1.0 ? 2 : c > 0.95 && r > 0.5 ? 1 : 0; }
 
     respawn() {
       const tr = this.track, i = this.idx, p = tr.S[i];
@@ -345,14 +370,14 @@
       else if (!this.off && !this.wet && Math.abs(this.steerVis) > 0.6 && sp > P.MAX * 0.62) mode = 'skid';
       // marcas de pneu (traço de desenho) enquanto derrapa no asfalto
       if ((mode === 'drift' || mode === 'skid') && !this.wet) {
-        [-1, 1].forEach((s, i) => { const w = g.localToWorld(_w.set(s * this.m.rear.x, 0, this.m.rear.z)), last = this.skidLast || (this.skidLast = [null, null]);
+        (this.m.moto ? [0] : [-1, 1]).forEach((s, i) => { const w = g.localToWorld(_w.set(s * this.m.rear.x, 0, this.m.rear.z)), last = this.skidLast || (this.skidLast = [null, null]);
           if (last[i]) Fx.skid(last[i].x, last[i].z, w.x, w.z, this.pos.y); last[i] = { x: w.x, z: w.z }; });
       } else this.skidLast = null;
       if (mode && this.smokeCD <= 0) {
         this.smokeCD = mode === 'drift' ? 0.025 : mode === 'dust' ? 0.045 : 0.06;
         const dustCol = this.track.dustColor || 0xc9a878;
-        [-1, 1].forEach(s => {
-          if (mode === 'drift' && s !== -this.driftDir && Math.random() < 0.5) return;
+        (this.m.moto ? [0] : [-1, 1]).forEach(s => {
+          if (mode === 'drift' && s && s !== -this.driftDir && Math.random() < 0.5) return;
           const w = g.localToWorld(_w.set(s * this.m.rear.x, 0.15, this.m.rear.z)), back = -0.25 * this.speed;
           if (mode === 'dust') Fx.puff('smoke', w.x + (Math.random() - 0.5), w.y + 0.2, w.z + (Math.random() - 0.5), Math.sin(this.mvAng) * back + (Math.random() - 0.5) * 3, 1.2 + Math.random(), Math.cos(this.mvAng) * back + (Math.random() - 0.5) * 3, shade(dustCol), 0.9, 3.6, 0.9, 0.55, 0.6);
           else Fx.puff('smoke', w.x, w.y + 0.25, w.z, Math.sin(this.mvAng) * back * 0.4 + (Math.random() - 0.5) * 2, 0.8 + Math.random() * 0.8, Math.cos(this.mvAng) * back * 0.4 + (Math.random() - 0.5) * 2, shade(0xe6e8ee), 0.7, mode === 'drift' ? 3.4 : 2.4, mode === 'drift' ? 0.85 : 0.55, mode === 'drift' ? 0.6 : 0.38, 0.8);
@@ -360,7 +385,7 @@
       }
       if (this.boostT > 0 && !this.off && this.trailCD <= 0) {
         this.trailCD = 0.016;
-        this.m.flames.forEach(f => { f.getWorldPosition(_w);
+        (this.m.moto ? this.m.flames.slice(0, 1) : this.m.flames).forEach(f => { f.getWorldPosition(_w); if (this.m.moto && this.m.flames[1]) { this.m.flames[1].getWorldPosition(_w2); _w.add(_w2).multiplyScalar(0.5); }
           Fx.puff('glow', _w.x, _w.y, _w.z, -Math.sin(this.mvAng) * 6, (Math.random() - 0.5) * 2, -Math.cos(this.mvAng) * 6, Math.random() < 0.7 ? 0xff7a1a : 0xffd23a, 1.4, 0.3, 0.4, 0.9);
           if (Math.random() < 0.5) Fx.puff('glow', _w.x, _w.y, _w.z, -Math.sin(this.mvAng) * 12, (Math.random() - 0.5) * 3, -Math.cos(this.mvAng) * 12, 0x7ad8ff, 0.45, 0.1, 0.5, 1);
         });
@@ -389,7 +414,7 @@
   const REST = 0.45, SIDE_GAIN = 1.45, MAX_PUSH = 24;
   function impulse(k, ix, iz, side, rx, rz) {
     const fx = Math.sin(k.mvAng), fz = Math.cos(k.mvAng), along = ix * fx + iz * fz;
-    k.speed += along * (side ? 0.35 : 0.8);
+    k.speed += along * (side ? 0.35 : 0.8); k.wheelT = (k.wheelT || 0) * 0.3;
     const lx = ix - fx * along, lz = iz - fz * along, g = side ? SIDE_GAIN : 1;
     k.pushX = (k.pushX || 0) + lx * g; k.pushZ = (k.pushZ || 0) + lz * g;
     const pm = Math.hypot(k.pushX, k.pushZ); if (pm > MAX_PUSH) { k.pushX *= MAX_PUSH / pm; k.pushZ *= MAX_PUSH / pm; }

@@ -138,9 +138,9 @@
         kind('bigIsle', GEOS.bigIsle(), m, { sMin: 70, sMax: 160, r: 120, shadow: false, yaw: false, y: -6 });
         const onIsland = (x, z) => island ? inPoly(island, x, z) : true;
         bands = [
-          { d0: W + 14, d1: 260, step: 12, p: 0.55, pick: (x, z) => onIsland(x, z) ? (rnd() < 0.55 ? 'palm' : rnd() < 0.6 ? 'bush' : 'umbrella') : (rnd() < 0.04 ? 'boat' : null) },
-          { d0: 260, d1: 640, step: 34, p: 0.5, pick: (x, z) => onIsland(x, z) ? 'palm' : (rnd() < 0.25 ? 'islet' : rnd() < 0.25 ? 'boat' : null) },
-          { d0: 640, d1: far, step: 90, p: 0.65, pick: (x, z) => onIsland(x, z) ? 'palm' : (rnd() < 0.55 ? 'bigIsle' : 'islet') }
+          { d0: W + 14, d1: 260, step: 14, p: 0.5, pick: (x, z) => onIsland(x, z) ? (rnd() < 0.28 ? (rnd() < 0.45 ? 'palm' : 'bush') : rnd() < 0.4 ? 'umbrella' : null) : (rnd() < 0.04 ? 'boat' : null) },
+          { d0: 260, d1: 640, step: 34, p: 0.5, pick: (x, z) => onIsland(x, z) ? (rnd() < 0.3 ? 'palm' : null) : (rnd() < 0.25 ? 'islet' : rnd() < 0.25 ? 'boat' : null) },
+          { d0: 640, d1: far, step: 90, p: 0.65, pick: (x, z) => onIsland(x, z) ? (rnd() < 0.25 ? 'palm' : null) : (rnd() < 0.55 ? 'bigIsle' : 'islet') }
         ];
       }
 

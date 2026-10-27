@@ -60,7 +60,13 @@
       const gap = (leaderProgress - k.progress);
       // k.skill: "personalidade" de cada rival (CFG.RIVALS[].top) — dá variedade ao pelotão de 8 karts
       k.topScale = (k.skill || 1) * B.SKILL * Math.max(B.RUBBER_MIN, Math.min(B.RUBBER_MAX, 1 + gap * 0.0006));
-      return { up, down: false, steer, drift };
+      // bot de moto: às vezes dá grau numa reta comprida
+      let wheelie = false;
+      if (k.m && k.m.moto) { this.wheelCD = (this.wheelCD || 2 + Math.random() * 4) - dt;
+        const straight = Math.abs(cAvg) < 0.0025 && cmax < 0.006 && k.speed > 30 && !drift;
+        if (this.wheelOn > 0) { this.wheelOn -= dt; wheelie = straight; }
+        else if (straight && this.wheelCD <= 0) { this.wheelOn = 1.2 + Math.random() * 2; this.wheelCD = 5 + Math.random() * 7; } }
+      return { up, down: false, steer, drift, wheelie };
     }
   }
 

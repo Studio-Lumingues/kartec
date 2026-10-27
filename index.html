@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=202610270007">
 </head>
 <body data-screen="boot">
 
@@ -19,16 +19,13 @@
       <linearGradient id="lgGold" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="250"><stop offset="0" stop-color="#FFF4A8"/><stop offset=".38" stop-color="#FFD02E"/><stop offset=".78" stop-color="#FF9A00"/><stop offset="1" stop-color="#FF6A00"/></linearGradient>
       <linearGradient id="lgShine" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="180"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <linearGradient id="lgRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8FA3"/><stop offset="1" stop-color="#E0305A"/></linearGradient>
-      <pattern id="lgCheck" width="16" height="16" patternUnits="userSpaceOnUse"><rect width="16" height="16" fill="#fff"/><rect width="8" height="8" fill="#2A1D4A"/><rect x="8" y="8" width="8" height="8" fill="#2A1D4A"/></pattern>
       <clipPath id="lgClip"><text x="350" y="246" font-size="150" text-anchor="middle" letter-spacing="2" class="lgText">KARTEC</text></clipPath>
     </defs>
     <g transform="translate(26 0) skewX(-10)">
       <g class="lgLines" stroke="#fff" stroke-linecap="round" stroke-width="12"><line x1="0" y1="150" x2="70" y2="150"/><line x1="-18" y1="190" x2="44" y2="190"/><line x1="6" y1="230" x2="56" y2="230"/></g>
       <g class="lgPlate" transform="translate(350 72)">
-        <rect x="-150" y="-40" width="300" height="80" rx="18" fill="#2A1D4A" transform="translate(0 8)"/>
-        <rect x="-150" y="-40" width="300" height="80" rx="18" fill="url(#lgRed)" stroke="#2A1D4A" stroke-width="9"/>
-        <rect x="-128" y="-22" width="30" height="44" rx="6" fill="url(#lgCheck)" stroke="#2A1D4A" stroke-width="4"/>
-        <rect x="98" y="-22" width="30" height="44" rx="6" fill="url(#lgCheck)" stroke="#2A1D4A" stroke-width="4"/>
+        <rect x="-140" y="-40" width="280" height="80" rx="18" fill="#2A1D4A" transform="translate(0 8)"/>
+        <rect x="-140" y="-40" width="280" height="80" rx="18" fill="url(#lgRed)" stroke="#2A1D4A" stroke-width="9"/>
         <g class="lgText" font-size="62" text-anchor="middle" letter-spacing="10"><text y="22" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="10" stroke-linejoin="round" transform="translate(0 4)">SUPER</text><text y="22" fill="#fff">SUPER</text></g>
       </g>
       <g class="lgText lgMain" font-size="150" text-anchor="middle" letter-spacing="2">
@@ -52,12 +49,13 @@
   </div>
   <div class="hudTR">
     <div id="clock" class="pill small"></div>
+    <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações" title="Configurações">⚙️</button>
     <button id="menuBtn" class="pill btn" type="button">Menu</button>
   </div>
   <canvas id="mini" width="264" height="264" aria-label="Minimapa"></canvas>
   <canvas id="speedo" width="300" height="190" aria-label="Velocímetro"></canvas>
   <div id="pos" aria-live="polite"><b>1</b><i>º</i></div>
-  <div id="help"><kbd>W</kbd><kbd>↑</kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
+  <div id="help"><kbd>W</kbd><kbd>↑</kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
 </div>
 <div id="signal" hidden><div id="cdnum" hidden></div></div>
 <div id="toast" role="status"></div>
@@ -67,7 +65,7 @@
 <!-- controles de toque -->
 <div id="touch">
   <div class="pad"><button data-k="left" aria-label="Esquerda">◀</button><button data-k="right" aria-label="Direita">▶</button></div>
-  <div class="pad"><button data-k="drift" class="d" aria-label="Drift">Drift</button><button data-k="down" aria-label="Ré">▼</button><button data-k="up" class="go" aria-label="Acelerar">▲</button></div>
+  <div class="pad"><button data-k="wheelie" class="d wh" aria-label="Grau">Grau</button><button data-k="drift" class="d" aria-label="Drift">Drift</button><button data-k="down" aria-label="Ré">▼</button><button data-k="up" class="go" aria-label="Acelerar">▲</button></div>
 </div>
 
 <!-- ======================= Carregamento ======================= -->
@@ -96,6 +94,7 @@
     <button id="btnPlay" class="cta big" type="button">Jogar <kbd>Enter</kbd></button>
     <button id="btnOnline" class="navBtn" type="button"><span class="ico">🌐</span><span><strong>Online</strong><small>Corra com os amigos</small></span></button>
     <button id="btnGarage" class="navBtn" type="button"><span class="ico">🔧</span><span><strong>Garagem</strong><small id="menuKart"></small></span></button>
+    <button id="btnSettings" class="navBtn" type="button"><span class="ico">⚙️</span><span><strong>Configurações</strong><small>Som e gráficos</small></span></button>
     <button id="btnHow" class="navBtn" type="button"><span class="ico">🎮</span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
   </nav>
 </section>
@@ -193,15 +192,30 @@
   </div>
 </section>
 
+<!-- ======================= Modal: configurações ======================= -->
+<div id="settingsModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="sheet">
+    <header><h2 id="setTitle">Configurações</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
+    <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
+      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true">🔊 Som</button>
+      <button type="button" data-v="gfx" role="tab" aria-selected="false">🖥️ Gráficos</button>
+    </div>
+    <div id="setVol" class="block setPane"></div>
+    <div id="setGfx" class="block setPane" hidden></div>
+    <div class="actions"><button class="cta" type="button" data-close>Pronto</button><button id="setReset" class="ghost" type="button">Restaurar padrão</button></div>
+  </div>
+</div>
+
 <!-- ======================= Modal: como jogar ======================= -->
 <div id="howModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="howTitle">
   <div class="sheet narrow">
     <header><h2 id="howTitle">Como jogar</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
     <div id="how">
       <p><b>Acelerar</b> W ou ↑ · <b>Ré</b> S ou ↓ · <b>Virar</b> A/D ou ←/→</p>
-      <p><b>Drift</b>: segure Espaço numa curva. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo.</p>
+      <p><b>Drift</b>: segure Espaço numa curva. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo. A faísca só esquenta em <b>curva de verdade</b>: drift em reta fica com faísca branca e não dá turbo, e logo depois de um mini-turbo a próxima carga demora mais.</p>
       <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
       <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
+      <p><b>Grau</b> (só na moto): segure <b>Ctrl</b> (ou <b>E</b>) numa reta. Empinada, a moto fica 6% mais rápida, mas vira menos e não derrapa.</p>
       <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> volta ao menu · <b>N</b> avança 3 horas · <b>M</b> som</p>
     </div>
     <div class="actions"><button class="cta" type="button" data-close>Entendi</button></div>
@@ -258,27 +272,31 @@
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js"></script>
-<script src="js/textures.js"></script>
-<script src="js/toon.js"></script>
-<script src="js/kart.js"></script>
-<script src="js/models/materials.js"></script>
-<script src="js/models/livery.js"></script>
-<script src="js/models/pilot.js"></script>
-<script src="js/models/karts.js"></script>
-<script src="js/custom.js"></script>
-<script src="js/ai.js"></script>
-<script src="js/tracks.js"></script>
-<script src="js/props.js"></script>
-<script src="js/scenery.js"></script>
-<script src="js/city.js"></script>
-<script src="js/net.js"></script>
-<script src="js/online.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/showroom.js"></script>
-<script src="js/garage.js"></script>
-<script src="js/intro.js"></script>
-<script src="js/podium.js"></script>
-<script src="js/main.js"></script>
+<script src="js/config.js?v=202610270007"></script>
+<script src="js/audio.js?v=202610270007"></script>
+<script src="js/textures.js?v=202610270007"></script>
+<script src="js/toon.js?v=202610270007"></script>
+<script src="js/kart.js?v=202610270007"></script>
+<script src="js/models/materials.js?v=202610270007"></script>
+<script src="js/models/livery.js?v=202610270007"></script>
+<script src="js/models/pilot.js?v=202610270007"></script>
+<script src="js/models/karts.js?v=202610270007"></script>
+<script src="js/custom.js?v=202610270007"></script>
+<script src="js/ai.js?v=202610270007"></script>
+<script src="js/tracks.js?v=202610270007"></script>
+<script src="js/props.js?v=202610270007"></script>
+<script src="js/scenery.js?v=202610270007"></script>
+<script src="js/city.js?v=202610270007"></script>
+<script src="js/beach.js?v=202610270007"></script>
+<script src="js/net.js?v=202610270007"></script>
+<script src="js/online.js?v=202610270007"></script>
+<script src="js/ui.js?v=202610270007"></script>
+<script src="js/settings.js?v=202610270007"></script>
+<script src="js/showroom.js?v=202610270007"></script>
+<script src="js/garage.js?v=202610270007"></script>
+<script src="js/intro.js?v=202610270007"></script>
+<script src="js/podium.js?v=202610270007"></script>
+<script src="js/main.js?v=202610270007"></script>
+<script src="js/cursor.js?v=202610270007"></script>
 </body>
 </html>

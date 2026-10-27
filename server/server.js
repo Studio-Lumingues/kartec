@@ -48,7 +48,8 @@ const server = http.createServer((req, res) => {
       if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('404'); return; }
       const ext = path.extname(file).toLowerCase(), type = MIME[ext] || 'application/octet-stream';
       const etag = '"' + st.size.toString(36) + '-' + st.mtimeMs.toString(36) + '"';
-      const headers = { 'Content-Type': type, 'ETag': etag, 'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' };
+      const big = /assets\/(audio_|pilot)/.test(url);   // mídia pesada: cache longo (o nome leva ?v= da versão)
+      const headers = { 'Content-Type': type, 'ETag': etag, 'Cache-Control': big ? 'public, max-age=86400' : 'no-cache', 'X-Content-Type-Options': 'nosniff' };
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); res.end(); return; }
       const gz = /gzip/.test(req.headers['accept-encoding'] || '') && /text|javascript|json|svg|gltf/.test(type);
       if (!gz) { res.writeHead(200, Object.assign(headers, { 'Content-Length': st.size })); fs.createReadStream(file).pipe(res); return; }

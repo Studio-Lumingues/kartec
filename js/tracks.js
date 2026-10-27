@@ -90,6 +90,11 @@
     const LACC = [0]; for (let i = 1; i <= N; i++) LACC.push(LACC[i - 1] + S[i - 1].distanceTo(S[i % N]));
 
     // ---------- consulta de posição na pista ----------
+    // "quanto a pista curva" em cada nó: ângulo entre as direções ~80 m antes e ~80 m depois (0 = reta, 1 = curva
+    // de verdade). Usado pelo drift: o mini-turbo só carrega rápido em curva (fim do "spam" de drift em reta).
+    { const C = new Float32Array(N), Kc = Math.max(6, Math.round(40 / (L.length / N)));
+      for (let i = 0; i < N; i++) { const a = T[(i - Kc + N) % N], b = T[(i + Kc) % N], ang = Math.acos(Math.max(-1, Math.min(1, a.x * b.x + a.z * b.z))), t = Math.max(0, Math.min(1, (ang - 0.14) / 0.42)); C[i] = t * t * (3 - 2 * t); }
+      tr.corner = C; tr.cornerAt = i => C[((i % N) + N) % N]; }
     tr.nearest = (p, hint) => {
       let best = 1e18, bi = hint || 0; const base = bi;
       for (let d = -25; d <= 25; d++) { const i = (base + d + N) % N, dx = S[i].x - p.x, dz = S[i].z - p.z, q = dx * dx + dz * dz; if (q < best) { best = q; bi = i; } }
@@ -161,7 +166,7 @@
     if (theme === 'city') {
       [-0.45, 0.25].forEach(o => strip(o, o + 0.2, 0.07, { map: TX.get('paintYellow'), uSpan: 0.1, vLen: 3, po: -2 }));           // faixa dupla amarela
       [-W / 2, W / 2].forEach(o => strip(o - 0.15, o + 0.15, 0.07, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) }));
-    } else strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 5) % 2)) });
+    } else strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
     if (theme === 'city') {                                    // meio-fio cinza/amarelo + calçadão de ondas
       const tsh = i => 1 - 0.5 * tunShade(i);
       strip(W, W + 1.8, 0.16, { map: TX.get('curbGray'), uSpan: 1, vLen: 4, col: tsh }); strip(-W - 1.8, -W, 0.16, { map: TX.get('curbGray'), uSpan: 1, vLen: 4, flipU: true, col: tsh });
@@ -890,22 +895,15 @@
       const onIsland = (x, z) => { let c = false; for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const a = ring[i], b = ring[j]; if ((a.z > z) !== (b.z > z) && x < (b.x - a.x) * (z - a.z) / (b.z - a.z) + a.x) c = !c; } return c; };
       // coqueiros ao longo da orla e em bosques
       const palms = [[], [], []];
-      for (let i = 0; i < N; i += 6) [1, -1].forEach(sd => { if (rnd() < 0.35) return; const q = side(i, sd * (W + 7 + rnd() * 18), 0); if (onIsland(q.x, q.z) && okSpot(q.x, q.z, 2)) { palms[(rnd() * 3) | 0].push({ x: q.x, z: q.z, r: rnd() * 6.28, s: 0.85 + rnd() * 0.45 }); used.push({ x: q.x, z: q.z, r: 2 }); if (Math.hypot(q.x - side(i, 0, 0).x, q.z - side(i, 0, 0).z) < tr.WALL) tr.obstacles.push({ x: q.x, z: q.z, r: 0.5 }); } });
-      for (let gc = 0, t = 0; gc < 10 && t < 600; t++) { const x = (rnd() - 0.5) * 600, z = (rnd() - 0.5) * 500; if (!onIsland(x, z) || nearTrack({ x, z }, W + 30)) continue;
-        for (let k = 0; k < 8; k++) { const r = 3 + Math.sqrt(k) * 5, a = k * 2.4, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (onIsland(px, pz)) palms[k % 3].push({ x: px, z: pz, r: rnd() * 6.28, s: 0.8 + rnd() * 0.5 }); } gc++; }
+      // coqueiros ao longo da orla: bem menos que antes (a orla é de praia, não de mata)
+      for (let i = 0; i < N; i += 14) [1, -1].forEach(sd => { if (rnd() < 0.55) return; const q = side(i, sd * (W + 7 + rnd() * 18), 0); if (onIsland(q.x, q.z) && okSpot(q.x, q.z, 2)) { palms[(rnd() * 3) | 0].push({ x: q.x, z: q.z, r: rnd() * 6.28, s: 0.85 + rnd() * 0.45 }); used.push({ x: q.x, z: q.z, r: 2 }); if (Math.hypot(q.x - side(i, 0, 0).x, q.z - side(i, 0, 0).z) < tr.WALL) tr.obstacles.push({ x: q.x, z: q.z, r: 0.5 }); } });
+      for (let gc = 0, t = 0; gc < 4 && t < 600; t++) { const x = (rnd() - 0.5) * 600, z = (rnd() - 0.5) * 500; if (!onIsland(x, z) || nearTrack({ x, z }, W + 30)) continue;
+        for (let k = 0; k < 6; k++) { const r = 3 + Math.sqrt(k) * 5, a = k * 2.4, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (onIsland(px, pz)) palms[k % 3].push({ x: px, z: pz, r: rnd() * 6.28, s: 0.8 + rnd() * 0.5 }); } gc++; }
       [0.25, 0.4, 0.6].forEach((lean, k) => plants('palm', palms[k], 0x6ec23a, 'palmBark', 'palmLeaf', { lean }));
-      const rest = []; for (let k = 0; k < 140; k++) { const x = (rnd() - 0.5) * 640, z = (rnd() - 0.5) * 520; if (onIsland(x, z) && okSpot(x, z, 3)) rest.push({ x, z, r: rnd() * 6.28, s: 0.5 + rnd() * 0.5 }); }
+      const rest = []; for (let k = 0; k < 45; k++) { const x = (rnd() - 0.5) * 640, z = (rnd() - 0.5) * 520; if (onIsland(x, z) && okSpot(x, z, 3)) rest.push({ x, z, r: rnd() * 6.28, s: 0.5 + rnd() * 0.5 }); }
       plants('bush', rest, 0x5a9a3a);
-      // guarda-sóis listrados + cangas, perto da água
-      const umbCols = [[0xe8302a, 0xffffff], [0x2a5ce8, 0xffd21a], [0x2cb84a, 0xffffff], [0xff7a1a, 0x2a5ce8], [0xff4fb0, 0xffffff]];
-      const umbTex = umbCols.map(([a, b]) => { const c = TX.cvs(64, 8), g = c.getContext('2d'); for (let k = 0; k < 8; k++) { g.fillStyle = '#' + new THREE.Color(k % 2 ? b : a).getHexString(); g.fillRect(k * 8, 0, 8, 8); } return new THREE.MeshLambertMaterial({ map: new THREE.CanvasTexture(c), side: THREE.DoubleSide }); });
-      const poleW = new THREE.MeshLambertMaterial({ color: 0xf0f0f0 });
-      for (let k = 0, t = 0; k < 46 && t < 600; t++) { const ri = (rnd() * ring.length) | 0, p = ring[ri], dx = cx - p.x, dz = cz - p.z, l = Math.hypot(dx, dz) || 1, d = 4 + rnd() * 14, x = p.x + dx / l * d, z = p.z + dz / l * d;
-        if (!okSpot(x, z, 3)) continue; used.push({ x, z, r: 3 });
-        const g = new THREE.Group(); g.position.set(x, 0, z); g.rotation.set((rnd() - 0.5) * 0.2, rnd() * 6.28, (rnd() - 0.5) * 0.2); add(g);
-        const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.8, 6), poleW); pole.position.y = 1.4; g.add(pole);
-        const top = new THREE.Mesh(new THREE.ConeGeometry(1.9, 0.8, 8, 1, true), umbTex[k % umbTex.length]); top.position.y = 2.7; top.castShadow = true; g.add(top);
-        const towel = new THREE.Mesh(new THREE.PlaneGeometry(1, 2), new THREE.MeshLambertMaterial({ color: [0xffd21a, 0x2ab8e8, 0xe8302a, 0x9a3ae0][k % 4] })); towel.rotation.x = -Math.PI / 2; towel.position.set(1.4, 0.03, 0.4); g.add(towel); k++; }
+      // praia de verdade: guarda-sóis, cadeiras, cangas, isopores, bolas, pranchas, castelos de areia, vôlei e passarelas (beach.js)
+      if (window.BeachKit) tr.beachStats = BeachKit.build({ ring, cx, cz, okSpot, used, add, rnd, T, N });
       // quiosques de palha, posto de salva-vidas e farol
       const woodM = new THREE.MeshLambertMaterial({ map: TX.get('wood', 2, 2) }), thM = new THREE.MeshLambertMaterial({ map: TX.get('thatch', 3, 2), flatShading: true });
       for (let k = 0, t = 0; k < 7 && t < 300; t++) { const i = (rnd() * N) | 0, sd = rnd() < 0.5 ? 1 : -1, q = side(i, sd * (W + 12), 0); if (!onIsland(q.x, q.z) || !okSpot(q.x, q.z, 6)) continue; used.push({ x: q.x, z: q.z, r: 6 });

@@ -20,7 +20,7 @@
 
   function gradient() {
     if (grad) return grad;
-    grad = new THREE.DataTexture(new Uint8Array([150, 150, 150, 255, 205, 205, 205, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);
+    grad = new THREE.DataTexture(new Uint8Array([122, 122, 132, 255, 196, 196, 204, 255, 255, 255, 255, 255]), 3, 1, THREE.RGBAFormat);   // sombra mais funda (e levemente fria) = mais volume
     grad.minFilter = grad.magFilter = THREE.NearestFilter; grad.generateMipmaps = false; grad.needsUpdate = true;
     return grad;
   }
@@ -33,6 +33,10 @@
 
   // trecho do fragment shader: brilho duro (plástico) + contorno claro (rim)
   const GLOSS = [
+    // oclusão aproximada pela orientação: faces voltadas para baixo/para os lados escurecem (barriga dos karts,
+    // laterais dos pneus, base das copas, marquises, beirais) -> volume e profundidade sem custo de pós-processamento
+    '{ vec3 Nw = normalize(normal); vec3 upV = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);',
+    '  float upness = dot(Nw, upV); gl_FragColor.rgb *= mix(0.58, 1.0, smoothstep(-0.85, 0.45, upness)); }',
     '{ vec3 V = normalize(vViewPosition); vec3 N = normalize(normal);',
     '  float rim = smoothstep(0.60, 0.72, 1.0 - max(dot(N, V), 0.0));',
     '  vec3 H = normalize(normalize(vec3(-0.35, 0.8, 0.5)) + V);',
