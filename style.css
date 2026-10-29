@@ -56,9 +56,11 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
 .hudTR { right: calc(16px + env(safe-area-inset-right, 0px)); align-items: flex-end; }
 #lap { font-family: var(--display); font-weight: 700; font-size: 32px; letter-spacing: .5px; }
 #mini { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(112px + env(safe-area-inset-top, 0px)); width: 172px; height: 172px; z-index: 3; pointer-events: none; filter: drop-shadow(0 6px 0 var(--ink)); }
-#speedo { position: fixed; left: calc(8px + env(safe-area-inset-left, 0px)); bottom: calc(6px + env(safe-area-inset-bottom, 0px)); width: 240px; height: 152px; z-index: 3; pointer-events: none; }
+#speedo { display: none; }   /* velocímetro 2D antigo: substituído pelo 3D (#speedo3d) */
+/* velocímetro 3D no canto inferior direito: a caixa define posição e tamanho; js/speedo3d.js desenha dentro dela */
+#speedo3d { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: clamp(180px, 26vmin, 280px); aspect-ratio: 1; z-index: 3; pointer-events: none; }
 /* posição: número grande no canto inferior direito */
-#pos { position: fixed; right: calc(22px + env(safe-area-inset-right, 0px)); bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none; font-family: var(--display); line-height: 1; display: flex; align-items: flex-start; transform: rotate(-4deg); }
+#pos { position: fixed; left: calc(22px + env(safe-area-inset-left, 0px)); bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none; font-family: var(--display); line-height: 1; display: flex; align-items: flex-start; transform: rotate(-4deg); }
 #pos b { font-weight: 700; font-size: 160px; background: linear-gradient(180deg, #fff6a8 0%, var(--gold) 40%, var(--orange) 75%, var(--red) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; filter: drop-shadow(0 8px 0 var(--ink)); }
 #pos i { font: 700 54px var(--display); font-style: normal; margin-top: 22px; color: var(--white); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; filter: drop-shadow(0 5px 0 var(--ink)); }
 #pos[data-p="2"] b { background: linear-gradient(180deg, #ffffff 0%, #b9f4ff 50%, var(--select) 100%); -webkit-background-clip: text; background-clip: text; }
@@ -91,7 +93,7 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
 @media (pointer: coarse) {
   body[data-screen="race"] #touch { display: flex; }
   #help { display: none; }
-  #speedo { width: 176px; height: 111px; bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  #speedo3d { width: clamp(130px, 24vmin, 180px); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
   #pos { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
   #pos b { font-size: 90px; }
   #mini { width: 120px; height: 120px; }

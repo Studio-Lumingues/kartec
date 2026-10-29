@@ -61,6 +61,8 @@
   </div>
   <canvas id="mini" width="264" height="264" aria-label="Minimapa"></canvas>
   <canvas id="speedo" width="300" height="190" aria-label="Velocímetro"></canvas>
+  <!-- velocímetro 3D: esta caixa só marca onde ele aparece; o desenho é feito pelo js/speedo3d.js no canvas do jogo -->
+  <div id="speedo3d" aria-hidden="true"></div>
   <div id="pos" aria-live="polite"><b></b><i></i></div>
   <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
 </div>
@@ -310,6 +312,7 @@
 <script src="js/online.js?v=202610290007"></script>
 <script src="js/logo.js?v=202610290007"></script>
 <script src="js/ui.js?v=202610290007"></script>
+<script src="js/speedo3d.js?v=202610290007"></script>
 <script src="js/settings.js?v=202610290007"></script>
 <script src="js/patchnotes.js?v=202610290007"></script>
 <script src="js/showroom.js?v=202610290007"></script>
