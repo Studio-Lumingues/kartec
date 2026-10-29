@@ -15,7 +15,7 @@
     high:   { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far' }
   };
   const DEF = { vol: { master: 80, engine: 70, sfx: 80, ui: 60, amb: 50 },
-    gfx: Object.assign({ preset: 'auto', speedFx: true, shake: true, fps: false, mouseLook: false }, PRESETS.auto) };
+    gfx: Object.assign({ preset: 'auto', speedFx: true, shake: true, fps: false }, PRESETS.auto) };
   const SHADOW = { off: 0, low: 512, medium: 1024, high: 2048 };
   const DENS = { low: 0.35, medium: 0.65, high: 1 };
   const VIEW = { near: 0.62, medium: 0.82, far: 1 };
@@ -54,8 +54,6 @@
       if (R && this.fixedDpr()) R.setPixelRatio(this.fixedDpr());
       // distância de visão: névoa da pista atual (o cenário distante é cortado junto)
       if (window.Env && Env.baseFogFar && window.Game && Game.scene && Game.scene.fog) Env.fogFar = Env.baseFogFar * this.viewMul();
-      // câmera no mouse desligada: devolve o cursor na hora
-      if (!g.mouseLook && document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) { } }
       // contador de FPS
       this.fpsOn(g.fps);
     },
@@ -118,9 +116,7 @@
         opt('scenery', 'Cenário', [['low', 'Leve'], ['medium', 'Médio'], ['high', 'Completo']], 'Vale a partir da próxima corrida') +
         opt('particles', 'Partículas', [['low', 'Poucas'], ['normal', 'Normais']]) +
         opt('view', 'Distância de visão', [['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
-        tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') +
-        tog('mouseLook', 'Câmera no mouse', 'Gira a câmera só mexendo o mouse (o navegador avisa que travou o cursor). Desligado: segure o botão direito') +
-        tog('fps', 'Mostrar FPS');
+        tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS');
       // abas
       $('setTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => this.tab(b.dataset.v)));
       // volumes (arrastar = ouvir na hora)

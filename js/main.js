@@ -908,10 +908,7 @@
   // partida acaba (resultados e menu precisam do mouse). Em telas de toque não trava. Se o travamento se perder por outro
   // motivo (Alt+Tab), um clique na tela do jogo trava de novo.
   const PL = {
-    // travar o mouse (girar a câmera só mexendo o mouse) faz o navegador mostrar o aviso "pressione Esc para mostrar
-    // o cursor" toda corrida. Agora é opcional e vem DESLIGADO (Configurações › Gráficos › Câmera no mouse);
-    // sem travar, a câmera gira segurando o botão direito.
-    get ok() { return !!(renderer.domElement.requestPointerLock && !matchMedia('(pointer: coarse)').matches && window.Settings && Settings.s && Settings.g.mouseLook); },
+    ok: !!(renderer.domElement.requestPointerLock && !matchMedia('(pointer: coarse)').matches),
     lastEsc: 0,
     racing() { return Game.state === 'countdown' || Game.state === 'race' || Game.state === 'finish' || Game.state === 'waiting'; },
     locked() { return document.pointerLockElement === renderer.domElement; },
