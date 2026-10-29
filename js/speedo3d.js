@@ -177,7 +177,7 @@
       px: spring(0, 100, 12), py: spring(0, 120, 11), pz: spring(0, 90, 10), sc: spring(1, 220, 14) };
     const step2 = (s, to, dt) => { s.v += (s.k * (to - s.x) - s.c * s.v) * dt; s.x += s.v * dt; };
 
-    let t = 0, shown = 0, prevAbs = 0, acc = 0, lat = 0, frac = 0, wasAir = false, wasBoost = false, wasDrift = 0, boostAmt = 0, driftLvl = 0;
+    let t = 0, shown = 0, shownFr = 0, prevFr = 0, acc = 0, lat = 0, frac = 0, wasAir = false, wasBoost = false, wasDrift = 0, boostAmt = 0, driftLvl = 0;
     let camPrevYaw = null;
     const camDir = new T.Vector3();
 
@@ -191,7 +191,9 @@
       driftLvl = s.drift | 0;
 
       // aceleração (fração do máximo por segundo), suavizada
-      if (dt > 0) { acc = damp(acc, clamp((abs - prevAbs) / dt / maxSpeed, -3, 3), 7, dt); prevAbs = abs; }
+      // fill: fração 0…1 do arco (opcional; sem ele, speed / max)
+      const fr = s.fill != null ? clamp(+s.fill || 0, 0, 1.15) : clamp(abs / maxSpeed, 0, 1.15);
+      if (dt > 0) { acc = damp(acc, clamp((fr - prevFr) / dt, -3, 3), 7, dt); prevFr = fr; }
 
       // curva: steer explícito ou rotação da câmera do jogo
       let steer = s.steer;
@@ -201,7 +203,7 @@
         if (camPrevYaw != null && dt > 0) { let d = yaw - camPrevYaw; d = Math.atan2(Math.sin(d), Math.cos(d)); steer = clamp(-d / dt / 1.6, -1, 1); }
         camPrevYaw = yaw;
       }
-      frac = clamp(abs / maxSpeed, 0, 1.15);
+      frac = fr;
       lat = damp(lat, clamp(steer || 0, -1, 1) * Math.min(1, frac * 1.4), 6, dt);
 
       // impulsos
@@ -236,8 +238,8 @@
       rig.scale.setScalar(S.sc.x);
 
       // arco, bolinha e número
-      shown = damp(shown, abs, 14, dt);
-      const f = clamp(shown / maxSpeed, 0, 1), fill = f * SEGS;
+      shown = damp(shown, abs, 14, dt); shownFr = damp(shownFr, fr, 14, dt);
+      const f = clamp(shownFr, 0, 1), fill = f * SEGS;
       const flick = boostAmt > 0.05 ? 0.5 + 0.5 * Math.sin(t * 30) : 0;
       for (let i = 0; i < SEGS; i++) {
         const sg = segs[i], lv = clamp(fill - i, 0, 1);
@@ -261,9 +263,13 @@
     let rect = null, frame = 0;
     const cr0 = new T.Vector4(), sc0 = new T.Vector4(), size = new T.Vector2();
     const measure = () => {
-      if (!el) { rect = null; return; }
-      const r = el.getBoundingClientRect();
-      if (r.width < 2 || r.height < 2) { rect = null; return; }
+      let r = el && el.getBoundingClientRect();
+      if (!r || r.width < 2 || r.height < 2) {
+        // sem a caixa #speedo3d (ou escondida): no modo ligado à mão usa o canto inferior direito mesmo assim
+        if (!opts.fallback) { rect = null; return; }
+        const sz = clamp(Math.min(innerWidth, innerHeight) * 0.26, 150, 280);
+        r = { left: innerWidth - sz - 14, bottom: innerHeight - 12, width: sz, height: sz };
+      }
       const c = renderer.domElement.getBoundingClientRect();
       renderer.getSize(size);
       const kx = size.x / (c.width || 1), ky = size.y / (c.height || 1);
@@ -285,11 +291,12 @@
       renderer.setScissorTest(true);
       renderer.clearDepth();
       renderer.render(scene, cam);
+      if (!announced) { announced = true; console.info('[velocímetro 3D] ativo'); }
       renderer.setViewport(cr0); renderer.setScissor(sc0); renderer.setScissorTest(scis);
       renderer.autoClear = autoClear;
     }
 
-    let hidden = false;
+    let hidden = false, announced = false;
     return {
       update, render, scene, camera: cam,
       setVisible(v) { hidden = !v; },
@@ -393,6 +400,7 @@
   }
 
   window.Speedo3D = {
-    create(renderer, opts) { manual = true; return create(renderer, opts); }
+    create(renderer, opts) { manual = true; return create(renderer, Object.assign({ fallback: true }, opts)); },
+    readOld   // número que o velocímetro 2D antigo escreveria ({ speed, max } ou null)
   };
 })();

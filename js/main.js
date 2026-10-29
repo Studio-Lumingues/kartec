@@ -17,6 +17,10 @@
   TX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
+  // velocímetro 3D (js/speedo3d.js): objeto 3D preso no canto inferior direito, desenhado por cima da corrida
+  let speedo3d = null;
+  try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 160, camera }); else console.warn('[velocímetro 3D] js/speedo3d.js não carregou'); }
+  catch (e) { console.error('[velocímetro 3D]', e); }
   renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); console.warn('contexto WebGL perdido — aguardando restauração'); });
   renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -362,6 +366,7 @@
       if (this.state === 'countdown') this.countdown(dt);
       if (racing) this.race.time = ON ? Math.max(0, Net.raceTime()) : this.race.time + dt;
       const inP = this.state === 'finish' || this.state === 'waiting' || P.finished ? { up: false, down: false, steer: 0, drift: false } : Input.read();
+      this.inP = inP;   // o velocímetro 3D usa a direção e o drift deste quadro
       const K = this.karts;
       if (ON) {
         // online: o SEU kart roda em tempo real (subpassos de 1/60 s se o quadro demorar) -> mesma velocidade
@@ -512,7 +517,28 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) renderer.render(this.scene, camera);
+      else if (this.scene) { renderer.render(this.scene, camera); this.drawSpeedo(); }
+    },
+    // velocímetro 3D: arco = fração da velocidade máxima; número = o mesmo do velocímetro antigo (km/h)
+    drawSpeedo() {
+      const P = this.player, st = this.state;
+      if (!speedo3d || !P || !(st === 'race' || st === 'countdown' || st === 'waiting' || st === 'finish')) return;
+      const inp = this.inP || {}, old = Speedo3D.readOld && Speedo3D.readOld();
+      const fill = Math.abs(P.speed) / CFG.PHYS.MAX;
+      const kmh = old ? old.speed : Math.abs(P.speed) * (CFG.KMH || 3.6);
+      // curva pela rotação real do kart (ângulo crescente = virando para a esquerda na tela)
+      const dt = Math.min(0.1, this.rawDt || 1 / 60);
+      const dA = this._spAng == null ? 0 : wrapA(P.ang - this._spAng); this._spAng = P.ang;
+      const steer = Math.max(-1, Math.min(1, -dA / Math.max(dt, 1e-3) / 1.6));
+      try {
+        speedo3d.update(dt, {
+          speed: P.speed < 0 ? -kmh : kmh, fill, steer,
+          boost: P.boostT > 0,
+          drift: inp.drift && Math.abs(steer) > 0.2 ? (P.driftLevel || P.sparkLevel || 1) : 0,
+          airborne: !!P.air, offroad: !!(P.offroad || P.onGrass)
+        });
+        speedo3d.render();
+      } catch (e) { if (!this._spErr) { this._spErr = true; console.error('[velocímetro 3D]', e); } }
     }
   };
   const fmt = t => UI.fmt(t);
