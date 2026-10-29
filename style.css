@@ -688,3 +688,11 @@ html, body { overscroll-behavior: none; }
 @media (max-width: 420px) { .pauseSec { grid-template-columns: 1fr; } }
 /* sem menu de toque longo / seleção no iOS */
 body { -webkit-touch-callout: none; }
+
+/* ---------- pausa sem caixa: só os botões empilhados sobre a corrida escurecida ---------- */
+#pauseModal { background: rgba(14, 16, 40, .62); }
+#pauseModal .sheet.pauseSheet { width: min(400px, 100%); background: none; border: 0; box-shadow: none; padding: 0; overflow: visible; }
+#pauseModal .pauseNav { margin: 0; gap: 14px; }
+#pauseModal .pauseSec { display: contents; }
+#pauseModal .pauseNav > *, #pauseModal .pauseSec > * { width: 100%; }
+#pauseModal .ghost { font: 700 20px var(--display); padding: 12px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }

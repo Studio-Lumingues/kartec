@@ -908,7 +908,10 @@
   // partida acaba (resultados e menu precisam do mouse). Em telas de toque não trava. Se o travamento se perder por outro
   // motivo (Alt+Tab), um clique na tela do jogo trava de novo.
   const PL = {
-    ok: !!(renderer.domElement.requestPointerLock && !matchMedia('(pointer: coarse)').matches),
+    // travar o mouse (girar a câmera só mexendo o mouse) faz o navegador mostrar o aviso "pressione Esc para mostrar
+    // o cursor" toda corrida. Agora é opcional e vem DESLIGADO (Configurações › Gráficos › Câmera no mouse);
+    // sem travar, a câmera gira segurando o botão direito.
+    get ok() { return !!(renderer.domElement.requestPointerLock && !matchMedia('(pointer: coarse)').matches && window.Settings && Settings.s && Settings.g.mouseLook); },
     lastEsc: 0,
     racing() { return Game.state === 'countdown' || Game.state === 'race' || Game.state === 'finish' || Game.state === 'waiting'; },
     locked() { return document.pointerLockElement === renderer.domElement; },
@@ -926,11 +929,9 @@
       Game.paused = !Game.online; PL.release();
       const on = !!Game.online, cup = on ? !!Game.online.cup : !!Game.cup;
       $('pauseTitle').textContent = on ? 'Menu' : 'Pausa';
-      $('pauseSub').textContent = on ? 'Online: a corrida continua enquanto este menu está aberto.' : (Game.cup ? CFG.CUP.name + ' · corrida ' + (Game.cup.round + 1) + ' de ' + CFG.CUP.order.length : 'Jogo pausado');
       // ações principais direto na Pausa (dois toques): online não reinicia (a corrida é de todos)
       $('pauseRestart').dataset.label = cup && !on ? 'Reiniciar esta pista' : 'Reiniciar corrida'; $('pauseRestart').hidden = on;
       $('pauseLeave').dataset.label = on ? 'Sair da sala' : cup ? 'Sair da Copa' : 'Sair da corrida';
-      $('pauseHint').textContent = on ? (cup ? 'Sair deixa a sala e os pontos da Copa. Toque duas vezes para confirmar.' : 'Sair deixa a sala. Toque duas vezes para confirmar.') : 'Reiniciar e sair pedem dois toques.';
       this.resetConfirm();
       UI.openModal('pauseModal'); UI.Sfx.tone(520, 380, 0.1, 'triangle', 0.05);
     },

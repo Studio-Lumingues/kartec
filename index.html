@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610292100">
+<link rel="stylesheet" href="style.css?v=202610292300">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -230,13 +230,12 @@
 <!-- ======================= Modal: pausa (Esc durante a corrida) ======================= -->
 <div id="pauseModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
   <div class="sheet narrow pauseSheet">
-    <header><div><h2 id="pauseTitle">Pausa</h2><p id="pauseSub" class="pauseSub"></p></div></header>
+    <h2 id="pauseTitle" class="sr">Pausa</h2>
     <nav class="pauseNav">
       <button id="pauseResume" class="cta big" type="button">Continuar <kbd>Esc</kbd></button>
       <!-- ações principais: dois toques para confirmar (sem sair sem querer) -->
       <button id="pauseRestart" class="ghost pauseAct" type="button" data-label="Reiniciar corrida">Reiniciar corrida</button>
       <button id="pauseLeave" class="danger pauseAct" type="button" data-label="Sair da corrida">Sair da corrida</button>
-      <p id="pauseHint" class="pauseHint"></p>
       <!-- acesso secundário: só ajustes -->
       <div class="pauseSec">
         <button id="pauseSettings" class="ghost" type="button"><span class="ic" data-ic="gear"></span> Configurações</button>
@@ -322,35 +321,35 @@
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js?v=202610292100"></script>
-<script src="js/icons.js?v=202610292100"></script>
-<script src="js/audio.js?v=202610292100"></script>
-<script src="js/textures.js?v=202610292100"></script>
-<script src="js/toon.js?v=202610292100"></script>
-<script src="js/kart.js?v=202610292100"></script>
-<script src="js/models/materials.js?v=202610292100"></script>
-<script src="js/models/livery.js?v=202610292100"></script>
-<script src="js/models/pilot.js?v=202610292100"></script>
-<script src="js/models/karts.js?v=202610292100"></script>
-<script src="js/custom.js?v=202610292100"></script>
-<script src="js/ai.js?v=202610292100"></script>
-<script src="js/tracks.js?v=202610292100"></script>
-<script src="js/props.js?v=202610292100"></script>
-<script src="js/scenery.js?v=202610292100"></script>
-<script src="js/city.js?v=202610292100"></script>
-<script src="js/beach.js?v=202610292100"></script>
-<script src="js/net.js?v=202610292100"></script>
-<script src="js/online.js?v=202610292100"></script>
-<script src="js/logo.js?v=202610292100"></script>
-<script src="js/ui.js?v=202610292100"></script>
-<script src="js/speedo3d.js?v=202610292100"></script>
-<script src="js/settings.js?v=202610292100"></script>
-<script src="js/patchnotes.js?v=202610292100"></script>
-<script src="js/showroom.js?v=202610292100"></script>
-<script src="js/garage.js?v=202610292100"></script>
-<script src="js/intro.js?v=202610292100"></script>
-<script src="js/podium.js?v=202610292100"></script>
-<script src="js/main.js?v=202610292100"></script>
-<script src="js/cursor.js?v=202610292100"></script>
+<script src="js/config.js?v=202610292300"></script>
+<script src="js/icons.js?v=202610292300"></script>
+<script src="js/audio.js?v=202610292300"></script>
+<script src="js/textures.js?v=202610292300"></script>
+<script src="js/toon.js?v=202610292300"></script>
+<script src="js/kart.js?v=202610292300"></script>
+<script src="js/models/materials.js?v=202610292300"></script>
+<script src="js/models/livery.js?v=202610292300"></script>
+<script src="js/models/pilot.js?v=202610292300"></script>
+<script src="js/models/karts.js?v=202610292300"></script>
+<script src="js/custom.js?v=202610292300"></script>
+<script src="js/ai.js?v=202610292300"></script>
+<script src="js/tracks.js?v=202610292300"></script>
+<script src="js/props.js?v=202610292300"></script>
+<script src="js/scenery.js?v=202610292300"></script>
+<script src="js/city.js?v=202610292300"></script>
+<script src="js/beach.js?v=202610292300"></script>
+<script src="js/net.js?v=202610292300"></script>
+<script src="js/online.js?v=202610292300"></script>
+<script src="js/logo.js?v=202610292300"></script>
+<script src="js/ui.js?v=202610292300"></script>
+<script src="js/speedo3d.js?v=202610292300"></script>
+<script src="js/settings.js?v=202610292300"></script>
+<script src="js/patchnotes.js?v=202610292300"></script>
+<script src="js/showroom.js?v=202610292300"></script>
+<script src="js/garage.js?v=202610292300"></script>
+<script src="js/intro.js?v=202610292300"></script>
+<script src="js/podium.js?v=202610292300"></script>
+<script src="js/main.js?v=202610292300"></script>
+<script src="js/cursor.js?v=202610292300"></script>
 </body>
 </html>

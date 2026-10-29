@@ -1,16 +1,17 @@
 // =====================================================================================
 // patchnotes.js — tela "Patch notes" (menu principal): o que mudou em cada atualização, com data e hora.
 //
-// COMO ACRESCENTAR UMA ATUALIZAÇÃO: coloque uma entrada NOVA NO TOPO da lista NOTES:
-//   { at: '2026-11-02T18:30:00Z', title: 'Título curto', items: ['O que mudou, em uma linha', '...'] }
-// `at` é a hora em que o update subiu (com Z = UTC; ou com o fuso, ex.: '2026-11-02T15:30:00-03:00').
-// Cada jogador vê a data no próprio fuso. Itens: frases curtas, em linguagem de jogador.
-// Quando o jogo roda pelo servidor do projeto, "No ar desde" vem de /deploy.json (hora real em que os
-// arquivos subiram); hospedado sem ele (Vercel, disco), vale a data da entrada mais recente.
+// COMO ACRESCENTAR UMA ATUALIZAÇÃO: coloque uma entrada NOVA NO TOPO da lista NOTES com at: 'auto':
+//   { at: 'auto', title: 'Título curto', items: ['O que mudou, em uma linha', '...'] }
+// 'auto' = a hora vem sozinha do deploy que está no ar (api/deploy na Vercel; deploy.json no Render):
+// a hora exata em que o deploy ficou pronto, ou a do commit que o gerou.
+// IMPORTANTE: só a entrada do topo deve ficar com 'auto'. Ao criar a próxima, troque o 'auto' da anterior
+// pela data que aparecia no jogo (o tooltip da data mostra o valor pronto para copiar, ex.: 2026-11-02T18:30:00Z).
+// Datas fixas: com Z = UTC, ou com o fuso (ex.: '2026-11-02T15:30:00-03:00'). Cada jogador vê no próprio fuso.
 // =====================================================================================
 (function () {
   const NOTES = [
-    { at: '2026-10-30T00:00:00Z', title: 'Olhar para trás e fim da travada ao anoitecer', items: [
+    { at: 'auto', title: 'Olhar para trás e fim da travada ao anoitecer', items: [
       'Segure C para olhar para trás e ver quem vem chegando',
       'Acabou o congelamento na virada do dia para a noite',
       'Os gráficos da pista são preparados no carregamento: sem engasgos no meio da corrida',
@@ -80,27 +81,45 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const when = iso => { const d = new Date(iso); if (isNaN(d)) return ''; const p = n => String(n).padStart(2, '0');
     return p(d.getDate()) + '/' + p(d.getMonth() + 1) + '/' + d.getFullYear() + ' às ' + p(d.getHours()) + ':' + p(d.getMinutes()); };
+  const fixed = n => typeof n.at === 'string' && n.at !== 'auto' && !isNaN(Date.parse(n.at));
   const PatchNotes = {
-    list: NOTES,
-    latest() { return NOTES.reduce((a, b) => (new Date(b.at) > new Date(a.at) ? b : a), NOTES[0]); },
+    list: NOTES, deploy: null, _req: null,
+    // hora de uma entrada: a escrita, ou (at: 'auto') a do deploy no ar; sem deploy ainda = fica no topo
+    iso(n) { return fixed(n) ? n.at : (this.deploy && this.deploy.deployedAt) || null; },
+    time(n) { const i = this.iso(n); return i ? Date.parse(i) : Number.MAX_SAFE_INTEGER; },
+    sorted() { return NOTES.slice().sort((a, b) => this.time(b) - this.time(a)); },
+    latest() { return this.sorted()[0]; },
+    id(n) { return (fixed(n) ? n.at : 'auto') + '|' + n.title; },                  // identifica a entrada (o selo "Novo" usa)
     init() {
       $('btnNotes').addEventListener('click', () => this.open());
       this.badge();
     },
     seen() { try { return localStorage.getItem(KEY()) || ''; } catch (e) { return ''; } },
-    badge() { const b = $('notesBadge'); if (b) b.hidden = this.seen() === this.latest().at; },
+    badge() { const b = $('notesBadge'); if (b) b.hidden = this.seen() === this.id(this.latest()); },
+    // hora real do deploy: Vercel (api/deploy) e, se não houver, o servidor do Render (deploy.json)
+    fetchDeploy() {
+      if (this._req) return this._req;
+      if (!/^https?:$/.test(location.protocol)) return (this._req = Promise.resolve(null));
+      const j = u => fetch(u, { cache: 'no-store' }).then(r => r.ok && /json/.test(r.headers.get('content-type') || '') ? r.json() : null).catch(() => null);
+      return (this._req = j('api/deploy').then(d => d && d.deployedAt ? d : j('deploy.json').then(d2 => (d2 && d2.deployedAt ? d2 : d))).then(d => { this.deploy = d || null; return this.deploy; }));
+    },
+    render() {
+      const list = this.sorted(), last = this.seen(), legacy = !isNaN(Date.parse(last)) ? Date.parse(last) : null;
+      const seenIdx = list.findIndex(n => this.id(n) === last);
+      $('notesList').innerHTML = list.map((n, i) => {
+        const iso = this.iso(n), fresh = !last || (seenIdx >= 0 ? i < seenIdx : legacy !== null ? this.time(n) > legacy : true);
+        const tip = iso ? (fixed(n) ? '' : ' title="Hora do deploy: ' + esc(new Date(iso).toISOString().replace('.000', '')) + '"') : '';
+        return '<article class="pnote' + (fresh ? ' fresh' : '') + '">' +
+          '<header><time datetime="' + esc(iso || '') + '"' + tip + '>' + (iso ? when(iso) : 'agora há pouco') + '</time>' + (i === 0 ? '<span class="tagNew">Atual</span>' : '') + '</header>' +
+          '<h3>' + esc(n.title) + '</h3><ul>' + n.items.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></article>';
+      }).join('');
+      const d = this.deploy, liveIso = (d && d.deployedAt) || this.iso(list[0]);
+      $('notesLive').textContent = liveIso ? 'No ar desde ' + when(liveIso) + (d && d.sha ? ' · versão ' + d.sha : '') : '';
+    },
     open() {
-      const list = NOTES.slice().sort((a, b) => new Date(b.at) - new Date(a.at)), last = this.seen();
-      $('notesList').innerHTML = list.map((n, i) => '<article class="pnote' + (!last || new Date(n.at) > new Date(last) ? ' fresh' : '') + '">' +
-        '<header><time datetime="' + esc(n.at) + '">' + when(n.at) + '</time>' + (i === 0 ? '<span class="tagNew">Atual</span>' : '') + '</header>' +
-        '<h3>' + esc(n.title) + '</h3><ul>' + n.items.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></article>').join('');
-      $('notesLive').textContent = 'No ar desde ' + when(list[0].at);
-      // hora real em que os arquivos subiram (só quando o jogo vem do servidor do projeto)
-      if (/^https?:$/.test(location.protocol)) fetch('deploy.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(d => {
-        if (d && d.deployedAt) $('notesLive').textContent = 'No ar desde ' + when(d.deployedAt);
-      }).catch(() => { });
-      UI.openModal('notesModal');
-      try { localStorage.setItem(KEY(), this.latest().at); } catch (e) { } this.badge();
+      this.render(); UI.openModal('notesModal');
+      this.fetchDeploy().then(() => { if (UI.modal === 'notesModal') this.render(); });
+      try { localStorage.setItem(KEY(), this.id(this.latest())); } catch (e) { } this.badge();
     }
   };
   window.PatchNotes = PatchNotes;
