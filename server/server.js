@@ -29,6 +29,9 @@ const SERVE_STATIC = process.env.SERVE_STATIC !== '0';
 const ROOT = path.resolve(__dirname, '..');
 const PROTOCOL = 1, MAX_PLAYERS = 8, MAX_ROOMS = 200, TRACK_COUNT = 3;
 const FINISH_GRACE_MS = 45000, LOAD_TIMEOUT_MS = 20000, COUNTDOWN_MS = 3600, START_MARGIN_MS = 900;
+// reconexão: quem cai (F5, aba fechada, wi-fi) tem RECONNECT_MS para voltar com o mesmo token; depois sai da sala de vez.
+// O batimento curto garante que uma conexão morta sem aviso (4G caiu) seja percebida em no máximo 2x HEARTBEAT_MS.
+const RECONNECT_MS = 15000, HEARTBEAT_MS = 4000;
 const now = () => Number(process.hrtime.bigint() / 1000n) / 1000;      // ms com fração (monotônico)
 
 // ---------------------------------------------------------------- HTTP (arquivos do jogo)
@@ -121,8 +124,10 @@ function startRace(r) {
   r.state = 'loading'; r.raceN = (r.raceN || 0) + 1;
   const ids = r.order.slice();
   for (let i = ids.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [ids[i], ids[j]] = [ids[j], ids[i]]; }   // grid sorteado
-  r.race = { id: r.raceN, ids, loaded: new Set(), finish: new Map(), prog: new Map(), left: new Set(), startAt: 0, firstFinish: 0, timer: null };
-  broadcast(r, { t: 'prepare', raceId: r.raceN, track: r.track, laps: r.laps, grid: ids.map((id, slot) => ({ id, slot, name: players.get(id).name, spec: players.get(id).spec })) });
+  const grid = ids.map((id, slot) => ({ id, slot, name: players.get(id).name, spec: players.get(id).spec }));
+  r.race = { id: r.raceN, ids, grid, track: r.track, laps: r.laps, loaded: new Set(), finish: new Map(), prog: new Map(), left: new Set(), startAt: 0, firstFinish: 0, timer: null };
+  ids.forEach(id => { players.get(id).last = null; });
+  broadcast(r, { t: 'prepare', raceId: r.raceN, track: r.track, laps: r.laps, grid });
   r.race.timer = setTimeout(() => go(r), LOAD_TIMEOUT_MS);                 // quem não carregar a tempo larga atrasado
   pushRoom(r);
 }
@@ -214,9 +219,21 @@ function onBinary(p, buf) {
   for (let o = 4; o < 40; o += 4) if (!isFinite(buf.readFloatLE(o))) return;
   const speed = buf.readFloatLE(28); if (Math.abs(speed) > 200) return;
   r.race.prog.set(p.id, buf.readFloatLE(36));
+  // último estado conhecido: se o jogador recarregar a página, ele volta exatamente daqui
+  p.last = { raceId: r.race.id, x: buf.readFloatLE(8), y: buf.readFloatLE(12), z: buf.readFloatLE(16), ang: buf.readFloatLE(20), mvAng: buf.readFloatLE(24), speed: buf.readFloatLE(28), prog: buf.readFloatLE(36) };
   // retransmite já: mesmo pacote com tipo 2 e o id de quem mandou
   const out = Buffer.allocUnsafe(40); buf.copy(out, 0, 0, 40); out[0] = 2; out[1] = p.id & 255;
   roomPlayers(r).forEach(o => { if (o !== p && o.ws && o.ws.readyState === 1 && o.ws.bufferedAmount < 64 * 1024) o.ws.send(out, { binary: true }); });
+}
+
+// ---------------------------------------------------------------- retomada (F5 / aba reaberta)
+// tudo o que o cliente precisa para remontar a corrida em andamento: pista, grid (sem quem já saiu),
+// instante da largada no relógio do servidor, quem já chegou e o último estado do próprio kart
+function resumeView(r, p) {
+  const R = r.race; if (!R || (r.state !== 'loading' && r.state !== 'racing')) return null;
+  return { t: 'resume', raceId: R.id, state: r.state, track: R.track, laps: R.laps, startAt: R.startAt, serverTime: now(),
+    grid: R.grid.filter(g => g.id === p.id || (!R.left.has(g.id) && players.get(g.id) && players.get(g.id).room === r.id)),
+    finished: [...R.finish], me: p.last && p.last.raceId === R.id ? p.last : null };
 }
 
 // ---------------------------------------------------------------- WebSocket
@@ -231,7 +248,12 @@ wss.on('connection', (ws, req) => {
   // reconexão: ?token=... devolve o mesmo jogador (mesma sala), se ainda existir
   const tok = new URL(req.url, 'http://x').searchParams.get('token');
   let p = tok && tokens.get(tok);
-  if (p && !p.ws) { p.ws = ws; clearTimeout(p.dropTimer); }
+  if (p) {
+    // mesmo jogador voltando. Se a conexão antiga ainda não fechou (F5 rápido), a nova assume o lugar dela;
+    // o 'close' da antiga é ignorado porque p.ws já aponta para a nova
+    const old = p.ws; p.ws = ws; p.ip = ip; clearTimeout(p.dropTimer); p.dropTimer = null;
+    if (old && old !== ws) { clients.delete(old); try { old.terminate(); } catch (e) { } }
+  }
   else { const id = nextId; nextId = nextId >= 250 ? 1 : nextId + 1;
     p = { id, ws, ip, token: crypto.randomBytes(18).toString('base64url'), name: 'Piloto ' + id, spec: cleanSpec({}), room: null, ready: false, rtt: 0 };
     players.set(id, p); tokens.set(p.token, p); }
@@ -244,14 +266,21 @@ wss.on('connection', (ws, req) => {
   });
   ws.on('close', () => {
     clients.delete(ws); if (p.ws !== ws) return; p.ws = null;
-    const r = p.room && rooms.get(p.room); if (r) pushRoom(r);
-    // 20 s para voltar (queda de wi-fi/4G); depois sai da sala de vez
-    p.dropTimer = setTimeout(() => { leaveRoom(p, 'desconectou'); players.delete(p.id); tokens.delete(p.token); }, 20000);
+    const r = p.room && rooms.get(p.room);
+    if (r) { pushRoom(r); broadcast(r, { t: 'notice', msg: p.name + ' caiu · esperando ' + Math.round(RECONNECT_MS / 1000) + ' s' }); }
+    // RECONNECT_MS para voltar (F5, aba fechada sem querer, queda de wi-fi/4G); depois sai da sala de vez
+    p.dropTimer = setTimeout(() => { if (p.ws) return; leaveRoom(p, 'desconectou'); players.delete(p.id); tokens.delete(p.token); }, RECONNECT_MS);
   });
-  if (p.room && rooms.get(p.room)) { const r = rooms.get(p.room); send(p, { t: 'welcome', id: p.id, token: p.token, serverTime: now(), protocol: PROTOCOL, resumed: true }); send(p, { t: 'joined', room: roomView(r), you: p.id }); pushRoom(r); }
+  if (p.room && rooms.get(p.room)) {
+    const r = rooms.get(p.room), rv = resumeView(r, p);
+    send(p, { t: 'welcome', id: p.id, token: p.token, serverTime: now(), protocol: PROTOCOL, resumed: true });
+    send(p, { t: 'joined', room: roomView(r), you: p.id, resumed: true });
+    if (rv) send(p, rv);
+    broadcast(r, { t: 'notice', msg: p.name + ' voltou' }, p); pushRoom(r);
+  }
 });
-// batimento: derruba conexões mortas (sem resposta em 10 s)
-setInterval(() => { wss.clients.forEach(ws => { if (!ws.isAlive) return ws.terminate(); ws.isAlive = false; try { ws.ping(); } catch (e) { } }); }, 10000);
+// batimento: derruba conexões mortas (sem resposta em até 2x HEARTBEAT_MS)
+setInterval(() => { wss.clients.forEach(ws => { if (!ws.isAlive) return ws.terminate(); ws.isAlive = false; try { ws.ping(); } catch (e) { } }); }, HEARTBEAT_MS);
 // atualiza o ping de todos na sala de tempos em tempos (para o painel do lobby)
 setInterval(() => rooms.forEach(r => { if (r.state === 'lobby') pushRoom(r); }), 5000);
 

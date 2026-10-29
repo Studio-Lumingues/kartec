@@ -10,6 +10,12 @@
 // =====================================================================================
 (function () {
   const NOTES = [
+    { at: '2026-10-29T15:00:00Z', title: 'Reconexão no online e HUD mais limpa', items: [
+      'Recarregou a página ou fechou a aba sem querer? Você volta para a mesma corrida em até 15 segundos',
+      'Caiu a internet no meio da corrida: o jogo reconecta sozinho, também com 15 segundos de prazo',
+      'Sem aquele aviso do navegador ao apertar F5',
+      'Contador de FPS no estilo das placas da HUD, logo abaixo das voltas',
+      'Sem barras de rolagem em nenhuma tela'] },
     { at: '2026-10-29T00:07:00Z', title: 'Patch notes no jogo', items: [
       'Nova tela de Patch notes no menu, com o resumo de cada atualização',
       'O selo "Novo" aparece no botão quando sai uma atualização que você ainda não viu'] },

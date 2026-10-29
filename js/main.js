@@ -547,6 +547,48 @@
       const go = () => { this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false }; };
       if (this.state === 'waiting') go(); else setTimeout(() => { if (this.state === 'waiting') go(); }, 300);
     },
+    // volta para uma corrida JÁ EM ANDAMENTO (página recarregada/aba reaberta): mesma pista e grid, relógio da
+    // largada do servidor e o kart no último ponto que o servidor recebeu (mesma volta, mesma posição na pista)
+    onlineResume(m) {
+      this.online = { raceId: m.raceId, startAt: m.startAt, acc: 0, hitAt: {}, sentAt: {} };
+      this.mode = 'online'; this.cup = null; this.trackIdx = m.track; CFG.LAPS = m.laps; this.spec = Object.assign({}, Custom.spec);
+      Net.resetRace(m.startAt, m.raceId);
+      UI.transition(() => {
+        Podium.stop(); this.curTrack = m.track; this.load(m.track, { online: m.grid });
+        UI.screen('race'); this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
+        UI.cupInfo('Online · ' + (Net.room ? Net.room.name : ''));
+        (m.finished || []).forEach(([id, t]) => this.onlineFinished({ id, time: t }));
+        const P = this.player, mine = (m.finished || []).find(f => f[0] === Net.id);
+        if (m.me) { try { this.restoreKart(P, m.me); } catch (e) { console.error('[resume]', e); } }
+        if (Net.serverNow() < m.startAt) {                                   // ainda na contagem: ela continua sincronizada
+          this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
+          $('signal').hidden = false; UI.countNum(''); UI.Fairy.show();
+        } else {                                                             // já largou: direto para a corrida
+          this.state = 'race'; this.cd = { t: 99, step: 4, early: true };
+          $('signal').hidden = true; UI.countNum(''); this.race.time = Math.max(0, Net.raceTime());
+        }
+        if (mine) { P.finished = true; P.finishTime = mine[1]; this.state = 'finish'; this.race.endT = 0; UI.toast('Aguardando os outros pilotos…', 4000); }
+        else UI.toast('De volta à corrida!', 1600);
+        PL.request();
+      });
+    },
+    // coloca o kart no ponto salvo sem perder as voltas: acha o nó da pista pelo progresso e corrige o
+    // progresso/volta em múltiplos de N (a pista tem N nós por volta)
+    restoreKart(k, s) {
+      if (!isFinite(s.prog)) return;
+      const def = CFG.TRACKS[this.curTrack], tr = this.track, N = tr.N || def.N, si = def.startIdx;
+      k.place(tr, si, 0); const p0 = k.progress;
+      const node = (((si + Math.round(s.prog - p0)) % N) + N) % N;
+      k.place(tr, node, 0);
+      const laps = Math.round((s.prog - k.progress) / N);
+      if (laps) {
+        k.progress += laps * N;
+        const d = Object.getOwnPropertyDescriptor(k, 'lap');              // "lap" guardado no kart (e não calculado) acompanha
+        if (d && 'value' in d && typeof k.lap === 'number') k.lap += laps;
+      }
+      if ([s.x, s.y, s.z, s.ang, s.mvAng].every(isFinite)) { k.pos.set(s.x, s.y, s.z); k.ang = s.ang; k.mvAng = s.mvAng; }
+      k.speed = 0;
+    },
     onlineFinished(m) { const k = this.rivals && this.rivals.find(x => x.netId === m.id); if (k) { k.finished = true; k.finishTime = m.time; } },
     onlineLeft(id) {
       const k = this.rivals && this.rivals.find(x => x.netId === id); if (!k || !this.scene) return;
@@ -872,7 +914,8 @@
       Showroom.build(renderer); Garage.build(); UI.menuKart(Custom.spec);
       try { renderer.compile(Showroom.scene, Showroom.cam); } catch (e) { }   // vitrine do menu pré-compilada: nada a compilar quando a logo sai
       Custom.onChange((id, v, spec) => { Showroom.apply(id, spec); UI.menuKart(spec); });
-      setTimeout(() => Game.toIntro(), ok ? 150 : 900);
+      // voltando para uma sala/corrida online (F5 ou aba reaberta em até 15 s): pula a abertura
+      setTimeout(() => { if (!(window.Online && Online.bootDone())) Game.toIntro(); }, ok ? 150 : 900);
     });
   }
   // espera a fonte dos números/títulos (Titan One) para os textos desenhados em canvas já saírem com ela

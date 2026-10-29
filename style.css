@@ -632,3 +632,14 @@ body[data-screen="menu"] #brand { width: min(500px, 44vw); top: calc(22px + env(
 html, body, * { scrollbar-width: none !important; -ms-overflow-style: none !important; }
 *::-webkit-scrollbar, *::-webkit-scrollbar-thumb, *::-webkit-scrollbar-track { display: none !important; width: 0 !important; height: 0 !important; background: transparent !important; }
 html, body { overscroll-behavior: none; }
+
+/* ---------- faixa de reconexão (F5 / queda de rede): placa escura no topo, acima da tela de carregamento ---------- */
+#netResume {
+  position: fixed; left: 50%; top: calc(84px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 45; pointer-events: none;
+  height: 40px; line-height: 40px; padding: 0 30px; white-space: nowrap;
+  background: linear-gradient(180deg, rgba(46, 48, 54, .92), rgba(22, 23, 27, .94));
+  color: #fff; font: 700 20px var(--display); letter-spacing: .5px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+  clip-path: polygon(16px 0, calc(100% - 16px) 0, 100% 50%, calc(100% - 16px) 100%, 16px 100%, 0 50%);
+}
+#netResume[hidden] { display: none; }
+@media (max-width: 560px) { #netResume { font-size: 16px; height: 34px; line-height: 34px; padding: 0 22px; } }

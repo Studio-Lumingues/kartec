@@ -19,6 +19,8 @@
     ws: null, id: 0, token: null, connected: false, room: null, handlers: {}, url: null,
     offset: 0, offsetT: 0, synced: false, rtt: 0, samples: [], pingTimer: null, raceStart: 0, raceId: 0,
     remote: new Map(), SEND_HZ,
+    // reconexão: o servidor guarda a vaga por 15 s; o cliente salva o token para voltar mesmo depois de F5
+    RESUME_MS: 15000,
     // endereço do servidor: o mesmo host da página (http/https) ou o salvo pelo jogador (página aberta via file://)
     // endereço do servidor configurado (jogo e servidor separados), normalizado para ws(s)://.../ws
     configured() {
@@ -38,38 +40,72 @@
     emit(type, m) { (this.handlers[type] || []).forEach(fn => { try { fn(m); } catch (e) { console.error('[net]', type, e); } }); },
     send(o) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(o)); },
 
-    connect(url, hello) {
+    connect(url, hello, timeoutMs) {
       this.url = url || this.defaultUrl(); this.hello = hello; this._closing = false;
       return new Promise((resolve, reject) => {
         let ws; try { ws = new WebSocket(this.url + (this.token ? (this.url.includes('?') ? '&' : '?') + 'token=' + encodeURIComponent(this.token) : '')); } catch (e) { reject(e); return; }
         ws.binaryType = 'arraybuffer'; this.ws = ws; let done = false;
         const fail = e => { if (!done) { done = true; reject(e || new Error('Sem conexão com o servidor')); } };
-        const to = setTimeout(() => { fail(new Error('O servidor não respondeu')); try { ws.close(); } catch (e) { } }, 6000);
+        const to = setTimeout(() => { fail(new Error('O servidor não respondeu')); try { ws.close(); } catch (e) { } }, Math.max(1500, Math.min(6000, timeoutMs || 6000)));
         ws.onopen = () => { this.send({ t: 'hello', name: hello.name, spec: hello.spec }); };
         ws.onerror = () => fail();
         ws.onclose = () => { clearTimeout(to); const was = this.connected; this.connected = false; clearInterval(this.pingTimer); fail(); if (was && !this._closing) this.emit('drop'); };
         ws.onmessage = ev => {
           if (typeof ev.data !== 'string') { this.onBinary(ev.data); return; }
           let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-          if (m.t === 'welcome') { this.id = m.id; this.token = m.token; this.connected = true; clearTimeout(to); this.startPing(); if (!done) { done = true; resolve(m); } }
+          if (m.t === 'welcome') { const first = !this.connected; this.id = m.id; this.token = m.token; this.connected = true; clearTimeout(to); if (first) this.startPing(); this.saveSession(); if (!done) { done = true; resolve(m); } }
           if (m.t === 'pong') { this.onPong(m); return; }
-          if (m.t === 'joined' || m.t === 'room') this.room = m.room;
+          if (m.t === 'joined' || m.t === 'room') { this.room = m.room; this.saveSession(); }
           this.emit(m.t, m);
         };
       });
     },
-    // reconexão automática (mesmo token = mesma vaga na sala)
-    async reconnect() {
-      for (let i = 0; i < 5; i++) { await new Promise(r => setTimeout(r, 700 + i * 1200)); try { return await this.connect(this.url, this.hello); } catch (e) { } }
-      return null;
+    // ---------------- sessão salva (para voltar à sala depois de F5 ou de fechar a aba sem querer) ----------------
+    // localStorage (e não sessionStorage) para valer também quando a aba é fechada e aberta de novo.
+    // hb = "ainda estou vivo" (a cada segundo); closedAt = hora em que a página foi fechada/recarregada.
+    _skey() { return CFG.STORAGE + ':session'; },
+    _readSession() { try { return JSON.parse(localStorage.getItem(this._skey()) || 'null'); } catch (e) { return null; } },
+    saveSession() {
+      if (!this.connected || !this.token || !this.room) return;
+      try { localStorage.setItem(this._skey(), JSON.stringify({ token: this.token, url: this.url, id: this.id, room: this.room.id, hb: Date.now(), closedAt: 0 })); } catch (e) { }
     },
-    close() { this._closing = true; clearInterval(this.pingTimer); if (this.ws) try { this.ws.close(); } catch (e) { } this.ws = null; this.connected = false; this.room = null; this.token = null; this.remote.clear(); },
+    forget() { try { localStorage.removeItem(this._skey()); } catch (e) { } },
+    markClosed() { const s = this._readSession(); if (!s || !this.connected || !this.room) return; s.closedAt = Date.now(); try { localStorage.setItem(this._skey(), JSON.stringify(s)); } catch (e) { } },
+    // sessão que ainda dá para retomar: fechada há menos de 15 s. Se não há closedAt e o "hb" é recente,
+    // outra aba do jogo está usando essa sessão agora: não rouba a vaga dela.
+    pending() {
+      const s = this._readSession(); if (!s || !s.token || !s.room || !s.url) return null;
+      const t = Date.now(), since = s.closedAt ? t - s.closedAt : t - s.hb;
+      if (!s.closedAt && since < 3000) return null;
+      if (since >= this.RESUME_MS) { this.forget(); return null; }
+      return { url: s.url, token: s.token, room: s.room, deadline: t + (this.RESUME_MS - since) };
+    },
+    // tenta voltar com o token salvo até o prazo; onTick(segundosRestantes) para mostrar a contagem
+    async resume(info, hello, onTick) {
+      this.token = info.token; this.url = info.url;
+      while (true) {
+        const left = info.deadline - Date.now(); if (left <= 0) break;
+        if (onTick) onTick(Math.ceil(left / 1000));
+        try {
+          const w = await this.connect(info.url, hello, left);
+          if (w && w.resumed) return w;
+          this.close(); return null;                                         // o servidor não tem mais a vaga (passou do prazo ou reiniciou)
+        } catch (e) { }
+        const rest = info.deadline - Date.now(); if (rest <= 0) break;
+        if (onTick) onTick(Math.ceil(rest / 1000));
+        await new Promise(r => setTimeout(r, Math.min(1000, rest)));
+      }
+      this.close(); return null;
+    },
+    // queda no meio do jogo: mesmo token = mesma vaga na sala, com o mesmo prazo de 15 s
+    reconnect(onTick) { return this.resume({ url: this.url, token: this.token, deadline: Date.now() + this.RESUME_MS }, this.hello, onTick); },
+    close() { this._closing = true; clearInterval(this.pingTimer); if (this.ws) try { this.ws.close(); } catch (e) { } this.ws = null; this.connected = false; this.room = null; this.token = null; this.remote.clear(); this.forget(); },
 
     // ---------------- relógio sincronizado ----------------
     startPing() {
       clearInterval(this.pingTimer); this.samples = []; this.synced = false;
       let n = 0; const burst = setInterval(() => { this.ping(); if (++n >= 6) clearInterval(burst); }, 120);   // 6 amostras rápidas na entrada
-      this.pingTimer = setInterval(() => this.ping(), 1000);
+      this.pingTimer = setInterval(() => { this.ping(); if (this.room) this.saveSession(); else this.forget(); }, 1000);
     },
     ping() { this.send({ t: 'ping', c: performance.now(), rtt: Math.round(this.rtt) }); },
     onPong(m) {
@@ -126,5 +162,7 @@
     },
     resetRace(startAt, raceId) { this.raceStart = startAt; this.raceId = raceId; this.remote.clear(); }
   };
+  // página recarregando ou aba fechando: marca a hora para a próxima abertura saber que pode retomar
+  addEventListener('pagehide', () => Net.markClosed());
   window.Net = Net;
 })();

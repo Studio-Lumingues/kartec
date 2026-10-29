@@ -39,7 +39,8 @@
       Custom.onChange(() => { if (Net.connected) Net.send({ t: 'spec', spec: Custom.spec }); });
       // eventos da rede
       Net.on('rooms', m => this.renderRooms(m.rooms));
-      Net.on('joined', m => this.enterLobby(m.room));
+      Net.on('joined', m => { if (this.resuming) { this.resuming.room = m.room; return; } this.enterLobby(m.room, m.resumed); });
+      Net.on('resume', m => { if (this.resuming) { this.resuming.race = m; return; } this.handleResume(m); });
       Net.on('room', m => this.renderLobby(m.room));
       Net.on('error', m => this.error(m.msg));
       Net.on('notice', m => UI.toast(m.msg, 1800));
@@ -49,8 +50,56 @@
       Net.on('left', m => { if (Game.online) Game.onlineLeft(m.id); });
       Net.on('results', m => Game.onlineResults(m.rows));
       Net.on('bump', m => Game.netBump(m));
-      Net.on('kicked', () => { Net.room = null; UI.toast('Você foi removido da sala', 2500); Game.leaveOnline(true); });
+      Net.on('kicked', () => { Net.room = null; Net.forget(); UI.toast('Você foi removido da sala', 2500); Game.leaveOnline(true); });
       Net.on('drop', () => this.onDrop());
+      this.bootResume();
+    },
+    // ---------- voltar para a sala/corrida depois de F5 ou de reabrir a aba (prazo de 15 s) ----------
+    // a conexão começa JÁ, enquanto o jogo ainda carrega, para garantir a vaga dentro do prazo;
+    // a corrida só é remontada quando o carregamento termina (bootDone, chamado pelo main.js)
+    bootResume() {
+      const info = Net.pending(); if (!info) return;
+      this.resuming = { ok: false, room: null, race: null };
+      this.banner('Voltando para a sala…');
+      Net.resume(info, { name: this.name(), spec: Custom.spec }, s => this.banner('Voltando para a corrida… ' + s + ' s')).then(w => {
+        if (!this.resuming) return;
+        if (!w) { this.resuming = null; this.banner(''); this._resumeFailed = true; if (this.booted) this.resumeFailed(); return; }
+        this.resuming.ok = true; this.finishResume();
+      });
+    },
+    // main.js: carregamento terminou. Devolve true se a retomada cuida da próxima tela (sem abertura)
+    bootDone() {
+      this.booted = true;
+      if (this._resumeFailed) { this._resumeFailed = false; setTimeout(() => UI.toast('Não deu para voltar à corrida: passou de 15 s', 3200), 600); return false; }
+      if (!this.resuming) return false;
+      this.finishResume(); return true;
+    },
+    resumeFailed() { this.banner(''); Game.toIntro(); setTimeout(() => UI.toast('Não deu para voltar à corrida: passou de 15 s', 3200), 600); },
+    finishResume() {
+      const R = this.resuming; if (!R || !R.ok || !this.booted) return;
+      this.resuming = null; this.banner('');
+      if (!R.room) { this.resumeFailed(); return; }
+      Game.toMenu(true); Net.room = R.room;
+      if (R.race) this.handleResume(R.race); else this.enterLobby(R.room, true);
+    },
+    async handleResume(m) {
+      // queda rápida no meio da própria corrida: a cena já existe, só segue (e larga, se o "VAI" chegou enquanto estava fora)
+      if (Game.online && Game.online.raceId === m.raceId && Game.scene) {
+        if (Game.state === 'waiting') { if (m.state === 'racing' && m.startAt) Game.onlineGo({ raceId: m.raceId, startAt: m.startAt }); else Net.send({ t: 'loaded', raceId: m.raceId }); }
+        return;
+      }
+      UI.closeModal(true);
+      if (m.state === 'loading') { Game.onlinePrepare(m); return; }
+      // relógio sincronizado antes de decidir se ainda está na contagem ou já correndo (no máx. 2 s)
+      const t0 = performance.now(); while (!Net.synced && performance.now() - t0 < 2000) await new Promise(r => setTimeout(r, 50));
+      Game.onlineResume(m);
+    },
+    // faixa de aviso da reconexão (vazia = esconde)
+    banner(t) {
+      let el = $('netResume');
+      if (!t) { if (el) el.hidden = true; return; }
+      if (!el) { el = document.createElement('div'); el.id = 'netResume'; el.setAttribute('role', 'status'); document.body.appendChild(el); }
+      el.textContent = t; el.hidden = false;
     },
     name() { return ($('onName').value || '').replace(/[<>]/g, '').trim().slice(0, 16) || 'Piloto'; },
     me() { return Net.room && Net.room.players.find(p => p.id === Net.id); },
@@ -103,10 +152,12 @@
       Net.send({ t: 'create', name, password: pass, max: +$('onMax').value, track: +$('onTrack').value, laps: +$('onLaps').value });
     },
     // ---------- sala de espera ----------
-    enterLobby(room) {
+    enterLobby(room, resumed) {
+      // de volta após uma queda no meio da corrida: continua onde está, só atualiza a sala
+      if (resumed && Game.online && Game.scene) { this.renderLobby(room); return; }
       UI.closeModal(true); try { localStorage.setItem(KEY(), this.name()); } catch (e) { }
       if (Game.state === 'menu' || Game.state === 'garage' || Game.state === 'lobby') { Game.state = 'lobby'; UI.screen('lobby'); Showroom.setRig('menu'); }
-      this.renderLobby(room); UI.toast('Você entrou na sala ' + room.name, 1600);
+      this.renderLobby(room); UI.toast(resumed ? 'De volta à sala ' + room.name : 'Você entrou na sala ' + room.name, 1600);
     },
     toLobby() {
       UI.transition(() => { Podium.stop(); Game.online = null; Game.dispose(); Game.state = 'lobby'; UI.screen('lobby'); Showroom.setRig('menu'); this.renderLobby(Net.room); });
@@ -135,7 +186,7 @@
     leave(force) {
       const racing = Game.online && ['waiting', 'countdown', 'race', 'finish'].includes(Game.state);
       if (racing && !force) { this.escape(); return; }
-      Net.send({ t: 'leave' }); Net.room = null; Game.leaveOnline(true);
+      Net.send({ t: 'leave' }); Net.room = null; Net.forget(); Game.leaveOnline(true);
     },
     escape() {
       if (Game.state === 'lobby') { this.leave(true); return; }
@@ -146,10 +197,10 @@
     },
     async onDrop() {
       if (!Net.room) return;
-      UI.toast('Conexão perdida. Reconectando…', 3000);
-      const w = await Net.reconnect();
+      const w = await Net.reconnect(s => this.banner('Conexão perdida · reconectando… ' + s + ' s'));
+      this.banner('');
       if (w && w.resumed) UI.toast('Reconectado!', 1500);
-      else { UI.toast(w ? 'O servidor reiniciou e a sala foi encerrada. Crie ou entre numa sala de novo.' : 'Não foi possível reconectar ao servidor.', 3800); Net.room = null; Game.leaveOnline(true); }
+      else { UI.toast('Não foi possível voltar em 15 s: você saiu da sala.', 3800); Net.room = null; Net.forget(); Game.leaveOnline(true); }
     }
   };
   window.Online = Online;
