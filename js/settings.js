@@ -69,7 +69,7 @@
         const num = el.firstChild;
         let n = 0, t0 = performance.now();
         const tick = now => {
-          n++;
+          n++; this.fpsFollow();
           if (now - t0 >= 500) { num.textContent = Math.min(999, Math.round(n * 1000 / (now - t0))); n = 0; t0 = now; this.fpsPlace(); }
           if (!el.hidden) requestAnimationFrame(tick); else this._fpsRun = false;
         };
@@ -84,6 +84,22 @@
       const parent = race ? col : document.body;
       if (el.parentNode !== parent) parent.appendChild(el);
       el.classList.toggle('inHud', !!race);
+      if (!race) el.style.transform = el.style.translate = el.style.rotate = el.style.scale = el.style.opacity = '';
+    },
+    // acompanha a placa de voltas quadro a quadro: copia o movimento dela (transform, translate, rotate, scale e
+    // opacidade, venha de estilo, classe CSS ou animação) e usa como pivô o MESMO ponto da placa de voltas.
+    // Assim balanço, tremor, giro e "pulo" da troca de volta movem as duas placas juntas, como uma peça só.
+    fpsFollow() {
+      const el = $('fpsPill'), lap = $('lap');
+      if (!el || !lap || !el.classList.contains('inHud')) return;
+      const cs = getComputedStyle(lap);
+      el.style.transform = cs.transform === 'none' ? '' : cs.transform;
+      el.style.translate = cs.translate === 'none' ? '' : cs.translate;
+      el.style.rotate = cs.rotate === 'none' ? '' : cs.rotate;
+      el.style.scale = cs.scale === 'none' ? '' : cs.scale;
+      el.style.opacity = cs.opacity;
+      const o = cs.transformOrigin.split(' ').map(parseFloat);
+      if (o.length >= 2 && o.every(isFinite)) el.style.transformOrigin = (lap.offsetLeft + o[0] - el.offsetLeft) + 'px ' + (lap.offsetTop + o[1] - el.offsetTop) + 'px';
     },
     // ---------- interface ----------
     init() {
