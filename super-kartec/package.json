@@ -1,0 +1,16 @@
+{
+  "name": "super-kartec",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Super Kartec: jogo de kart 3D com modo online (servidor + arquivos do jogo no mesmo serviço)",
+  "main": "server/server.js",
+  "scripts": {
+    "start": "node server/server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.17.1"
+  }
+}

@@ -1,0 +1,14 @@
+# Blueprint do Render: New + > Blueprint > escolha este repositório
+services:
+  - type: web
+    name: super-kartec
+    runtime: node
+    region: virginia          # região do Render mais próxima do Brasil (não há região na América do Sul)
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ALLOWED_ORIGINS        # opcional: site do jogo na Vercel, ex.: https://meu-jogo.vercel.app (vazio = qualquer site)
+        sync: false

@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Super Kartec</title>
+<!-- Fredoka (logo, títulos e números) + Nunito (textos e HUD): tipografia arredondada. Sem internet, caem para fontes do sistema. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=202610290007">
+</head>
+<body data-screen="boot">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gNumGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6a8"/><stop offset=".42" stop-color="#ffd23f"/><stop offset=".78" stop-color="#ff9a1a"/><stop offset="1" stop-color="#ff5a2a"/></linearGradient>
+  <linearGradient id="gNumSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#b9f4ff"/><stop offset="1" stop-color="#3dd6ff"/></linearGradient>
+  <linearGradient id="gNumGo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2ffd8"/><stop offset=".5" stop-color="#4cff6a"/><stop offset="1" stop-color="#12b84a"/></linearGradient>
+</defs></svg>
+
+<!-- ======================= Logo (SVG): placa "SUPER" vermelha + "KARTEC" dourado com contorno duplo ======================= -->
+<template id="logoTpl">
+  <svg class="logo" viewBox="0 0 680 300" role="img" aria-label="Super Kartec">
+    <defs>
+      <linearGradient id="lgGold" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="250"><stop offset="0" stop-color="#FFF4A8"/><stop offset=".38" stop-color="#FFD02E"/><stop offset=".78" stop-color="#FF9A00"/><stop offset="1" stop-color="#FF6A00"/></linearGradient>
+      <linearGradient id="lgShine" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="180"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+      <linearGradient id="lgRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8FA3"/><stop offset="1" stop-color="#E0305A"/></linearGradient>
+      <clipPath id="lgClip"><text x="350" y="246" font-size="138" text-anchor="middle" letter-spacing="2" class="lgText" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text></clipPath>
+    </defs>
+    <g transform="translate(26 0) skewX(-10)">
+      <g class="lgLines" stroke="#fff" stroke-linecap="round" stroke-width="12"><line x1="0" y1="150" x2="70" y2="150"/><line x1="-18" y1="190" x2="44" y2="190"/><line x1="6" y1="230" x2="56" y2="230"/></g>
+      <g class="lgPlate" transform="translate(350 72)">
+        <rect x="-140" y="-40" width="280" height="80" rx="18" fill="#2A1D4A" transform="translate(0 8)"/>
+        <rect x="-140" y="-40" width="280" height="80" rx="18" fill="url(#lgRed)" stroke="#2A1D4A" stroke-width="9"/>
+        <g class="lgText" font-size="62" text-anchor="middle" letter-spacing="10"><text y="22" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="10" stroke-linejoin="round" transform="translate(0 4)" textLength="196" lengthAdjust="spacingAndGlyphs">SUPER</text><text y="22" fill="#fff" textLength="196" lengthAdjust="spacingAndGlyphs">SUPER</text></g>
+      </g>
+      <g class="lgText lgMain" font-size="138" text-anchor="middle" letter-spacing="2">
+        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round" transform="translate(0 11)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="#fff" stroke="#fff" stroke-width="13" stroke-linejoin="round" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="url(#lgGold)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="url(#lgShine)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+      </g>
+      <g clip-path="url(#lgClip)"><rect class="lgSweep" x="-120" y="100" width="70" height="170" fill="#fff" opacity=".55" transform="skewX(-20)"/></g>
+    </g>
+  </svg>
+</template>
+
+<!-- ======================= HUD da corrida ======================= -->
+<div id="hud">
+  <div class="hudTL">
+    <div id="lap" class="pill">Volta 1/3</div>
+    <div id="time" class="pill mono">00’00”00</div>
+    <div id="cupInfo" class="pill small"></div>
+  </div>
+  <div class="hudTR">
+    <div id="clock" class="pill small"></div>
+    <div class="hudBtns">
+      <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações" title="Configurações"><span class="ic" data-ic="gear"></span></button>
+      <button id="menuBtn" class="pill btn" type="button">Menu</button>
+    </div>
+  </div>
+  <canvas id="mini" width="264" height="264" aria-label="Minimapa"></canvas>
+  <canvas id="speedo" width="300" height="190" aria-label="Velocímetro"></canvas>
+  <div id="pos" aria-live="polite"><b></b><i></i></div>
+  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
+</div>
+<div id="signal" hidden><div id="cdnum" hidden></div></div>
+<div id="toast" role="status"></div>
+<div id="flare" aria-hidden="true"></div>
+<div id="speedLines" aria-hidden="true"></div>
+
+<!-- controles de toque -->
+<div id="touch">
+  <div class="pad"><button data-k="left" aria-label="Esquerda"><span class="ic" data-ic="left"></span></button><button data-k="right" aria-label="Direita"><span class="ic" data-ic="right"></span></button></div>
+  <div class="pad"><button data-k="wheelie" class="d wh" aria-label="Grau">Grau</button><button data-k="drift" class="d" aria-label="Drift">Drift</button><button data-k="down" aria-label="Ré"><span class="ic" data-ic="down"></span></button><button data-k="up" class="go" aria-label="Acelerar"><span class="ic" data-ic="up"></span></button></div>
+</div>
+
+<!-- ======================= Carregamento ======================= -->
+<section id="boot" aria-live="polite">
+  <div class="bootBox">
+    <p>Preparando a largada…</p>
+    <div class="bar"><i id="bootBar"></i></div>
+    <small id="bootNote">Carregando o piloto 3D</small>
+  </div>
+</section>
+
+<!-- ======================= Abertura ======================= -->
+<section id="intro">
+  <div class="letterbox top"></div><div class="letterbox bottom"></div>
+  <div id="introFlash"></div>
+  <p id="pressStart">Toque ou pressione <kbd>Enter</kbd></p>
+  <button id="btnSkip" class="skip" type="button">Pular <kbd>Esc</kbd></button>
+</section>
+
+<!-- logo compartilhada: entra com impacto na abertura e desliza para o canto do menu -->
+<div id="brand" aria-hidden="false"></div>
+
+<!-- ======================= Menu principal ======================= -->
+<section id="menu" aria-label="Menu principal">
+  <nav class="mainNav">
+    <button id="btnPlay" class="cta big" type="button">Jogar <kbd>Enter</kbd></button>
+    <button id="btnOnline" class="navBtn" type="button"><span class="ico" data-ic="online"></span><span><strong>Online</strong><small>Corra com os amigos</small></span></button>
+    <button id="btnGarage" class="navBtn" type="button"><span class="ico" data-ic="wrench"></span><span><strong>Garagem</strong><small id="menuKart"></small></span></button>
+    <button id="btnSettings" class="navBtn" type="button"><span class="ico" data-ic="gear"></span><span><strong>Configurações</strong><small>Som e gráficos</small></span></button>
+    <button id="btnNotes" class="navBtn" type="button"><span class="ico" data-ic="notes"></span><span><strong>Patch notes</strong><small>O que mudou no jogo</small></span><span id="notesBadge" class="newBadge" hidden>Novo</span></button>
+    <button id="btnHow" class="navBtn" type="button"><span class="ico" data-ic="gamepad"></span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
+  </nav>
+</section>
+
+<!-- ======================= Modal: preparar corrida ======================= -->
+<div id="setup" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="setupTitle">
+  <div class="sheet">
+    <header><h2 id="setupTitle">Preparar corrida</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div class="block">
+      <h3>Modo</h3>
+      <div class="seg" id="modeSeg" role="radiogroup" aria-label="Modo de jogo">
+        <button type="button" data-v="cup" class="on" role="radio" aria-checked="true"><strong>Copa Kartec</strong><span>3 pistas, vence o menor tempo somado</span></button>
+        <button type="button" data-v="single" role="radio" aria-checked="false"><strong>Corrida única</strong><span>Escolha uma pista</span></button>
+      </div>
+    </div>
+    <div class="block">
+      <h3 id="trackTitle">Pistas da Copa</h3>
+      <div id="trackList"></div>
+    </div>
+    <div class="row2">
+      <div class="block">
+        <h3>Voltas</h3>
+        <div class="stepper" id="lapStep"><button type="button" class="ghost" data-d="-1" aria-label="Menos voltas">−</button><output id="lapVal">3</output><button type="button" class="ghost" data-d="1" aria-label="Mais voltas">+</button></div>
+      </div>
+      <div class="block">
+        <h3>Rival</h3>
+        <div class="seg mini" id="diffSeg" role="radiogroup" aria-label="Dificuldade">
+          <button type="button" data-v="easy" role="radio" aria-checked="false">Fácil</button>
+          <button type="button" data-v="normal" class="on" role="radio" aria-checked="true">Normal</button>
+          <button type="button" data-v="hard" role="radio" aria-checked="false">Difícil</button>
+        </div>
+      </div>
+    </div>
+    <div class="actions">
+      <button id="btnRace" class="cta" type="button">Correr <kbd>Enter</kbd></button>
+      <button class="ghost" type="button" data-close>Voltar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= Modal: jogar online ======================= -->
+<div id="onlineModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
+  <div class="sheet">
+    <header><h2 id="onlineTitle">Jogar online</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div class="block onTop">
+      <label class="field"><span>Seu nome</span><input id="onName" maxlength="16" autocomplete="nickname" spellcheck="false"></label>
+      <p id="onStatus" class="netStatus" role="status"></p>
+    </div>
+    <div class="seg mini" id="onTabs" role="tablist" aria-label="Online">
+      <button type="button" data-v="join" class="on" role="tab" aria-selected="true">Entrar numa sala</button>
+      <button type="button" data-v="create" role="tab" aria-selected="false">Criar sala</button>
+    </div>
+    <div id="onJoin" class="block">
+      <div class="roomsHead"><h3>Salas abertas</h3><button id="onRefresh" class="ghost small" type="button">Atualizar</button></div>
+      <div id="onRooms" class="roomList" aria-live="polite"></div>
+      <div class="joinRow">
+        <label class="field code"><span>Código</span><input id="onCode" maxlength="5" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Senha da sala</span><input id="onPass" type="password" maxlength="32" autocomplete="off"></label>
+        <button id="onJoinBtn" class="cta" type="button">Entrar</button>
+      </div>
+    </div>
+    <div id="onCreate" class="block" hidden>
+      <div class="createGrid">
+        <label class="field"><span>Nome da sala</span><input id="onRoomName" maxlength="24" autocomplete="off"></label>
+        <label class="field"><span>Senha (para entrar)</span><input id="onRoomPass" type="password" maxlength="32" autocomplete="new-password"></label>
+        <label class="field"><span>Jogadores</span><select id="onMax"></select></label>
+        <label class="field"><span>Pista</span><select id="onTrack"></select></label>
+        <label class="field"><span>Voltas</span><select id="onLaps"></select></label>
+      </div>
+      <div class="actions"><button id="onCreateBtn" class="cta" type="button">Criar sala</button></div>
+    </div>
+    <p id="onError" class="netError" role="alert"></p>
+    <details class="adv"><summary>Servidor</summary><label class="field"><span>Endereço (ws://…/ws)</span><input id="onServer" spellcheck="false"></label></details>
+  </div>
+</div>
+
+<!-- ======================= Sala de espera (online) ======================= -->
+<section id="lobby" aria-label="Sala online" hidden>
+  <div class="lobbyCard">
+    <header>
+      <div><p class="eyebrow">Sala online</p><h2 id="lobbyName"></h2></div>
+      <button id="lobbyCode" class="code" type="button" title="Copiar o código da sala"></button>
+    </header>
+    <ul id="lobbyPlayers" class="lobbyPlayers"></ul>
+    <div class="lobbySettings">
+      <label class="field"><span>Pista</span><select id="lobbyTrack"></select></label>
+      <label class="field"><span>Voltas</span><select id="lobbyLaps"></select></label>
+    </div>
+    <p id="lobbyHint" class="note"></p>
+    <div class="actions">
+      <button id="lobbyReady" class="cta" type="button">Estou pronto</button>
+      <button id="lobbyStart" class="cta" type="button" hidden>Iniciar corrida</button>
+      <button id="lobbyLeave" class="ghost" type="button">Sair da sala</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= Modal: configurações ======================= -->
+<div id="settingsModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <div class="sheet">
+    <header><h2 id="setTitle">Configurações</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
+      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true"><span class="ic" data-ic="sound"></span> Som</button>
+      <button type="button" data-v="gfx" role="tab" aria-selected="false"><span class="ic" data-ic="monitor"></span> Gráficos</button>
+    </div>
+    <div id="setVol" class="block setPane"></div>
+    <div id="setGfx" class="block setPane" hidden></div>
+    <div class="actions"><button class="cta" type="button" data-close>Pronto</button><button id="setReset" class="ghost" type="button">Restaurar padrão</button></div>
+  </div>
+</div>
+
+<!-- ======================= Modal: patch notes ======================= -->
+<div id="notesModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="notesTitle">
+  <div class="sheet">
+    <header><div><h2 id="notesTitle">Patch notes</h2><p id="notesLive" class="notesLive"></p></div><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div id="notesList" class="notesList"></div>
+    <div class="actions"><button class="cta" type="button" data-close>Bora correr</button></div>
+  </div>
+</div>
+
+<!-- ======================= Modal: como jogar ======================= -->
+<div id="howModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="howTitle">
+  <div class="sheet narrow">
+    <header><h2 id="howTitle">Como jogar</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div id="how">
+      <p><b>Acelerar</b> W ou <span class="ic" data-ic="up"></span> · <b>Ré</b> S ou <span class="ic" data-ic="down"></span> · <b>Virar</b> A/D ou <span class="ic" data-ic="left"></span><span class="ic" data-ic="right"></span></p>
+      <p><b>Drift</b>: segure Espaço numa curva. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo. A faísca só esquenta em <b>curva de verdade</b>: drift em reta fica com faísca branca e não dá turbo, e logo depois de um mini-turbo a próxima carga demora mais.</p>
+      <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
+      <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
+      <p><b>Grau</b> (só na moto): segure <b>Ctrl</b> (ou <b>E</b>) numa reta. Empinada, a moto fica 6% mais rápida, mas vira menos e não derrapa.</p>
+      <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> volta ao menu · <b>N</b> avança 3 horas · <b>M</b> som</p>
+    </div>
+    <div class="actions"><button class="cta" type="button" data-close>Entendi</button></div>
+  </div>
+</div>
+
+<!-- ======================= Garagem ======================= -->
+<section id="garage" aria-label="Garagem">
+  <header class="gTop">
+    <button id="btnGarageBack" class="ghost back" type="button">‹ Menu <kbd>Esc</kbd></button>
+    <div><h2>Garagem</h2><p id="garageSummary"></p></div>
+  </header>
+  <aside class="gPanel">
+    <div id="garageTabs" class="tabs" role="tablist" aria-label="Categorias"></div>
+    <div id="garageBody"></div>
+    <div class="actions"><button id="btnGarageDone" class="cta" type="button">Pronto</button></div>
+  </aside>
+  <p class="gHint">Arraste o kart para girar</p>
+</section>
+
+<!-- cortina das transições entre telas -->
+<div id="curtain" aria-hidden="true"></div>
+
+<!-- ======================= Resultado de cada corrida da Copa ======================= -->
+<section id="roundUI" hidden>
+  <div class="card">
+    <p class="eyebrow" id="roundEyebrow"></p>
+    <h2 id="roundTitle"></h2>
+    <div class="table" id="roundTable"></div>
+    <p class="note" id="roundNote"></p>
+    <div class="actions">
+      <button id="btnNext" class="cta" type="button">Próxima pista <kbd>Enter</kbd></button>
+      <button id="btnQuit" class="ghost" type="button">Sair da Copa</button>
+    </div>
+  </div>
+</section>
+
+<!-- ======================= Pódio ======================= -->
+<section id="podiumUI" hidden>
+  <div class="card">
+    <h2 id="podiumTitle">Você venceu a Copa!</h2>
+    <p id="podiumSub"></p>
+    <div class="table" id="results"></div>
+    <div class="actions">
+      <button id="btnAgain" class="cta" type="button">Jogar novamente <kbd>Enter</kbd></button>
+      <button id="btnMenu" class="ghost" type="button">Voltar ao menu</button>
+    </div>
+  </div>
+</section>
+
+<!-- Three.js r128 (UMD) + carregador GLTF e utilitário de esqueleto da mesma versão (cópias locais) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>window.THREE || document.write('<script src="js/vendor/three.min.js"><\/script>')</script>
+<script src="js/vendor/GLTFLoader.js"></script>
+<script src="js/vendor/SkeletonUtils.js"></script>
+<!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
+<script src="js/config.js?v=202610290007"></script>
+<script src="js/icons.js?v=202610290007"></script>
+<script src="js/audio.js?v=202610290007"></script>
+<script src="js/textures.js?v=202610290007"></script>
+<script src="js/toon.js?v=202610290007"></script>
+<script src="js/kart.js?v=202610290007"></script>
+<script src="js/models/materials.js?v=202610290007"></script>
+<script src="js/models/livery.js?v=202610290007"></script>
+<script src="js/models/pilot.js?v=202610290007"></script>
+<script src="js/models/karts.js?v=202610290007"></script>
+<script src="js/custom.js?v=202610290007"></script>
+<script src="js/ai.js?v=202610290007"></script>
+<script src="js/tracks.js?v=202610290007"></script>
+<script src="js/props.js?v=202610290007"></script>
+<script src="js/scenery.js?v=202610290007"></script>
+<script src="js/city.js?v=202610290007"></script>
+<script src="js/beach.js?v=202610290007"></script>
+<script src="js/net.js?v=202610290007"></script>
+<script src="js/online.js?v=202610290007"></script>
+<script src="js/logo.js?v=202610290007"></script>
+<script src="js/ui.js?v=202610290007"></script>
+<script src="js/settings.js?v=202610290007"></script>
+<script src="js/patchnotes.js?v=202610290007"></script>
+<script src="js/showroom.js?v=202610290007"></script>
+<script src="js/garage.js?v=202610290007"></script>
+<script src="js/intro.js?v=202610290007"></script>
+<script src="js/podium.js?v=202610290007"></script>
+<script src="js/main.js?v=202610290007"></script>
+<script src="js/cursor.js?v=202610290007"></script>
+</body>
+</html>
