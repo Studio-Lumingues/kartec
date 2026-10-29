@@ -157,7 +157,8 @@
   const Input = {
     keys: {},
     map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift',
-      ControlLeft: 'wheelie', ControlRight: 'wheelie', KeyE: 'wheelie' },   // Ctrl (ou E): dar grau com a moto
+      ControlLeft: 'wheelie', ControlRight: 'wheelie', KeyE: 'wheelie',   // Ctrl (ou E): dar grau com a moto
+      KeyC: 'look' },                                                     // C (segurando): olhar para trás
     init() {
       addEventListener('keydown', e => { const k = this.map[e.code]; if (k) { this.keys[k] = true; if (window.Game && Game.scene && !/INPUT|TEXTAREA/.test(e.target.tagName)) e.preventDefault(); } });
       addEventListener('keyup', e => { const k = this.map[e.code]; if (k) this.keys[k] = false; });

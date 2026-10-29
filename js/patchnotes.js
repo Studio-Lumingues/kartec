@@ -10,6 +10,12 @@
 // =====================================================================================
 (function () {
   const NOTES = [
+    { at: '2026-10-30T00:00:00Z', title: 'Olhar para trás e fim da travada ao anoitecer', items: [
+      'Segure C para olhar para trás e ver quem vem chegando',
+      'Acabou o congelamento na virada do dia para a noite',
+      'Os gráficos da pista são preparados no carregamento: sem engasgos no meio da corrida',
+      'Reiniciar e sair agora ficam direto no menu de Pausa (Esc), com dois toques para confirmar',
+      'Sem menu do botão direito em nenhuma tela'] },
     { at: '2026-10-29T21:00:00Z', title: 'Pausa, salas públicas e Copa online', items: [
       'Esc agora abre o menu de Pausa em vez de sair da corrida',
       'Sair da corrida fica em Configurações › Partida, com dois toques para confirmar',

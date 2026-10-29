@@ -128,7 +128,13 @@
     return base + (top - base) * BOOST.SHARE[Math.max(0, Math.min(3, n | 0))];
   };
   renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); console.warn('contexto WebGL perdido — aguardando restauração'); });
-  renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+  // sem menu do botão direito em lugar nenhum do jogo (canvas, botões, painéis, modais); captura = vale antes de qualquer outro
+  document.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); }, true);
+  // F12 e atalhos das ferramentas de desenvolvedor não abrem sem querer durante o jogo
+  addEventListener('keydown', e => {
+    const k = e.code, ctrl = e.ctrlKey || e.metaKey;
+    if (k === 'F12' || (ctrl && e.shiftKey && (k === 'KeyI' || k === 'KeyJ' || k === 'KeyC')) || (ctrl && e.altKey && (k === 'KeyI' || k === 'KeyJ' || k === 'KeyC')) || (ctrl && k === 'KeyU')) { e.preventDefault(); e.stopPropagation(); }
+  }, true);
 
   // ================================ AMBIENTE ================================
   const dnC = h => new THREE.Color(h);
@@ -195,7 +201,10 @@
       // dentro do túnel a luz do céu cai (suave nas bocas) e os faróis acendem
       const P0 = window.Game && Game.player, shade = track && track.shadeAt && P0 ? track.shadeAt(focus, P0.idx) : 0; this.shade = shade;
       sun.intensity *= 1 - 0.6 * shade;
-      sun.castShadow = sun.intensity > 0.08;
+      // a sombra do sol fica SEMPRE ligada. Antes ela desligava ao anoitecer (intensidade < 0,08): mudar castShadow
+      // muda o número de luzes com sombra, o que obriga o Three.js a recompilar o shader de TODOS os materiais
+      // -> era o congelamento na virada do dia para a noite (e na entrada do túnel ao entardecer).
+      // Com a luz fraca a sombra já some sozinha (ela só escurece a parte que essa luz ilumina).
       this.hemi.intensity = (0.32 + 0.48 * sm((e + 0.15) / 0.45)) * (1 - 0.45 * shade); dnMix(DN.hS, e, this.hemi.color); dnMix(DN.hG, e, this.hemi.groundColor);
       // dentro do túnel: as luminárias do teto viram uma luz ambiente quente e moderada (nem breu à noite, nem clarão de dia)
       if (shade > 0.01) { this.hemi.intensity = Math.max(this.hemi.intensity, 0.55 * shade); this.hemi.color.lerp(TUN_LIGHT, 0.7 * shade); }
@@ -312,6 +321,16 @@
       document.body.classList.toggle('moto', !!(this.player.m && this.player.m.moto));
       this.wrongT = 0;
       if (this.lite) this.setLite(true);
+      this.precompile(scene);
+    },
+    // compila agora (atrás da cortina) os shaders de tudo que a pista pode mostrar, inclusive o que está escondido
+    // (faróis, chamas do turbo, blocos distantes do cenário, contornos): nada compila depois, no meio da corrida
+    precompile(scene) {
+      try {
+        const hidden = []; scene.traverse(o => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+        renderer.compile(scene, camera);
+        hidden.forEach(o => { o.visible = false; });
+      } catch (e) { console.warn('[pré-compilação]', e); }
     },
     dispose() {
       if (!this.scene) return;
@@ -671,12 +690,15 @@
       if (c.zoomOff) { camera.position.sub(c.zoomOff); c.zoomOff = null; }
       if (this.state === 'finish') { c.ang += dt * 0.6; this.orbitCam(); return; }
       c.ang += wrapA(P.mvAng - c.ang) * Math.min(1, 5 * dt);
+      // C segurado: câmera vira 180° na hora (à frente do kart, olhando para trás); soltou, volta na hora
+      if (Input.keys.look && !UI.modal && (this.state === 'race' || this.state === 'countdown')) { this.lookBackCam(dt); return; }
       if (!c.drag && !(PL.locked() && performance.now() - (c.lookT || 0) < 2500)) { c.yaw *= Math.max(0, 1 - 2 * dt); c.pitch *= Math.max(0, 1 - 2 * dt); }
       const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55 + c.pitch * 8) * c.zoom;   // câmera desce um pouco na velocidade
       const tx = P.pos.x - Math.sin(a) * dist, tz = P.pos.z - Math.cos(a) * dist; let ty = Math.max(P.pos.y + h, 1.5);
       const tr = this.track, ceil = tr.ceilingAt ? Math.min(tr.ceilingAt({ x: tx, z: tz }, P.idx), tr.ceilingAt(camera.position, P.idx)) : Infinity;   // túnel: câmera não passa do teto
       ty = Math.min(ty, ceil);
       const k = Math.min(1, 8 * dt); camera.position.x += (tx - camera.position.x) * k; camera.position.z += (tz - camera.position.z) * k; camera.position.y += (ty - camera.position.y) * k;
+      if (c.lookBack) { c.lookBack = false; camera.position.set(tx, ty, tz); }      // acabou de soltar o C: volta direto, sem deslizar
       if ((this.state === 'countdown' && this.cd.t < 0.05) || this.state === 'waiting') camera.position.set(tx, ty, tz);
       camera.position.y = Math.min(camera.position.y, ceil);
       camera.lookAt(P.pos.x + Math.sin(c.ang) * 4, P.pos.y + 2, P.pos.z + Math.cos(c.ang) * 4);
@@ -696,6 +718,17 @@
           camera.position.add(c.zoomOff);
         } }
       this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
+    },
+    // visão traseira: mesma altura e distância da câmera normal, só que na frente do kart olhando para trás
+    lookBackCam(dt) {
+      const P = this.player, c = this.cam; c.lookBack = true;
+      const a = P.ang, spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55) * c.zoom;
+      const tx = P.pos.x + Math.sin(a) * dist, tz = P.pos.z + Math.cos(a) * dist, tr = this.track;
+      const ceil = tr.ceilingAt ? tr.ceilingAt({ x: tx, z: tz }, P.idx) : Infinity;
+      camera.position.set(tx, Math.min(Math.max(P.pos.y + h, 1.5), ceil), tz);
+      camera.lookAt(P.pos.x - Math.sin(a) * 4, P.pos.y + 2, P.pos.z - Math.cos(a) * 4);
+      camera.fov += (60 - camera.fov) * Math.min(1, 8 * dt); camera.updateProjectionMatrix();
+      this.scene.fog.far = Env.fogFar;
     },
     // modo leve: esconde os contornos (metade dos triângulos dos karts e pilotos) na cena atual e nas próximas
     lite: false,
@@ -883,7 +916,7 @@
     release() { if (document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) { } } }
   };
   // ---------------- pausa (Esc durante a corrida) ----------------
-  // Esc abre a Pausa em vez de sair. Sair/reiniciar ficam em Configurações › Partida, com dois toques.
+  // Esc abre a Pausa em vez de sair. Sair e reiniciar ficam na própria Pausa, com dois toques.
   // Offline a corrida congela; online ela continua (é de todos), mas o seu kart para de receber comandos.
   const Pause = {
     nav: false,
@@ -891,16 +924,30 @@
     open() {
       if (!this.can() || UI.modal) return;
       Game.paused = !Game.online; PL.release();
-      $('pauseTitle').textContent = Game.online ? 'Menu' : 'Pausa';
-      $('pauseSub').textContent = Game.online ? 'Online: a corrida continua enquanto este menu está aberto.' : (Game.cup ? CFG.CUP.name + ' · corrida ' + (Game.cup.round + 1) + ' de ' + CFG.CUP.order.length : 'Jogo pausado');
+      const on = !!Game.online, cup = on ? !!Game.online.cup : !!Game.cup;
+      $('pauseTitle').textContent = on ? 'Menu' : 'Pausa';
+      $('pauseSub').textContent = on ? 'Online: a corrida continua enquanto este menu está aberto.' : (Game.cup ? CFG.CUP.name + ' · corrida ' + (Game.cup.round + 1) + ' de ' + CFG.CUP.order.length : 'Jogo pausado');
+      // ações principais direto na Pausa (dois toques): online não reinicia (a corrida é de todos)
+      $('pauseRestart').dataset.label = cup && !on ? 'Reiniciar esta pista' : 'Reiniciar corrida'; $('pauseRestart').hidden = on;
+      $('pauseLeave').dataset.label = on ? 'Sair da sala' : cup ? 'Sair da Copa' : 'Sair da corrida';
+      $('pauseHint').textContent = on ? (cup ? 'Sair deixa a sala e os pontos da Copa. Toque duas vezes para confirmar.' : 'Sair deixa a sala. Toque duas vezes para confirmar.') : 'Reiniciar e sair pedem dois toques.';
+      this.resetConfirm();
       UI.openModal('pauseModal'); UI.Sfx.tone(520, 380, 0.1, 'triangle', 0.05);
     },
+    // botão de dois toques: o primeiro arma (pisca por 3 s), o segundo confirma
+    confirmBtn(btn, fn) {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('armed')) { this.resetConfirm(); fn(); return; }
+        this.resetConfirm(); btn.classList.add('armed'); btn.textContent = 'Toque de novo para confirmar';
+        clearTimeout(btn._t); btn._t = setTimeout(() => this.resetConfirm(), 3000);
+      });
+    },
+    resetConfirm() { ['pauseLeave', 'pauseRestart'].forEach(id => { const b = $(id); clearTimeout(b._t); b.classList.remove('armed'); b.textContent = b.dataset.label || b.textContent; }); },
     // fechar a Pausa (Esc, Continuar ou clique fora) volta para a corrida
     resume() { if (UI.modal === 'pauseModal') UI.closeModal(); else this.onClosed(); },
     onClosed() { Game.paused = false; if (this.can()) PL.request(); },
     settings() { this.nav = true; Settings.open({ back: 'pauseModal' }); this.nav = false; },
     how() { this.nav = true; UI.openModal('howModal', { back: 'pauseModal' }); this.nav = false; },
-    // chamados pela aba Partida das Configurações
     quit() {
       UI._back = null; if (UI.modal) UI.closeModal(true); Game.paused = false;
       if (Game.online) Online.leave(true); else Game.toMenu();
@@ -911,6 +958,8 @@
   $('pauseResume').addEventListener('click', () => Pause.resume());
   $('pauseSettings').addEventListener('click', () => Pause.settings());
   $('pauseHow').addEventListener('click', () => Pause.how());
+  Pause.confirmBtn($('pauseLeave'), () => Pause.quit());
+  Pause.confirmBtn($('pauseRestart'), () => Pause.restart());
   // aba escondida (troca de janela) no meio da corrida offline: pausa sozinha
   document.addEventListener('visibilitychange', () => { if (document.hidden && !Game.online && Pause.can() && !UI.modal) Pause.open(); });
 

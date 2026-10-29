@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610291800">
+<link rel="stylesheet" href="style.css?v=202610292100">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -220,17 +220,9 @@
     <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
       <button type="button" data-v="vol" class="on" role="tab" aria-selected="true"><span class="ic" data-ic="sound"></span> Som</button>
       <button type="button" data-v="gfx" role="tab" aria-selected="false"><span class="ic" data-ic="monitor"></span> Gráficos</button>
-      <button type="button" data-v="match" role="tab" aria-selected="false" id="setTabMatch" hidden><span class="ic" data-ic="checker"></span> Partida</button>
     </div>
     <div id="setVol" class="block setPane"></div>
     <div id="setGfx" class="block setPane" hidden></div>
-    <!-- só durante a corrida: sair fica aqui dentro (Esc › Configurações › Partida) para ninguém sair sem querer -->
-    <div id="setMatch" class="block setPane" hidden>
-      <p class="matchInfo" id="matchInfo"></p>
-      <button id="matchRestart" class="ghost matchBtn" type="button">Reiniciar corrida</button>
-      <button id="matchLeave" class="danger matchBtn" type="button">Sair da partida</button>
-      <p class="note" id="matchHint">Para sair, toque duas vezes no botão.</p>
-    </div>
     <div class="actions"><button class="cta" type="button" data-close>Pronto</button><button id="setReset" class="ghost" type="button">Restaurar padrão</button></div>
   </div>
 </div>
@@ -241,8 +233,15 @@
     <header><div><h2 id="pauseTitle">Pausa</h2><p id="pauseSub" class="pauseSub"></p></div></header>
     <nav class="pauseNav">
       <button id="pauseResume" class="cta big" type="button">Continuar <kbd>Esc</kbd></button>
-      <button id="pauseSettings" class="navBtn" type="button"><span class="ico" data-ic="gear"></span><span><strong>Configurações</strong><small>Som, gráficos e sair da partida</small></span></button>
-      <button id="pauseHow" class="navBtn" type="button"><span class="ico" data-ic="gamepad"></span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
+      <!-- ações principais: dois toques para confirmar (sem sair sem querer) -->
+      <button id="pauseRestart" class="ghost pauseAct" type="button" data-label="Reiniciar corrida">Reiniciar corrida</button>
+      <button id="pauseLeave" class="danger pauseAct" type="button" data-label="Sair da corrida">Sair da corrida</button>
+      <p id="pauseHint" class="pauseHint"></p>
+      <!-- acesso secundário: só ajustes -->
+      <div class="pauseSec">
+        <button id="pauseSettings" class="ghost" type="button"><span class="ic" data-ic="gear"></span> Configurações</button>
+        <button id="pauseHow" class="ghost" type="button"><span class="ic" data-ic="gamepad"></span> Como jogar</button>
+      </div>
     </nav>
   </div>
 </div>
@@ -266,7 +265,8 @@
       <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
       <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
       <p><b>Grau</b> (só na moto): segure <b>Ctrl</b> (ou <b>E</b>) numa reta. Empinada, a moto fica 6% mais rápida, mas vira menos e não derrapa.</p>
-      <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> pausa (sair fica em Configurações › Partida) · <b>N</b> avança 3 horas · <b>M</b> som</p>
+      <p><b>Olhar para trás</b>: segure <b>C</b> para ver quem vem atrás.</p>
+      <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> pausa (reiniciar e sair ficam lá) · <b>N</b> avança 3 horas · <b>M</b> som</p>
     </div>
     <div class="actions"><button class="cta" type="button" data-close>Entendi</button></div>
   </div>
@@ -322,35 +322,35 @@
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js?v=202610291800"></script>
-<script src="js/icons.js?v=202610291800"></script>
-<script src="js/audio.js?v=202610291800"></script>
-<script src="js/textures.js?v=202610291800"></script>
-<script src="js/toon.js?v=202610291800"></script>
-<script src="js/kart.js?v=202610291800"></script>
-<script src="js/models/materials.js?v=202610291800"></script>
-<script src="js/models/livery.js?v=202610291800"></script>
-<script src="js/models/pilot.js?v=202610291800"></script>
-<script src="js/models/karts.js?v=202610291800"></script>
-<script src="js/custom.js?v=202610291800"></script>
-<script src="js/ai.js?v=202610291800"></script>
-<script src="js/tracks.js?v=202610291800"></script>
-<script src="js/props.js?v=202610291800"></script>
-<script src="js/scenery.js?v=202610291800"></script>
-<script src="js/city.js?v=202610291800"></script>
-<script src="js/beach.js?v=202610291800"></script>
-<script src="js/net.js?v=202610291800"></script>
-<script src="js/online.js?v=202610291800"></script>
-<script src="js/logo.js?v=202610291800"></script>
-<script src="js/ui.js?v=202610291800"></script>
-<script src="js/speedo3d.js?v=202610291800"></script>
-<script src="js/settings.js?v=202610291800"></script>
-<script src="js/patchnotes.js?v=202610291800"></script>
-<script src="js/showroom.js?v=202610291800"></script>
-<script src="js/garage.js?v=202610291800"></script>
-<script src="js/intro.js?v=202610291800"></script>
-<script src="js/podium.js?v=202610291800"></script>
-<script src="js/main.js?v=202610291800"></script>
-<script src="js/cursor.js?v=202610291800"></script>
+<script src="js/config.js?v=202610292100"></script>
+<script src="js/icons.js?v=202610292100"></script>
+<script src="js/audio.js?v=202610292100"></script>
+<script src="js/textures.js?v=202610292100"></script>
+<script src="js/toon.js?v=202610292100"></script>
+<script src="js/kart.js?v=202610292100"></script>
+<script src="js/models/materials.js?v=202610292100"></script>
+<script src="js/models/livery.js?v=202610292100"></script>
+<script src="js/models/pilot.js?v=202610292100"></script>
+<script src="js/models/karts.js?v=202610292100"></script>
+<script src="js/custom.js?v=202610292100"></script>
+<script src="js/ai.js?v=202610292100"></script>
+<script src="js/tracks.js?v=202610292100"></script>
+<script src="js/props.js?v=202610292100"></script>
+<script src="js/scenery.js?v=202610292100"></script>
+<script src="js/city.js?v=202610292100"></script>
+<script src="js/beach.js?v=202610292100"></script>
+<script src="js/net.js?v=202610292100"></script>
+<script src="js/online.js?v=202610292100"></script>
+<script src="js/logo.js?v=202610292100"></script>
+<script src="js/ui.js?v=202610292100"></script>
+<script src="js/speedo3d.js?v=202610292100"></script>
+<script src="js/settings.js?v=202610292100"></script>
+<script src="js/patchnotes.js?v=202610292100"></script>
+<script src="js/showroom.js?v=202610292100"></script>
+<script src="js/garage.js?v=202610292100"></script>
+<script src="js/intro.js?v=202610292100"></script>
+<script src="js/podium.js?v=202610292100"></script>
+<script src="js/main.js?v=202610292100"></script>
+<script src="js/cursor.js?v=202610292100"></script>
 </body>
 </html>
