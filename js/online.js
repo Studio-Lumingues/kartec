@@ -8,7 +8,7 @@
   const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
   const Online = {
-    tab: 'join', selected: null, escAt: 0,
+    tab: 'join', selected: null, rooms: [],
     active() { return Net.connected && !!Net.room; },
     init() {
       // opções de pista/voltas/jogadores
@@ -26,7 +26,14 @@
       $('onRefresh').addEventListener('click', () => this.refresh());
       $('onJoinBtn').addEventListener('click', () => this.join());
       $('onCreateBtn').addEventListener('click', () => this.create());
-      [['onPass', () => this.join()], ['onCode', () => $('onPass').focus()], ['onRoomPass', () => this.create()], ['onRoomName', () => $('onRoomPass').focus()]].forEach(([id, fn]) =>
+      // busca: filtra a lista pelo NOME da sala enquanto digita (sem diferença de acento/maiúscula)
+      $('onSearch').addEventListener('input', () => this.renderRooms(this.rooms));
+      $('onSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const first = this.filtered()[0]; if (first) this.pick(first); } });
+      $('onMode').addEventListener('change', () => { $('onTrackField').hidden = $('onMode').value === 'cup'; });
+      $('lobbyMode').addEventListener('change', e => Net.send({ t: 'settings', mode: e.target.value }));
+      // lista se atualiza sozinha enquanto a aba "Entrar" está aberta
+      setInterval(() => { if (UI.modal === 'onlineModal' && this.tab === 'join' && Net.connected && !Net.room) this.refresh(); }, 4000);
+      [['onPass', () => this.join()], ['onRoomPass', () => this.create()], ['onRoomName', () => $('onRoomPass').focus()]].forEach(([id, fn]) =>
         $(id).addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); fn(); } }));
       $('onName').addEventListener('change', () => { const n = this.name(); try { localStorage.setItem(KEY(), n); } catch (e) { } if (Net.connected) Net.send({ t: 'name', name: n }); });
       $('lobbyReady').addEventListener('click', () => { const me = this.me(); Net.send({ t: 'ready', v: !(me && me.ready) }); UI.Sfx.tone(660, 990, 0.08, 'square', 0.06); });
@@ -34,7 +41,6 @@
       $('lobbyLeave').addEventListener('click', () => this.leave(true));
       $('lobbyTrack').addEventListener('change', e => Net.send({ t: 'settings', track: +e.target.value }));
       $('lobbyLaps').addEventListener('change', e => Net.send({ t: 'settings', laps: +e.target.value }));
-      $('lobbyCode').addEventListener('click', () => { const c = Net.room && Net.room.id; if (!c) return; (navigator.clipboard ? navigator.clipboard.writeText(c) : Promise.reject()).then(() => UI.toast('Código ' + c + ' copiado'), () => UI.toast('Código da sala: ' + c, 2500)); });
       // visual do kart muda na garagem -> os outros veem na hora
       Custom.onChange(() => { if (Net.connected) Net.send({ t: 'spec', spec: Custom.spec }); });
       // eventos da rede
@@ -42,13 +48,13 @@
       Net.on('joined', m => { if (this.resuming) { this.resuming.room = m.room; return; } this.enterLobby(m.room, m.resumed); });
       Net.on('resume', m => { if (this.resuming) { this.resuming.race = m; return; } this.handleResume(m); });
       Net.on('room', m => this.renderLobby(m.room));
-      Net.on('error', m => this.error(m.msg));
+      Net.on('error', m => { if (m.code === 'needpass' || m.code === 'pass') this.showPass(true); this.error(m.msg); });
       Net.on('notice', m => UI.toast(m.msg, 1800));
       Net.on('prepare', m => { UI.closeModal(true); Game.onlinePrepare(m); });
       Net.on('go', m => Game.onlineGo(m));
       Net.on('finished', m => Game.onlineFinished(m));
       Net.on('left', m => { if (Game.online) Game.onlineLeft(m.id); });
-      Net.on('results', m => Game.onlineResults(m.rows));
+      Net.on('results', m => Game.onlineResults(m.rows, m.cup));
       Net.on('bump', m => Game.netBump(m));
       Net.on('kicked', () => { Net.room = null; Net.forget(); UI.toast('Você foi removido da sala', 2500); Game.leaveOnline(true); });
       Net.on('drop', () => this.onDrop());
@@ -106,9 +112,9 @@
     status(t, cls) { const e = $('onStatus'); e.textContent = t; e.className = 'netStatus ' + (cls || ''); },
     error(t) { if (UI.modal === 'onlineModal') { $('onError').textContent = t || ''; } else if (t) UI.toast(t, 2600); },
     setTab(t) { this.tab = t; $('onTabs').querySelectorAll('button').forEach(b => { const on = b.dataset.v === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
-      $('onJoin').hidden = t !== 'join'; $('onCreate').hidden = t !== 'create'; this.error(''); },
+      $('onJoin').hidden = t !== 'join'; $('onCreate').hidden = t !== 'create'; this.error(''); if (t === 'join') this.refresh(); },
     async open() {
-      UI.openModal('onlineModal'); this.error(''); if (!$('onName').value) $('onName').value = 'Piloto ' + (100 + Math.floor(Math.random() * 900));
+      UI.openModal('onlineModal'); this.error(''); this.selected = null; this.showPass(false); if (!$('onName').value) $('onName').value = 'Piloto ' + (100 + Math.floor(Math.random() * 900));
       if (await this.ensure()) this.refresh();
     },
     async ensure() {
@@ -130,26 +136,47 @@
       }
     },
     refresh() { if (Net.connected) Net.send({ t: 'list' }); },
+    // ---------- lista de salas: busca pelo nome, sala pública entra com um clique ----------
+    norm(s) { return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(); },
+    filtered() { const q = this.norm($('onSearch').value); return q ? this.rooms.filter(r => this.norm(r.name).includes(q)) : this.rooms; },
     renderRooms(list) {
-      const box = $('onRooms'); box.innerHTML = '';
-      if (!list.length) { box.innerHTML = '<p class="empty">Nenhuma sala aberta. Crie a sua na aba ao lado!</p>'; return; }
-      list.forEach(r => {
-        const b = document.createElement('button'); b.type = 'button'; b.className = 'roomItem' + (this.selected === r.id ? ' on' : '') + (r.state !== 'lobby' ? ' busy' : '');
-        b.innerHTML = '<span class="lock">' + Icon.svg('lock') + '</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(CFG.TRACKS[r.track] ? CFG.TRACKS[r.track].name : '') + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (r.state !== 'lobby' ? ' · correndo' : '') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span><code>' + r.id + '</code>';
-        b.addEventListener('click', () => { this.selected = r.id; $('onCode').value = r.id; $('onPass').value = ''; $('onPass').focus(); box.querySelectorAll('.roomItem').forEach(x => x.classList.toggle('on', x === b)); });
+      this.rooms = list || []; const box = $('onRooms'), shown = this.filtered(), q = ($('onSearch').value || '').trim(); box.innerHTML = '';
+      if (this.selected && !this.rooms.some(r => r.id === this.selected)) { this.selected = null; this.showPass(false); }
+      if (!this.rooms.length) { box.innerHTML = '<p class="empty">Nenhuma sala aberta. Crie a sua na aba ao lado!</p>'; return; }
+      if (!shown.length) { box.innerHTML = '<p class="empty">Nenhuma sala com “' + esc(q) + '” no nome.</p>'; return; }
+      shown.forEach(r => {
+        const busy = r.state !== 'lobby', cup = r.mode === 'cup';
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'roomItem' + (this.selected === r.id ? ' on' : '') + (busy ? ' busy' : '') + (r.locked ? ' locked' : '');
+        const where = cup ? CFG.CUP.name + ' · 3 pistas' : (CFG.TRACKS[r.track] ? CFG.TRACKS[r.track].name : '');
+        b.innerHTML = '<span class="lock" title="' + (r.locked ? 'Com senha' : 'Pública') + '">' + Icon.svg(r.locked ? 'lock' : 'online') + '</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(where) + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (busy ? ' · correndo' : r.locked ? ' · com senha' : ' · pública') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span>';
+        b.dataset.id = r.id; b.addEventListener('click', () => this.pick(r));
         box.appendChild(b);
       });
     },
+    // escolher uma sala: pública entra na hora; com senha mostra o campo da senha
+    pick(r) {
+      this.error('');
+      if (r.state !== 'lobby') return this.error(r.mode === 'cup' ? 'Copa em andamento: entre quando ela acabar.' : 'Corrida em andamento: entre quando ela acabar.');
+      if (r.players >= r.max) return this.error('Sala cheia.');
+      this.selected = r.id; $('onRooms').querySelectorAll('.roomItem').forEach(x => x.classList.toggle('on', x.dataset.id === r.id));
+      if (r.locked) { $('onPass').value = ''; this.showPass(true, r.name); return; }
+      this.showPass(false); this.send(r.id, '');
+    },
+    showPass(on, name) { $('onPassRow').hidden = !on; if (on) { if (name) $('onPassLabel').textContent = 'Senha de “' + name + '”'; $('onPass').focus(); } },
     async join() {
-      const id = ($('onCode').value || '').trim().toUpperCase(), pass = $('onPass').value || '';
-      if (!id) return this.error('Escolha uma sala na lista ou digite o código.'); if (!pass) return this.error('Digite a senha da sala.');
+      const r = this.rooms.find(x => x.id === this.selected), pass = $('onPass').value || '';
+      if (!r) return this.error('Escolha uma sala na lista.'); if (!pass) return this.error('Digite a senha da sala.');
+      this.send(r.id, pass);
+    },
+    async send(id, pass) {
       if (!(await this.ensure())) return; Net.send({ t: 'name', name: this.name() }); Net.send({ t: 'spec', spec: Custom.spec }); Net.send({ t: 'join', id, password: pass });
     },
     async create() {
       const name = ($('onRoomName').value || '').trim(), pass = $('onRoomPass').value || '';
-      if (!name) return this.error('Dê um nome para a sala.'); if (pass.length < 3) return this.error('A senha precisa ter pelo menos 3 caracteres.');
+      if (!name) return this.error('Dê um nome para a sala.');
+      if (pass && pass.length < 3) return this.error('A senha precisa ter pelo menos 3 caracteres (ou deixe em branco para sala pública).');
       if (!(await this.ensure())) return; Net.send({ t: 'name', name: this.name() }); Net.send({ t: 'spec', spec: Custom.spec });
-      Net.send({ t: 'create', name, password: pass, max: +$('onMax').value, track: +$('onTrack').value, laps: +$('onLaps').value });
+      Net.send({ t: 'create', name, password: pass, mode: $('onMode').value, max: +$('onMax').value, track: +$('onTrack').value, laps: +$('onLaps').value });
     },
     // ---------- sala de espera ----------
     enterLobby(room, resumed) {
@@ -164,7 +191,8 @@
     },
     renderLobby(r) {
       if (!r) return; Net.room = r;
-      $('lobbyName').textContent = r.name; $('lobbyCode').textContent = '#' + r.id;
+      const cup = r.mode === 'cup';
+      $('lobbyName').textContent = r.name; $('lobbyEyebrow').textContent = 'Sala online · ' + (r.locked ? 'com senha' : 'pública') + ' · ' + (cup ? CFG.CUP.name : 'Corrida única');
       const host = r.host === Net.id, ul = $('lobbyPlayers'); ul.innerHTML = '';
       r.players.forEach(p => {
         const li = document.createElement('li'); li.className = (p.id === Net.id ? 'me ' : '') + (p.ready || p.id === r.host ? 'ready' : '');
@@ -175,25 +203,26 @@
         ul.appendChild(li);
       });
       const free = r.max - r.players.length; if (free > 0) { const li = document.createElement('li'); li.className = 'free'; li.innerHTML = '<i></i><span class="pn">' + free + (free > 1 ? ' vagas livres' : ' vaga livre') + '</span>'; ul.appendChild(li); }
-      $('lobbyTrack').value = r.track; $('lobbyLaps').value = r.laps; $('lobbyTrack').disabled = $('lobbyLaps').disabled = !host;
+      $('lobbyMode').value = cup ? 'cup' : 'single'; $('lobbyTrackField').hidden = cup;
+      $('lobbyTrack').value = r.track; $('lobbyLaps').value = r.laps; $('lobbyTrack').disabled = $('lobbyLaps').disabled = $('lobbyMode').disabled = !host;
+      $('lobbyStart').textContent = cup ? 'Iniciar Copa' : 'Iniciar corrida';
       const others = r.players.filter(p => p.id !== r.host), allReady = others.every(p => p.ready);
       $('lobbyStart').hidden = !host; $('lobbyReady').hidden = host;
       $('lobbyStart').disabled = !allReady || r.state !== 'lobby';
       const me = this.me(); $('lobbyReady').textContent = me && me.ready ? 'Cancelar pronto' : 'Estou pronto'; $('lobbyReady').classList.toggle('on', !!(me && me.ready));
-      $('lobbyHint').textContent = r.state !== 'lobby' ? 'Corrida em andamento…' : host ? (others.length ? (allReady ? 'Todos prontos: pode largar!' : 'Esperando todos marcarem "pronto".') : 'Passe o código e a senha para os amigos. Você também pode correr sozinho para testar.') : 'Marque "pronto" e espere o anfitrião largar.';
+      $('lobbyHint').textContent = r.state !== 'lobby' ? 'Corrida em andamento…' : host ? (others.length ? (allReady ? 'Todos prontos: pode largar!' : 'Esperando todos marcarem "pronto".') : (r.locked ? 'Passe o nome da sala e a senha para os amigos.' : 'Os amigos acham a sala buscando pelo nome.') + ' Você também pode correr sozinho para testar.') : 'Marque "pronto" e espere o anfitrião largar.';
     },
     // ---------- sair / Esc ----------
     leave(force) {
       const racing = Game.online && ['waiting', 'countdown', 'race', 'finish'].includes(Game.state);
-      if (racing && !force) { this.escape(); return; }
+      if (racing && !force) { if (window.Pause) Pause.open(); return; }          // nunca sai direto da corrida: abre a Pausa
       Net.send({ t: 'leave' }); Net.room = null; Net.forget(); Game.leaveOnline(true);
     },
     escape() {
       if (Game.state === 'lobby') { this.leave(true); return; }
       if (Game.state === 'podium') { this.toLobby(); return; }
-      const t = performance.now();
-      if (t - this.escAt < 2500) { this.leave(true); return; }
-      this.escAt = t; UI.toast('Pressione Esc (ou Menu) de novo para sair da corrida online', 2400);
+      if (Game.state === 'round') { UI.toast('A próxima pista da Copa começa sozinha', 1800); return; }
+      if (window.Pause && Pause.can()) Pause.open();
     },
     async onDrop() {
       if (!Net.room) return;

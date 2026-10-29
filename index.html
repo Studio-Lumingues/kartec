@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610291500">
+<link rel="stylesheet" href="style.css?v=202610291800">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -168,19 +168,21 @@
     </div>
     <div id="onJoin" class="block">
       <div class="roomsHead"><h3>Salas abertas</h3><button id="onRefresh" class="ghost small" type="button">Atualizar</button></div>
+      <label class="field search"><span class="sr">Buscar sala pelo nome</span><input id="onSearch" type="search" maxlength="24" placeholder="Buscar sala pelo nome…" autocomplete="off" spellcheck="false"></label>
       <div id="onRooms" class="roomList" aria-live="polite"></div>
-      <div class="joinRow">
-        <label class="field code"><span>Código</span><input id="onCode" maxlength="5" autocomplete="off" spellcheck="false"></label>
-        <label class="field"><span>Senha da sala</span><input id="onPass" type="password" maxlength="32" autocomplete="off"></label>
+      <!-- só aparece quando a sala escolhida tem senha; salas públicas entram com um clique -->
+      <div class="joinRow" id="onPassRow" hidden>
+        <label class="field"><span id="onPassLabel">Senha da sala</span><input id="onPass" type="password" maxlength="32" autocomplete="off"></label>
         <button id="onJoinBtn" class="cta" type="button">Entrar</button>
       </div>
     </div>
     <div id="onCreate" class="block" hidden>
       <div class="createGrid">
         <label class="field"><span>Nome da sala</span><input id="onRoomName" maxlength="24" autocomplete="off"></label>
-        <label class="field"><span>Senha (para entrar)</span><input id="onRoomPass" type="password" maxlength="32" autocomplete="new-password"></label>
+        <label class="field"><span>Senha <small>(opcional)</small></span><input id="onRoomPass" type="password" maxlength="32" autocomplete="new-password" placeholder="Em branco = sala pública"></label>
+        <label class="field"><span>Modo</span><select id="onMode"><option value="single">Corrida única</option><option value="cup">Copa Kartec (3 pistas)</option></select></label>
         <label class="field"><span>Jogadores</span><select id="onMax"></select></label>
-        <label class="field"><span>Pista</span><select id="onTrack"></select></label>
+        <label class="field" id="onTrackField"><span>Pista</span><select id="onTrack"></select></label>
         <label class="field"><span>Voltas</span><select id="onLaps"></select></label>
       </div>
       <div class="actions"><button id="onCreateBtn" class="cta" type="button">Criar sala</button></div>
@@ -194,12 +196,12 @@
 <section id="lobby" aria-label="Sala online" hidden>
   <div class="lobbyCard">
     <header>
-      <div><p class="eyebrow">Sala online</p><h2 id="lobbyName"></h2></div>
-      <button id="lobbyCode" class="code" type="button" title="Copiar o código da sala"></button>
+      <div><p class="eyebrow" id="lobbyEyebrow">Sala online</p><h2 id="lobbyName"></h2></div>
     </header>
     <ul id="lobbyPlayers" class="lobbyPlayers"></ul>
     <div class="lobbySettings">
-      <label class="field"><span>Pista</span><select id="lobbyTrack"></select></label>
+      <label class="field"><span>Modo</span><select id="lobbyMode"><option value="single">Corrida única</option><option value="cup">Copa Kartec (3 pistas)</option></select></label>
+      <label class="field" id="lobbyTrackField"><span>Pista</span><select id="lobbyTrack"></select></label>
       <label class="field"><span>Voltas</span><select id="lobbyLaps"></select></label>
     </div>
     <p id="lobbyHint" class="note"></p>
@@ -218,10 +220,30 @@
     <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
       <button type="button" data-v="vol" class="on" role="tab" aria-selected="true"><span class="ic" data-ic="sound"></span> Som</button>
       <button type="button" data-v="gfx" role="tab" aria-selected="false"><span class="ic" data-ic="monitor"></span> Gráficos</button>
+      <button type="button" data-v="match" role="tab" aria-selected="false" id="setTabMatch" hidden><span class="ic" data-ic="checker"></span> Partida</button>
     </div>
     <div id="setVol" class="block setPane"></div>
     <div id="setGfx" class="block setPane" hidden></div>
+    <!-- só durante a corrida: sair fica aqui dentro (Esc › Configurações › Partida) para ninguém sair sem querer -->
+    <div id="setMatch" class="block setPane" hidden>
+      <p class="matchInfo" id="matchInfo"></p>
+      <button id="matchRestart" class="ghost matchBtn" type="button">Reiniciar corrida</button>
+      <button id="matchLeave" class="danger matchBtn" type="button">Sair da partida</button>
+      <p class="note" id="matchHint">Para sair, toque duas vezes no botão.</p>
+    </div>
     <div class="actions"><button class="cta" type="button" data-close>Pronto</button><button id="setReset" class="ghost" type="button">Restaurar padrão</button></div>
+  </div>
+</div>
+
+<!-- ======================= Modal: pausa (Esc durante a corrida) ======================= -->
+<div id="pauseModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="pauseTitle">
+  <div class="sheet narrow pauseSheet">
+    <header><div><h2 id="pauseTitle">Pausa</h2><p id="pauseSub" class="pauseSub"></p></div></header>
+    <nav class="pauseNav">
+      <button id="pauseResume" class="cta big" type="button">Continuar <kbd>Esc</kbd></button>
+      <button id="pauseSettings" class="navBtn" type="button"><span class="ico" data-ic="gear"></span><span><strong>Configurações</strong><small>Som, gráficos e sair da partida</small></span></button>
+      <button id="pauseHow" class="navBtn" type="button"><span class="ico" data-ic="gamepad"></span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
+    </nav>
   </div>
 </div>
 
@@ -244,7 +266,7 @@
       <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
       <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
       <p><b>Grau</b> (só na moto): segure <b>Ctrl</b> (ou <b>E</b>) numa reta. Empinada, a moto fica 6% mais rápida, mas vira menos e não derrapa.</p>
-      <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> volta ao menu · <b>N</b> avança 3 horas · <b>M</b> som</p>
+      <p><b>Plataformas coloridas</b> dão turbo. <b>R</b> reinicia · <b>Esc</b> pausa (sair fica em Configurações › Partida) · <b>N</b> avança 3 horas · <b>M</b> som</p>
     </div>
     <div class="actions"><button class="cta" type="button" data-close>Entendi</button></div>
   </div>
@@ -300,35 +322,35 @@
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js?v=202610291500"></script>
-<script src="js/icons.js?v=202610291500"></script>
-<script src="js/audio.js?v=202610291500"></script>
-<script src="js/textures.js?v=202610291500"></script>
-<script src="js/toon.js?v=202610291500"></script>
-<script src="js/kart.js?v=202610291500"></script>
-<script src="js/models/materials.js?v=202610291500"></script>
-<script src="js/models/livery.js?v=202610291500"></script>
-<script src="js/models/pilot.js?v=202610291500"></script>
-<script src="js/models/karts.js?v=202610291500"></script>
-<script src="js/custom.js?v=202610291500"></script>
-<script src="js/ai.js?v=202610291500"></script>
-<script src="js/tracks.js?v=202610291500"></script>
-<script src="js/props.js?v=202610291500"></script>
-<script src="js/scenery.js?v=202610291500"></script>
-<script src="js/city.js?v=202610291500"></script>
-<script src="js/beach.js?v=202610291500"></script>
-<script src="js/net.js?v=202610291500"></script>
-<script src="js/online.js?v=202610291500"></script>
-<script src="js/logo.js?v=202610291500"></script>
-<script src="js/ui.js?v=202610291500"></script>
-<script src="js/speedo3d.js?v=202610291500"></script>
-<script src="js/settings.js?v=202610291500"></script>
-<script src="js/patchnotes.js?v=202610291500"></script>
-<script src="js/showroom.js?v=202610291500"></script>
-<script src="js/garage.js?v=202610291500"></script>
-<script src="js/intro.js?v=202610291500"></script>
-<script src="js/podium.js?v=202610291500"></script>
-<script src="js/main.js?v=202610291500"></script>
-<script src="js/cursor.js?v=202610291500"></script>
+<script src="js/config.js?v=202610291800"></script>
+<script src="js/icons.js?v=202610291800"></script>
+<script src="js/audio.js?v=202610291800"></script>
+<script src="js/textures.js?v=202610291800"></script>
+<script src="js/toon.js?v=202610291800"></script>
+<script src="js/kart.js?v=202610291800"></script>
+<script src="js/models/materials.js?v=202610291800"></script>
+<script src="js/models/livery.js?v=202610291800"></script>
+<script src="js/models/pilot.js?v=202610291800"></script>
+<script src="js/models/karts.js?v=202610291800"></script>
+<script src="js/custom.js?v=202610291800"></script>
+<script src="js/ai.js?v=202610291800"></script>
+<script src="js/tracks.js?v=202610291800"></script>
+<script src="js/props.js?v=202610291800"></script>
+<script src="js/scenery.js?v=202610291800"></script>
+<script src="js/city.js?v=202610291800"></script>
+<script src="js/beach.js?v=202610291800"></script>
+<script src="js/net.js?v=202610291800"></script>
+<script src="js/online.js?v=202610291800"></script>
+<script src="js/logo.js?v=202610291800"></script>
+<script src="js/ui.js?v=202610291800"></script>
+<script src="js/speedo3d.js?v=202610291800"></script>
+<script src="js/settings.js?v=202610291800"></script>
+<script src="js/patchnotes.js?v=202610291800"></script>
+<script src="js/showroom.js?v=202610291800"></script>
+<script src="js/garage.js?v=202610291800"></script>
+<script src="js/intro.js?v=202610291800"></script>
+<script src="js/podium.js?v=202610291800"></script>
+<script src="js/main.js?v=202610291800"></script>
+<script src="js/cursor.js?v=202610291800"></script>
 </body>
 </html>

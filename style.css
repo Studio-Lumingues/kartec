@@ -646,3 +646,32 @@ html, body { overscroll-behavior: none; }
 }
 #netResume[hidden] { display: none; }
 @media (max-width: 560px) { #netResume { font-size: 16px; height: 34px; line-height: 34px; padding: 0 22px; } }
+
+/* ---------- menu de pausa (Esc na corrida) ---------- */
+.pauseSheet header { margin-bottom: 4px; }
+.pauseSheet h2 { margin: 0; }
+.pauseSub { margin: 2px 0 0; font: 800 14px var(--ui); color: var(--ink-2); }
+.pauseNav { display: grid; gap: 12px; margin-top: 12px; }
+.pauseNav .cta.big { font-size: 32px; padding: 12px 26px 14px; }
+.pauseNav .navBtn:nth-child(2) { background: #fff3c4; } .pauseNav .navBtn:nth-child(3) { background: #dff8ff; }
+#pauseModal { background: rgba(20, 24, 63, .55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+
+/* ---------- configurações › Partida: sair/reiniciar com dois toques ---------- */
+#setTabs.three { grid-template-columns: 1fr 1fr 1fr; }
+#setMatch { gap: 12px; }
+.matchInfo { margin: 0; font: 800 15px var(--ui); color: var(--ink-2); line-height: 1.45; }
+.matchBtn { width: 100%; justify-content: center; }
+.danger { padding: 12px 18px; border: 3px solid var(--ink); border-radius: 999px; background: linear-gradient(180deg, #ff8fa3 0%, var(--red) 45%, var(--red-deep) 100%); color: var(--white); font: 700 20px var(--display); text-shadow: 0 2px 0 var(--ink); box-shadow: 0 4px 0 var(--ink); }
+.danger:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+.matchBtn.armed { animation: armedPulse .5s ease-in-out infinite alternate; }
+.ghost.matchBtn.armed { background: #ffd9df; }
+@keyframes armedPulse { from { box-shadow: 0 4px 0 var(--ink), 0 0 0 0 rgba(255, 77, 109, .0); } to { box-shadow: 0 4px 0 var(--ink), 0 0 0 6px rgba(255, 77, 109, .45); } }
+
+/* ---------- online: busca pelo nome e senha só quando a sala tem ---------- */
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.field.search { margin: 8px 0 0; }
+.field.search input { width: 100%; padding-left: 40px; background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10.5' cy='10.5' r='6.5' fill='none' stroke='%232a1d4a' stroke-width='2.6'/><path d='M15.5 15.5l5 5' stroke='%232a1d4a' stroke-width='2.8' stroke-linecap='round'/></svg>") 12px 50% / 20px no-repeat; }
+#onPassRow { grid-template-columns: 1fr auto; }
+@media (max-width: 560px) { #onPassRow { grid-template-columns: 1fr; } #onPassRow .cta { grid-column: auto; } }
+.roomItem:not(.locked) .lock .icn { opacity: .9; }
+.field span small { font-weight: 700; opacity: .7; }

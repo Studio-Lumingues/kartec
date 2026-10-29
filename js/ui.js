@@ -376,18 +376,23 @@
       });
     },
     // ---------- modais (abrem com escala + fade; foco vai para o primeiro controle) ----------
-    openModal(id) {
+    // opts.back: modal para onde voltar ao fechar este (ex.: Configurações aberta pela Pausa volta para a Pausa)
+    openModal(id, opts) {
       if (this.modal) this.closeModal(true);
       const m = $(id); m.hidden = false; m.classList.remove('closing'); this.modal = id; this._lastFocus = document.activeElement;
+      this._back = (opts && opts.back) || null;
       if (id === 'setup') { this.refreshTracks(); this.h.onSetupOpen && this.h.onSetupOpen(); }
       requestAnimationFrame(() => { const f = m.querySelector('.cta, button'); f && f.focus({ preventScroll: true }); });
       Sfx.tone(520, 780, 0.12, 'triangle', 0.06);
     },
     closeModal(instant) {
       const id = this.modal; if (!id) return; const m = $(id); this.modal = null;
+      const back = instant ? null : this._back; this._back = null;
       if (id === 'setup') this.h.onSetupClose && this.h.onSetupClose();
+      if (back) { m.hidden = true; this.openModal(back); return; }                // volta para o menu anterior (sem animação de saída)
+      this.h.onModalClose && this.h.onModalClose(id);
       if (instant || matchMedia('(prefers-reduced-motion: reduce)').matches) { m.hidden = true; return; }
-      m.classList.add('closing'); setTimeout(() => { m.hidden = true; m.classList.remove('closing'); }, 220);
+      m.classList.add('closing'); setTimeout(() => { if (this.modal !== id) m.hidden = true; m.classList.remove('closing'); }, 220);
       if (this._lastFocus && this._lastFocus.focus) this._lastFocus.focus({ preventScroll: true });
     },
     // ---------- carregamento e abertura ----------
@@ -497,20 +502,30 @@
         const name = tx('span', r.name); if (r.note) { name.appendChild(document.createElement('br')); name.appendChild(tx('small', r.note)); }
         mk((r.player ? 'me ' : '') + (i === 0 ? 'first' : ''), [tx('b', (i + 1) + 'º'), dot, name, tx('em', r.a), tx('em', r.b, 'total')]); });
     },
+    // info.online: Copa online (a próxima pista larga sozinha; sem "Próxima pista"); info.head: cabeçalho das colunas
     round(info) {
-      $('roundEyebrow').textContent = CFG.CUP.name + ' · corrida ' + info.round + ' de ' + info.total;
+      $('roundEyebrow').textContent = (info.online ? CFG.CUP.name + ' online' : CFG.CUP.name) + ' · corrida ' + info.round + ' de ' + info.total;
       $('roundTitle').textContent = info.trackName;
-      this.table($('roundTable'), ['Nesta pista', 'Total'], info.rows);
+      this.table($('roundTable'), info.head || ['Nesta pista', 'Total'], info.rows);
       $('roundNote').textContent = info.note || '';
+      $('btnNext').hidden = !!info.online;
+      $('btnQuit').hidden = !!info.online;
       $('btnNext').firstChild.textContent = info.last ? 'Ver pódio ' : 'Próxima pista ';
     },
+    // contagem visível até a próxima pista da Copa online
+    roundCountdown(ms, prefix) {
+      clearInterval(this._rcT); const end = performance.now() + ms, el = $('roundNote');
+      const tick = () => { const s = Math.max(0, Math.ceil((end - performance.now()) / 1000)); el.textContent = (prefix ? prefix + ' ' : '') + (s > 0 ? 'Próxima pista em ' + s + ' s…' : 'Carregando a próxima pista…'); if (s <= 0) clearInterval(this._rcT); };
+      tick(); this._rcT = setInterval(tick, 250);
+    },
+    stopRoundCountdown() { clearInterval(this._rcT); },
     podium(info) {
-      this.table($('results'), [info.cup ? 'Corridas' : 'Pista', info.cup ? 'Tempo total' : 'Tempo'], info.rows);
+      this.table($('results'), info.head || [info.cup ? 'Corridas' : 'Pista', info.cup ? 'Tempo total' : 'Tempo'], info.rows);
       const win = info.rows[0];
-      $('podiumTitle').textContent = win.player ? (info.cup ? 'Você venceu a Copa!' : 'Vitória!') : win.name + ' venceu desta vez';
-      $('podiumSub').textContent = win.player
+      $('podiumTitle').textContent = win.player ? (info.cup ? 'Você venceu a Copa!' : 'Vitória!') : win.name + (info.cup ? ' venceu a Copa' : ' venceu desta vez');
+      $('podiumSub').textContent = info.sub || (win.player
         ? (info.cup ? 'Menor tempo somado nas três pistas. O troféu de ouro é seu.' : 'Primeiro lugar. O troféu é seu.')
-        : (info.cup ? 'Na Copa vale a soma dos tempos: tente recuperar segundos com o mini-turbo nas curvas longas.' : 'Tente de novo: o drift com mini-turbo ganha muito tempo nas curvas longas.');
+        : (info.cup ? 'Na Copa vale a soma dos tempos: tente recuperar segundos com o mini-turbo nas curvas longas.' : 'Tente de novo: o drift com mini-turbo ganha muito tempo nas curvas longas.'));
     }
   };
   window.UI = UI;

@@ -10,6 +10,13 @@
 // =====================================================================================
 (function () {
   const NOTES = [
+    { at: '2026-10-29T21:00:00Z', title: 'Pausa, salas públicas e Copa online', items: [
+      'Esc agora abre o menu de Pausa em vez de sair da corrida',
+      'Sair da corrida fica em Configurações › Partida, com dois toques para confirmar',
+      'Fora do online, a corrida congela de verdade na pausa (e pausa sozinha se você trocar de janela)',
+      'Busque salas pelo nome; o código de sala saiu',
+      'Senha agora é opcional: sala sem senha entra com um clique',
+      'Copa Kartec online: 3 pistas seguidas com pontos (10, 8, 6, 5, 4, 3, 2, 1) e pódio final'] },
     { at: '2026-10-29T15:00:00Z', title: 'Reconexão no online e HUD mais limpa', items: [
       'Recarregou a página ou fechou a aba sem querer? Você volta para a mesma corrida em até 15 segundos',
       'Caiu a internet no meio da corrida: o jogo reconecta sozinho, também com 15 segundos de prazo',

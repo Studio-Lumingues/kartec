@@ -32,6 +32,9 @@ const FINISH_GRACE_MS = 45000, LOAD_TIMEOUT_MS = 20000, COUNTDOWN_MS = 3600, STA
 // reconexão: quem cai (F5, aba fechada, wi-fi) tem RECONNECT_MS para voltar com o mesmo token; depois sai da sala de vez.
 // O batimento curto garante que uma conexão morta sem aviso (4G caiu) seja percebida em no máximo 2x HEARTBEAT_MS.
 const RECONNECT_MS = 15000, HEARTBEAT_MS = 4000;
+// Copa online: as 3 pistas em sequência; pontos por posição em cada corrida (quem não termina ou sai fica com 0).
+// Entre uma corrida e outra a sala espera CUP_NEXT_MS mostrando a classificação e larga a próxima sozinha.
+const CUP_ORDER = [0, 1, 2], CUP_POINTS = [10, 8, 6, 5, 4, 3, 2, 1], CUP_NEXT_MS = 9000;
 const now = () => Number(process.hrtime.bigint() / 1000n) / 1000;      // ms com fração (monotônico)
 
 // ---------------------------------------------------------------- HTTP (arquivos do jogo)
@@ -96,11 +99,12 @@ const send = (p, obj) => { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.str
 const roomPlayers = r => r.order.map(id => players.get(id)).filter(Boolean);
 const broadcast = (r, obj, except) => { const s = JSON.stringify(obj); roomPlayers(r).forEach(p => { if (p !== except && p.ws && p.ws.readyState === 1) p.ws.send(s); }); };
 function roomView(r) {
-  return { id: r.id, name: r.name, max: r.max, track: r.track, laps: r.laps, state: r.state, host: r.host,
+  return { id: r.id, name: r.name, max: r.max, track: r.track, laps: r.laps, state: r.state, host: r.host, mode: r.mode, locked: !!r.hash,
+    cup: r.cup ? { round: r.cup.round + 1, total: CUP_ORDER.length } : null,
     players: roomPlayers(r).map(p => ({ id: p.id, name: p.name, spec: p.spec, ready: p.ready, away: !p.ws, ping: Math.round(p.rtt || 0) })) };
 }
 const pushRoom = r => broadcast(r, { t: 'room', room: roomView(r) });
-const listView = () => [...rooms.values()].map(r => ({ id: r.id, name: r.name, players: r.order.length, max: r.max, track: r.track, laps: r.laps, state: r.state, locked: true }));
+const listView = () => [...rooms.values()].map(r => ({ id: r.id, name: r.name, players: r.order.length, max: r.max, track: r.track, laps: r.laps, mode: r.mode, state: r.cup ? 'racing' : r.state, locked: !!r.hash }));
 
 // ---------------------------------------------------------------- salas
 function leaveRoom(p, reason) {
@@ -122,12 +126,15 @@ function joinRoom(p, r) {
 // ---------------------------------------------------------------- corrida
 function startRace(r) {
   r.state = 'loading'; r.raceN = (r.raceN || 0) + 1;
+  // Copa: a primeira largada cria o placar; as seguintes só avançam a pista
+  if (r.mode === 'cup' && !r.cup) r.cup = { round: 0, pts: new Map(), time: new Map(), done: new Map() };
+  const track = r.cup ? CUP_ORDER[r.cup.round] : r.track, cup = r.cup ? { round: r.cup.round + 1, total: CUP_ORDER.length } : null;
   const ids = r.order.slice();
   for (let i = ids.length - 1; i > 0; i--) { const j = crypto.randomInt(i + 1); [ids[i], ids[j]] = [ids[j], ids[i]]; }   // grid sorteado
   const grid = ids.map((id, slot) => ({ id, slot, name: players.get(id).name, spec: players.get(id).spec }));
-  r.race = { id: r.raceN, ids, grid, track: r.track, laps: r.laps, loaded: new Set(), finish: new Map(), prog: new Map(), left: new Set(), startAt: 0, firstFinish: 0, timer: null };
+  r.race = { id: r.raceN, ids, grid, track, laps: r.laps, cup, loaded: new Set(), finish: new Map(), prog: new Map(), left: new Set(), startAt: 0, firstFinish: 0, timer: null };
   ids.forEach(id => { players.get(id).last = null; });
-  broadcast(r, { t: 'prepare', raceId: r.raceN, track: r.track, laps: r.laps, grid });
+  broadcast(r, { t: 'prepare', raceId: r.raceN, track, laps: r.laps, grid, cup });
   r.race.timer = setTimeout(() => go(r), LOAD_TIMEOUT_MS);                 // quem não carregar a tempo larga atrasado
   pushRoom(r);
 }
@@ -149,9 +156,34 @@ function endRace(r) {
   const rows = R.ids.map(id => { const p = players.get(id), f = R.finish.get(id);
     return { id, name: p ? p.name : 'Jogador', spec: p ? p.spec : cleanSpec({}), time: f !== undefined ? f : null, prog: R.prog.get(id) || 0, left: R.left.has(id) }; });
   rows.sort((a, b) => (a.time === null) - (b.time === null) || (a.time !== null ? a.time - b.time : b.prog - a.prog));
-  broadcast(r, { t: 'results', raceId: R.id, rows: rows.map(({ prog, ...x }) => x) });
+  const cup = r.cup ? cupScore(r, rows, (now() - R.startAt) / 1000) : null;
+  broadcast(r, { t: 'results', raceId: R.id, rows: rows.map(({ prog, ...x }) => x), cup });
   r.race = null; roomPlayers(r).forEach(p => { p.ready = false; });
+  if (cup && !cup.final) {
+    // Copa continua: todos ficam na sala; a próxima pista larga sozinha depois da tela de classificação
+    r.cup.round++;
+    setTimeout(() => { if (rooms.get(r.id) === r && r.cup && r.state === 'results' && r.order.length) startRace(r); }, CUP_NEXT_MS);
+    pushRoom(r); return;
+  }
+  r.cup = null;
   setTimeout(() => { if (rooms.get(r.id) === r && r.state === 'results') { r.state = 'lobby'; pushRoom(r); } }, 1500);
+}
+// pontos da corrida (ordem de chegada) somados ao placar da Copa; desempate: menor tempo somado
+function cupScore(r, rows, raceSecs) {
+  const C = r.cup; let place = 0;
+  rows.forEach(row => {
+    const fin = row.time !== null && !row.left, pts = fin ? (CUP_POINTS[place] || 0) : 0, pos = fin ? ++place : 0;
+    row.racePts = pts; row.racePos = pos;
+    C.pts.set(row.id, (C.pts.get(row.id) || 0) + pts);
+    // quem não terminou soma o tempo da corrida inteira + 15 s (só para desempate)
+    C.time.set(row.id, (C.time.get(row.id) || 0) + (fin ? row.time : raceSecs + 15));
+    C.done.set(row.id, (C.done.get(row.id) || 0) + 1);
+  });
+  const race = new Map(rows.map(x => [x.id, x]));
+  const standings = roomPlayers(r).map(p => ({ id: p.id, name: p.name, spec: p.spec, pts: C.pts.get(p.id) || 0, time: Math.round((C.time.get(p.id) || 0) * 1000) / 1000,
+    racePts: race.has(p.id) ? race.get(p.id).racePts : 0, racePos: race.has(p.id) ? race.get(p.id).racePos : 0, raceTime: race.has(p.id) ? race.get(p.id).time : null }))
+    .sort((a, b) => b.pts - a.pts || a.time - b.time);
+  return { round: C.round + 1, total: CUP_ORDER.length, track: CUP_ORDER[C.round], final: C.round >= CUP_ORDER.length - 1, next: CUP_NEXT_MS, standings };
 }
 
 // ---------------------------------------------------------------- mensagens
@@ -170,9 +202,10 @@ function onJson(p, m) {
       if (rooms.size >= MAX_ROOMS) return send(p, { t: 'error', code: 'full', msg: 'Servidor cheio: tente de novo em instantes.' });
       const name = clean(m.name, 24), pass = String(m.password || '');
       if (!name) return send(p, { t: 'error', code: 'name', msg: 'Dê um nome para a sala.' });
-      if (pass.length < 3 || pass.length > 32) return send(p, { t: 'error', code: 'pass', msg: 'A senha precisa ter de 3 a 32 caracteres.' });
-      const salt = crypto.randomBytes(16), r2 = { id: newRoomId(), name, salt, hash: hashPass(pass, salt), max: Math.max(2, Math.min(MAX_PLAYERS, m.max | 0 || MAX_PLAYERS)),
-        track: Math.max(0, Math.min(TRACK_COUNT - 1, m.track | 0)), laps: Math.max(1, Math.min(5, m.laps | 0 || 3)), order: [], host: p.id, state: 'lobby', race: null };
+      // senha é opcional: sem senha = sala pública (entra direto pela lista)
+      if (pass && (pass.length < 3 || pass.length > 32)) return send(p, { t: 'error', code: 'pass', msg: 'A senha precisa ter de 3 a 32 caracteres (ou deixe em branco).' });
+      const salt = pass ? crypto.randomBytes(16) : null, r2 = { id: newRoomId(), name, salt, hash: pass ? hashPass(pass, salt) : null, max: Math.max(2, Math.min(MAX_PLAYERS, m.max | 0 || MAX_PLAYERS)),
+        track: Math.max(0, Math.min(TRACK_COUNT - 1, m.track | 0)), laps: Math.max(1, Math.min(5, m.laps | 0 || 3)), mode: m.mode === 'cup' ? 'cup' : 'single', cup: null, order: [], host: p.id, state: 'lobby', race: null };
       rooms.set(r2.id, r2); joinRoom(p, r2); return; }
     case 'join': {
       const r2 = rooms.get(String(m.id || '').toUpperCase().trim());
@@ -180,14 +213,18 @@ function onJson(p, m) {
       const key = p.ip + '|' + r2.id, at = attempts.get(key) || { n: 0, t: now() };
       if (now() - at.t > 60000) { at.n = 0; at.t = now(); }
       if (at.n >= 6) return send(p, { t: 'error', code: 'slow', msg: 'Muitas tentativas. Aguarde um minuto.' });
-      const ok = crypto.timingSafeEqual(hashPass(String(m.password || ''), r2.salt), r2.hash);
-      if (!ok) { at.n++; attempts.set(key, at); return send(p, { t: 'error', code: 'pass', msg: 'Senha incorreta.' }); }
+      if (r2.hash) {
+        if (!m.password) return send(p, { t: 'error', code: 'needpass', msg: 'Esta sala tem senha.' });
+        const ok = crypto.timingSafeEqual(hashPass(String(m.password || ''), r2.salt), r2.hash);
+        if (!ok) { at.n++; attempts.set(key, at); return send(p, { t: 'error', code: 'pass', msg: 'Senha incorreta.' }); }
+      }
       if (r2.order.length >= r2.max) return send(p, { t: 'error', code: 'full', msg: 'Sala cheia.' });
+      if (r2.cup) return send(p, { t: 'error', code: 'busy', msg: 'Copa em andamento: entre quando ela acabar.' });
       if (r2.state !== 'lobby' && r2.state !== 'results') return send(p, { t: 'error', code: 'busy', msg: 'Corrida em andamento: entre quando ela acabar.' });
       attempts.delete(key); joinRoom(p, r2); return; }
     case 'leave': leaveRoom(p); send(p, { t: 'rooms', rooms: listView() }); return;
     case 'ready': if (r && r.state === 'lobby') { p.ready = !!m.v; pushRoom(r); } return;
-    case 'settings': if (r && r.host === p.id && r.state === 'lobby') { if (m.track !== undefined) r.track = Math.max(0, Math.min(TRACK_COUNT - 1, m.track | 0)); if (m.laps !== undefined) r.laps = Math.max(1, Math.min(5, m.laps | 0)); pushRoom(r); } return;
+    case 'settings': if (r && r.host === p.id && r.state === 'lobby') { if (m.track !== undefined) r.track = Math.max(0, Math.min(TRACK_COUNT - 1, m.track | 0)); if (m.laps !== undefined) r.laps = Math.max(1, Math.min(5, m.laps | 0)); if (m.mode !== undefined) r.mode = m.mode === 'cup' ? 'cup' : 'single'; pushRoom(r); } return;
     case 'kick': if (r && r.host === p.id && m.id !== p.id) { const k = players.get(m.id); if (k && k.room === r.id) { leaveRoom(k, 'removido pelo anfitrião'); send(k, { t: 'kicked' }); } } return;
     case 'start': {
       if (!r || r.host !== p.id || r.state !== 'lobby') return;
@@ -231,7 +268,7 @@ function onBinary(p, buf) {
 // instante da largada no relógio do servidor, quem já chegou e o último estado do próprio kart
 function resumeView(r, p) {
   const R = r.race; if (!R || (r.state !== 'loading' && r.state !== 'racing')) return null;
-  return { t: 'resume', raceId: R.id, state: r.state, track: R.track, laps: R.laps, startAt: R.startAt, serverTime: now(),
+  return { t: 'resume', raceId: R.id, state: r.state, track: R.track, laps: R.laps, cup: R.cup, startAt: R.startAt, serverTime: now(),
     grid: R.grid.filter(g => g.id === p.id || (!R.left.has(g.id) && players.get(g.id) && players.get(g.id).room === r.id)),
     finished: [...R.finish], me: p.last && p.last.raceId === R.id ? p.last : null };
 }

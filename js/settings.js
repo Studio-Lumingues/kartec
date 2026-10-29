@@ -132,10 +132,41 @@
       $('setReset').addEventListener('click', () => { this.s = JSON.parse(JSON.stringify(DEF)); this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
       $('btnSettings').addEventListener('click', () => this.open());
       $('setBtn').addEventListener('click', () => this.open());
+      // aba Partida (só na corrida): sair e reiniciar pedem dois toques, para não sair sem querer
+      this.confirmBtn($('matchLeave'), () => window.Pause && Pause.quit());
+      this.confirmBtn($('matchRestart'), () => window.Pause && Pause.restart());
       this.sync();
     },
-    tab(t) { $('setTabs').querySelectorAll('button').forEach(b => { const on = b.dataset.v === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }); $('setVol').hidden = t !== 'vol'; $('setGfx').hidden = t !== 'gfx'; },
-    open() { if (window.Sfx) Sfx.unlock(); this.sync(); UI.openModal('settingsModal'); },
+    tab(t) { $('setTabs').querySelectorAll('button').forEach(b => { const on = b.dataset.v === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); }); $('setVol').hidden = t !== 'vol'; $('setGfx').hidden = t !== 'gfx'; $('setMatch').hidden = t !== 'match'; },
+    // opts.back: modal para voltar ao fechar (a Pausa). A aba Partida só existe durante a corrida.
+    open(opts) {
+      if (window.Sfx) Sfx.unlock(); this.sync();
+      const inRace = !!(window.Pause && Pause.can()), tabs = $('setTabs');
+      $('setTabMatch').hidden = !inRace; tabs.classList.toggle('three', inRace);
+      if (inRace) this.matchInfo();
+      if (!inRace && !$('setMatch').hidden) this.tab('vol');
+      this.resetConfirm();
+      UI.openModal('settingsModal', opts);
+    },
+    // textos da aba Partida conforme o tipo de corrida
+    matchInfo() {
+      const G = window.Game || {}, on = !!G.online, cup = on ? !!(G.online.cup) : !!G.cup;
+      $('matchInfo').textContent = on ? (cup ? 'Copa online em andamento. Se sair, você deixa a sala e perde os pontos da Copa.' : 'Corrida online em andamento. Se sair, você deixa a sala.')
+        : (cup ? 'Copa Kartec em andamento. Sair encerra a Copa; reiniciar recomeça só esta pista.' : 'Corrida contra os rivais.');
+      $('matchLeave').dataset.label = on ? 'Sair da sala' : cup ? 'Sair da Copa' : 'Sair da corrida';
+      $('matchRestart').dataset.label = 'Reiniciar corrida';
+      $('matchRestart').hidden = on;                                                     // online não reinicia (a corrida é de todos)
+      this.resetConfirm();
+    },
+    // botão de dois toques: o primeiro arma (fica vermelho piscando por 3 s), o segundo confirma
+    confirmBtn(btn, fn) {
+      btn.addEventListener('click', () => {
+        if (btn.classList.contains('armed')) { this.resetConfirm(); fn(); return; }
+        this.resetConfirm(); btn.classList.add('armed'); btn.textContent = 'Toque de novo para confirmar';
+        clearTimeout(btn._t); btn._t = setTimeout(() => this.resetConfirm(), 3000);
+      });
+    },
+    resetConfirm() { ['matchLeave', 'matchRestart'].forEach(id => { const b = $(id); if (!b) return; clearTimeout(b._t); b.classList.remove('armed'); b.textContent = b.dataset.label || b.textContent; }); },
     sync() {
       $('setVol').querySelectorAll('input').forEach(inp => { inp.value = this.s.vol[inp.dataset.vol]; inp.nextElementSibling.textContent = inp.value + '%'; inp.style.setProperty('--p', inp.value + '%'); });
       $('setGfx').querySelectorAll('.seg').forEach(seg => { const id = seg.dataset.g, cur = this.s.gfx[id], val = typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);

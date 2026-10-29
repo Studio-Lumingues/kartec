@@ -453,7 +453,8 @@
       return m;
     },
     toPodium(rows, cup, rec) {
-      this.state = 'podium'; UI.screen('podium'); UI.podium({ rows, cup }); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true;
+      this.paused = false;
+      this.state = 'podium'; UI.screen('podium'); UI.podium(Object.assign({ rows, cup: !!cup }, cup && typeof cup === 'object' ? cup : {})); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true;
       // os karts da corrida vão inteiros para o pódio (mesmos modelos e shaders já compilados: sem travada)
       Podium.start(rows.map(r => ({ name: r.name, color: r.color, spec: r.spec, player: r.player, model: r.kart ? this.handOff(r.kart) : null })));
       this.dispose();
@@ -465,13 +466,16 @@
       if (this.state === 'intro') { if (Intro.phase === 'film') Intro.step(dt); else { Intro.step(dt); Showroom.step(dt); } UI.Sfx.step(null, false); return; }
       if (this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') { Showroom.step(dt); if (this.state === 'lobby' && Net.connected) Net.tick(); UI.Sfx.step(null, false); return; }
       if (this.state === 'podium') { Podium.step(dt); UI.Sfx.step(null, false); return; }
+      // pausa (só fora do online): a corrida congela inteira; os motores ficam em silêncio
+      if (this.paused && !this.online) { UI.Sfx.step(null, false); return; }
       const P = this.player, tr = this.track;
       if (this.state === 'round') { this.cam.ang += dt * 0.4; tr.update(dt, performance.now() / 1000); Fx.step(dt); Env.step(dt, P.pos, tr, this.karts); this.orbitCam(); if (this.fill) this.fill.update(dt, camera.position, Env.fogFar); UI.Sfx.step(null, false); return; }
       const racing = this.state === 'race' || this.state === 'finish', ON = this.online;
       if (ON) Net.tick();
       if (this.state === 'countdown') this.countdown(dt);
       if (racing) this.race.time = ON ? Math.max(0, Net.raceTime()) : this.race.time + dt;
-      const inP = this.state === 'finish' || this.state === 'waiting' || P.finished ? { up: false, down: false, steer: 0, drift: false } : Input.read();
+      // menu aberto (pausa/configurações) no online: a corrida segue, mas o kart não recebe comandos
+      const inP = this.state === 'finish' || this.state === 'waiting' || P.finished || UI.modal ? { up: false, down: false, steer: 0, drift: false } : Input.read();
       this.inP = inP;   // o velocímetro 3D usa a direção e o drift deste quadro
       const K = this.karts;
       if (ON) {
@@ -509,7 +513,7 @@
     netStep(dt, racing) {
       const O = this.online, P = this.player, t = Net.raceTime(), now = performance.now();
       O.acc += this.rawDt || dt;
-      if (now - (O.hudT || 0) > 1000) { O.hudT = now; UI.cupInfo('Online · ' + (Net.room ? Net.room.name : '') + ' · ' + Math.round(Net.rtt) + ' ms'); }
+      if (now - (O.hudT || 0) > 1000) { O.hudT = now; UI.cupInfo(this.onlineTag() + ' · ' + Math.round(Net.rtt) + ' ms'); }
       if (racing && O.acc >= 1 / Net.SEND_HZ) { O.acc = Math.min(O.acc - 1 / Net.SEND_HZ, 1 / Net.SEND_HZ); Net.sendState(P, t); }
       this.rivals.forEach(k => {
         if (Net.sample(k.netId, t, this._ns)) k.applyNet(this._ns, dt);
@@ -529,15 +533,17 @@
       if (m.j > 3) { this.onKartEvent('bump', true); for (let i = 0; i < 6; i++) Fx.spark(P.pos.x, P.pos.y + 0.8, P.pos.z, (Math.random() - 0.5) * 8, 2 + Math.random() * 4, (Math.random() - 0.5) * 8, 0xffe08a, 0.22, 0.3); }
     },
     // ---- fluxo da corrida online (chamado pelo online.js) ----
+    // texto do HUD no online: "Online · Copa 2/3 · Sala"
+    onlineTag() { const c = this.online && this.online.cup; return 'Online · ' + (c ? 'Copa ' + c.round + '/' + c.total + ' · ' : '') + (Net.room ? Net.room.name : ''); },
     onlinePrepare(prep) {
-      this.online = { raceId: prep.raceId, startAt: 0, acc: 0, hitAt: {}, sentAt: {} };
+      this.online = { raceId: prep.raceId, startAt: 0, acc: 0, hitAt: {}, sentAt: {}, cup: prep.cup || null }; UI.stopRoundCountdown(); this.paused = false;
       this.mode = 'online'; this.cup = null; this.trackIdx = prep.track; CFG.LAPS = prep.laps; this.spec = Object.assign({}, Custom.spec);
       UI.transition(() => {
         Podium.stop(); this.curTrack = prep.track; this.load(prep.track, { online: prep.grid });
         UI.screen('race'); this.state = 'waiting'; this.cd = { t: 0, step: 0, early: false };
         this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
-        $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); UI.cupInfo('Online · ' + (Net.room ? Net.room.name : ''));
-        UI.toast('Aguardando todos carregarem…', 2500); PL.request();
+        $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); UI.cupInfo(this.onlineTag());
+        UI.toast(prep.cup ? CFG.TRACKS[prep.track].name + ' · corrida ' + prep.cup.round + ' de ' + prep.cup.total : 'Aguardando todos carregarem…', 2500); PL.request();
         Net.send({ t: 'loaded', raceId: prep.raceId });
       });
     },
@@ -550,13 +556,13 @@
     // volta para uma corrida JÁ EM ANDAMENTO (página recarregada/aba reaberta): mesma pista e grid, relógio da
     // largada do servidor e o kart no último ponto que o servidor recebeu (mesma volta, mesma posição na pista)
     onlineResume(m) {
-      this.online = { raceId: m.raceId, startAt: m.startAt, acc: 0, hitAt: {}, sentAt: {} };
+      this.online = { raceId: m.raceId, startAt: m.startAt, acc: 0, hitAt: {}, sentAt: {}, cup: m.cup || null }; this.paused = false;
       this.mode = 'online'; this.cup = null; this.trackIdx = m.track; CFG.LAPS = m.laps; this.spec = Object.assign({}, Custom.spec);
       Net.resetRace(m.startAt, m.raceId);
       UI.transition(() => {
         Podium.stop(); this.curTrack = m.track; this.load(m.track, { online: m.grid });
         UI.screen('race'); this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
-        UI.cupInfo('Online · ' + (Net.room ? Net.room.name : ''));
+        UI.cupInfo(this.onlineTag());
         (m.finished || []).forEach(([id, t]) => this.onlineFinished({ id, time: t }));
         const P = this.player, mine = (m.finished || []).find(f => f[0] === Net.id);
         if (m.me) { try { this.restoreKart(P, m.me); } catch (e) { console.error('[resume]', e); } }
@@ -595,11 +601,34 @@
       k.gone = true; k.m.group.visible = false; this.scene.remove(k.m.group); Net.remote.delete(id);
       UI.toast(k.name + ' saiu da corrida', 1800);
     },
-    onlineResults(rows) {
+    onlineResults(rows, cup) {
       if (!this.online) return; const P = this.player;
-      const ui = rows.map(r => { const me = r.id === Net.id, k = me ? P : (this.rivals || []).find(x => x.netId === r.id && !x.gone);
-        return { name: me ? r.name + ' (você)' : r.name, color: r.spec.color, spec: r.spec, player: me, kart: k, a: '', b: r.time != null ? fmt(r.time) : (r.left ? 'saiu' : 'não terminou') }; });
+      const kartOf = id => id === Net.id ? P : (this.rivals || []).find(x => x.netId === id && !x.gone);
+      if (cup) { this.onlineCup(cup, kartOf); return; }
+      const ui = rows.map(r => { const me = r.id === Net.id;
+        return { name: me ? r.name + ' (você)' : r.name, color: r.spec.color, spec: r.spec, player: me, kart: kartOf(r.id), a: '', b: r.time != null ? fmt(r.time) : (r.left ? 'saiu' : 'não terminou') }; });
       UI.transition(() => this.toPodium(ui, false, false));
+    },
+    // Copa online: entre as corridas mostra a classificação (a próxima pista larga sozinha, todos continuam na sala);
+    // depois da última, o pódio final pela soma dos pontos
+    onlineCup(cup, kartOf) {
+      this.paused = false;
+      const name = s => s.id === Net.id ? s.name + ' (você)' : s.name, S = cup.standings || [];
+      if (!cup.final) {
+        const rows = S.map(s => ({ name: name(s), color: s.spec.color, spec: s.spec, player: s.id === Net.id,
+          a: s.racePos ? s.racePos + 'º · +' + s.racePts : (s.raceTime == null ? 'não terminou' : '—'), b: s.pts + ' pts' }));
+        const me = S.findIndex(s => s.id === Net.id), lead = me === 0 ? 'Você lidera a Copa!' : me > 0 ? 'Você está em ' + (me + 1) + 'º, a ' + (S[0].pts - S[me].pts) + ' pts do líder.' : '';
+        UI.transition(() => {
+          this.state = 'round'; UI.screen('round'); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true; UI.countNum('');
+          UI.round({ online: true, round: cup.round, total: cup.total, trackName: CFG.TRACKS[cup.track].name, rows, head: ['Nesta corrida', 'Pontos'], last: false });
+          UI.roundCountdown(Math.max(1000, (cup.next || 9000) - 600), lead);
+        });
+        return;
+      }
+      const rows = S.map(s => ({ name: name(s), color: s.spec.color, spec: s.spec, player: s.id === Net.id, kart: kartOf(s.id), a: fmt(s.time), b: s.pts + ' pts' }));
+      const win = rows[0] && rows[0].player;
+      UI.transition(() => this.toPodium(rows, { head: ['Tempo somado', 'Pontos'],
+        sub: win ? 'Mais pontos somando as três pistas. O troféu de ouro é seu.' : 'Na Copa online vale a soma dos pontos de cada corrida (10, 8, 6, 5, 4, 3, 2, 1). Desempate pelo menor tempo somado.' }, false));
     },
     leaveOnline(toMenu) { this.online = null; this.mode = UI.mode; if (toMenu) this.toMenu(); },
     // LOD dos karts: o contorno de tinta (casco invertido = metade dos triângulos e das chamadas de desenho de cada
@@ -853,10 +882,42 @@
     request() { if (!this.ok || this.locked()) return; try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } },
     release() { if (document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) { } } }
   };
+  // ---------------- pausa (Esc durante a corrida) ----------------
+  // Esc abre a Pausa em vez de sair. Sair/reiniciar ficam em Configurações › Partida, com dois toques.
+  // Offline a corrida congela; online ela continua (é de todos), mas o seu kart para de receber comandos.
+  const Pause = {
+    nav: false,
+    can() { return !!Game.scene && ['countdown', 'race', 'finish', 'waiting'].includes(Game.state); },
+    open() {
+      if (!this.can() || UI.modal) return;
+      Game.paused = !Game.online; PL.release();
+      $('pauseTitle').textContent = Game.online ? 'Menu' : 'Pausa';
+      $('pauseSub').textContent = Game.online ? 'Online: a corrida continua enquanto este menu está aberto.' : (Game.cup ? CFG.CUP.name + ' · corrida ' + (Game.cup.round + 1) + ' de ' + CFG.CUP.order.length : 'Jogo pausado');
+      UI.openModal('pauseModal'); UI.Sfx.tone(520, 380, 0.1, 'triangle', 0.05);
+    },
+    // fechar a Pausa (Esc, Continuar ou clique fora) volta para a corrida
+    resume() { if (UI.modal === 'pauseModal') UI.closeModal(); else this.onClosed(); },
+    onClosed() { Game.paused = false; if (this.can()) PL.request(); },
+    settings() { this.nav = true; Settings.open({ back: 'pauseModal' }); this.nav = false; },
+    how() { this.nav = true; UI.openModal('howModal', { back: 'pauseModal' }); this.nav = false; },
+    // chamados pela aba Partida das Configurações
+    quit() {
+      UI._back = null; if (UI.modal) UI.closeModal(true); Game.paused = false;
+      if (Game.online) Online.leave(true); else Game.toMenu();
+    },
+    restart() { UI._back = null; if (UI.modal) UI.closeModal(true); Game.paused = false; if (!Game.online && this.can()) Game.startRace(Game.curTrack); }
+  };
+  window.Pause = Pause;
+  $('pauseResume').addEventListener('click', () => Pause.resume());
+  $('pauseSettings').addEventListener('click', () => Pause.settings());
+  $('pauseHow').addEventListener('click', () => Pause.how());
+  // aba escondida (troca de janela) no meio da corrida offline: pausa sozinha
+  document.addEventListener('visibilitychange', () => { if (document.hidden && !Game.online && Pause.can() && !UI.modal) Pause.open(); });
+
   addEventListener('keydown', e => { if (e.code === 'Escape') PL.lastEsc = performance.now(); }, true);
   document.addEventListener('pointerlockchange', () => {
     if (PL.locked() || !PL.racing()) return;                                          // travou, ou destravou fora da corrida (de propósito)
-    // destravou no meio da corrida: Esc = sair para o menu; perder o foco (Alt+Tab) não faz nada
+    // destravou no meio da corrida: Esc = abre a Pausa; perder o foco (Alt+Tab) não faz nada
     if (document.hasFocus() && performance.now() - PL.lastEsc > 400 && UI.h && UI.h.onEscape) UI.h.onEscape();
   });
   document.addEventListener('pointerdown', e => { if (e.button === 0 && PL.racing() && !PL.locked() && e.target === renderer.domElement) PL.request(); });
@@ -891,8 +952,16 @@
       onNext: () => Game.nextRound(),
       onPlayAgain: () => { if (Online.active()) Online.toLobby(); else Game.newGame(); },
       onMenu: () => { if (Online.active()) Online.leave(); else Game.toMenu(); },
-      onEscape: () => { if (Game.state === 'intro') Intro.skip(); else if (Game.online || Game.state === 'lobby') Online.escape(); else if (Game.state === 'garage') Game.toMenu(); else if (Game.state !== 'menu' && Game.state !== 'boot') Game.toMenu(); },
-      onRestart: () => { if (Game.online) return; if (Game.state === 'race' || Game.state === 'countdown' || Game.state === 'finish') Game.startRace(Game.curTrack); },
+      onEscape: () => {
+        if (UI.modal) return;                                                    // um menu já está aberto (o Esc dele fecha o menu)
+        if (Game.state === 'intro') Intro.skip();
+        else if (Pause.can()) Pause.open();                                      // corrida: abre a Pausa (nunca sai direto)
+        else if (Game.online || Game.state === 'lobby') Online.escape();
+        else if (Game.state === 'garage') Game.toMenu();
+        else if (Game.state !== 'menu' && Game.state !== 'boot') Game.toMenu();
+      },
+      onModalClose: id => { if (id === 'pauseModal' && !Pause.nav) Pause.onClosed(); },
+      onRestart: () => { if (Game.online || Game.paused || UI.modal) return; if (Game.state === 'race' || Game.state === 'countdown' || Game.state === 'finish') Game.startRace(Game.curTrack); },
       onNextHour: () => { if (Game.scene && !Game.online) Env.dayT = (Env.dayT + 0.125) % 1; },
       onEnter: () => {
         if (Game.state === 'intro') Intro.skip();
