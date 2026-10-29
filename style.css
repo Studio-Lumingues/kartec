@@ -696,3 +696,59 @@ body { -webkit-touch-callout: none; }
 #pauseModal .pauseSec { display: contents; }
 #pauseModal .pauseNav > *, #pauseModal .pauseSec > * { width: 100%; }
 #pauseModal .ghost { font: 700 20px var(--display); padding: 12px 18px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* =====================================================================================
+   MENU PRINCIPAL — botões de papel antigo (estilo Susan Kare) com ícones grandes cortados
+   * a tinta do menu é o mesmo preto dos ícones (#000417): contorno, sombra, textos e teclas
+   * ícone (assets/icons/) do tamanho da altura do botão, centrado na borda esquerda: só a metade direita aparece
+   * hover: o botão cresce de verdade na vertical e EMPURRA os outros botões (o layout se desloca)
+   ===================================================================================== */
+:root { --paper: #f6f5f2; --paper-hi: #ffffff; --btn-r: 12px; --nav-pad-l: 70px; --ico-hide: 34%; --ease: cubic-bezier(.2, .9, .3, 1.15); --t: .24s; --hover-grow: 12px; }
+/* preto dos ícones no lugar do roxo (as variáveis derivadas precisam ser refeitas aqui) */
+#menu .mainNav {
+  --ink: #000417; --ink-2: #4b4f63;
+  --line: 4px solid var(--ink); --pop: 0 6px 0 var(--ink);
+}
+#menu .mainNav > button {
+  position: relative; display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 11px 18px 11px var(--nav-pad-l);
+  background: linear-gradient(180deg, var(--paper-hi), var(--paper)) !important; color: var(--ink);
+  border: var(--line); border-radius: var(--btn-r); box-shadow: var(--pop);
+  transition: padding var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+/* "Jogar": mesmo papel e mesmo formato */
+#menu .mainNav > .cta {
+  min-width: 0; justify-content: space-between; border-radius: var(--btn-r);
+  font: 700 38px var(--display); letter-spacing: .5px; color: var(--ink); text-shadow: none;
+  padding-top: 14px; padding-bottom: 16px;
+}
+@media (max-width: 860px) { #menu .mainNav > .cta { font-size: 32px; } }
+#menu .mainNav > .cta kbd { background: rgba(0, 4, 23, .08); border-bottom-color: rgba(0, 4, 23, .3); color: var(--ink); text-shadow: none; }
+/* ícone grande, cortado pela metade na borda esquerda (tamanho fixo, centralizado: não cresce nem deforma no hover) */
+#menu .mainNav > button > .ico, #menu .mainNav > .cta::before {
+  content: ""; position: absolute; left: 0; top: 50%; height: var(--ico-h, 60px); width: auto; aspect-ratio: 1 / 1;
+  transform: translate(calc(-1 * var(--ico-hide)), -50%); transition: none !important; clip-path: inset(0 0 0 var(--ico-hide));   /* mostra ~66% do ícone (ajuste --ico-hide: menor = mais ícone visível) */
+  background: center / contain no-repeat; font-size: 0; pointer-events: none;
+}
+#menu .mainNav > button > .ico > * { display: none; }                  /* some o ícone antigo (icons.js) */
+#menu #btnPlay { --ico-h: 72px; }
+#menu #btnPlay::before     { background-image: url("assets/icons/jogar.png"), url("assets/jogar.png"); }
+#menu #btnOnline .ico      { background-image: url("assets/icons/online.png"), url("assets/online.png"); }
+#menu #btnGarage .ico      { background-image: url("assets/icons/garagem.png"), url("assets/garagem.png"); }
+#menu #btnSettings .ico    { background-image: url("assets/icons/configuracoes.png"), url("assets/configuracoes.png"); }
+#menu #btnNotes .ico       { background-image: url("assets/icons/patchnotes.png"), url("assets/patchnotes.png"); }
+#menu #btnHow .ico         { background-image: url("assets/icons/comojogar.png"), url("assets/comojogar.png"); }
+/* textos crescem um pouco a partir da esquerda */
+#menu .mainNav > button > span:not(.ico):not(.newBadge), #menu .mainNav > .cta > kbd { transform-origin: left center; transition: transform var(--t) var(--ease); }
+#menu .mainNav > .cta > kbd { transform-origin: right center; }
+/* sem balanço antigo */
+/* anula o translateX(6px) e o balanço antigos do hover. O "animation: none" vale só fora da entrada (.enter): durante a entrada ele
+   cancelava a animação navIn e, ao tirar o mouse, ela reiniciava com atraso e opacidade 0 (o botão "sumia" e voltava) */
+#menu .mainNav > button:hover, #menu .mainNav > button:focus-visible { rotate: none; transform: none; }
+#menu .mainNav:not(.enter) > button:hover, #menu .mainNav:not(.enter) > button:focus-visible { animation: none !important; }
+/* sem efeito de crescimento no hover (os botões ficam do tamanho normal) */
+#menu .mainNav > button:active { box-shadow: 0 2px 0 var(--ink); }
+#menu .mainNav .newBadge { z-index: 3; }
+@media (prefers-reduced-motion: reduce) {
+  #menu .mainNav, #menu .mainNav > button, #menu .mainNav > button > *, #menu .mainNav > .cta::before { transition: none; }
+}

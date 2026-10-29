@@ -13,70 +13,328 @@
   const Sfx = window.Sfx;
 
   // ================================ FATECXIE ================================
-  // a fadinha amarela que traz o semáforo na largada (presa à câmera, como o "juiz" voador dos jogos de kart)
+  // A fadinha que traz o semáforo na largada, presa à câmera como o "juiz" voador dos jogos de kart.
+  // Modelo 3D: js/models/entidades/fatecxie.glb (fadinha + semáforo na mão, numa malha só, compactada com meshopt).
+  // * Carrega em segundo plano logo depois que a página abre (o arquivo é grande).
+  // * Ao carregar, as asas são separadas do corpo (pela forma e pela cor da textura) em duas malhas que giram num
+  //   pivô no centro do corpo. Nada é copiado: corpo e asas usam os MESMOS atributos, só o índice muda.
+  // * Asas: batida em altíssima frequência + "rastros" transparentes que cobrem o arco percorrido no quadro
+  //   (como o obturador de uma câmera) = desfoque de movimento.
+  // * Entrada com easing elástico e saída com antecipação (back-in). A cada luz, o sinaleiro leva um empurrão
+  //   e balança como pêndulo com mola; a fada não pula. Sem partículas.
+  // * As 3 luzes do semáforo do modelo são apagadas/acesas por shader (máscara esférica em volta de cada lâmpada).
+  const Ease = {
+    outElastic(k, p) { p = p || 0.42; if (k <= 0) return 0; if (k >= 1) return 1; return Math.pow(2, -10 * k) * Math.sin((k - p / 4) * (2 * Math.PI) / p) + 1; },
+    inBack(k, s) { s = s == null ? 1.9 : s; return k * k * ((s + 1) * k - s); }
+  };
+  // valores-padrão (o config.js pode trocar qualquer um em CFG.FAIRY)
+  const FAIRY_DEF = {
+    MODEL: 'js/models/entidades/fatecxie.glb', SCALE: 3.4, POS: [1.2, 2.4, -7], ROT_Y: -Math.PI / 2 + 0.15, GLOW: 0.45,
+    LAMPS: [[0.134, -0.166, 0.3339], [0.135, -0.2801, 0.339], [0.134, -0.4082, 0.3374]], LAMP_R: 0.041,
+    BODY: { CENTER: [-0.047, 0.178, -0.012], RADIUS: 0.1385 },
+    WINGS: { HZ: 12, YAW: 0.55, ROLL: 0.32, OPACITY: 0.9, BLUR: 3, SHUTTER: 0.85 },
+    EYES: [[-0.008, 0.1865, -0.09], [-0.0715, 0.178, -0.16]], EYE_SIZE: [0.024, 0.046], BLINK: [2.0, 4.5],
+    RIM: 1.1, HALO: 3.0, AURA: 6.0,
+    SIGNAL: { PIVOT: [0.064, 0.1, 0.305], CUT_Y: 0.095, MIN_Z: 0.2, MIN_X: -0.06 },
+    SWING: { FREQ: 1.1, DAMP: 0.13, INERTIA: 0.35, KICK: 1.6, STRETCH: 0, MAX: 0.85 }
+  };
+  let _fc = null;
+  const fc = () => _fc || (_fc = (() => { const u = CFG.FAIRY || {};
+    return Object.assign({}, FAIRY_DEF, u, { BODY: Object.assign({}, FAIRY_DEF.BODY, u.BODY), WINGS: Object.assign({}, FAIRY_DEF.WINGS, u.WINGS),
+      SIGNAL: Object.assign({}, FAIRY_DEF.SIGNAL, u.SIGNAL), SWING: Object.assign({}, FAIRY_DEF.SWING, u.SWING) }); })());
+  const lowEnd = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4;
+
   const Fairy = {
+    DIM: [0x4a1212, 0x4a3c10, 0x12401a], ON: [0xff2a2a, 0xffd21a, 0x3dff5a],
+    // baixa e prepara o modelo uma vez só (a promessa é reaproveitada). Status em Fairy.status.
+    // * Página aberta direto do disco (file://): o navegador bloqueia ler o .glb, então o modelo vem da cópia
+    //   embutida em script (js/models/entidades/fatecxie.glb.js), que funciona sem servidor.
+    // * Em servidor (npm start, Vercel, Render): lê o .glb (mais leve); se falhar, usa a cópia embutida.
+    // * Carrega sozinho o decodificador meshopt se o index.html não tiver a tag.
+    preload() {
+      if (this._p) return this._p;
+      this.status = 'carregando'; this.reason = '';
+      const fail = (why, e) => { this.status = 'erro'; this.reason = why; console.error('[Fatecxie] ' + why, e || ''); return null; };
+      if (!window.THREE || !THREE.GLTFLoader) return (this._p = Promise.resolve(fail('THREE.GLTFLoader não encontrado (js/vendor/GLTFLoader.js)')));
+      const mkLoader = () => { const l = new THREE.GLTFLoader(); if (window.MeshoptDecoder && l.setMeshoptDecoder) l.setMeshoptDecoder(window.MeshoptDecoder); return l; };
+      const tryUrls = (urls, i) => new Promise((res, rej) => {
+        if (i >= urls.length) return rej(new Error('nenhum caminho respondeu'));
+        mkLoader().load(urls[i], g => { this.url = urls[i]; res(g); }, undefined,
+          e => { console.warn('[Fatecxie] não abriu ' + urls[i]); tryUrls(urls, i + 1).then(res, rej); });
+      });
+      const fromEmbedded = () => this.embedded().then(buf => new Promise((res, rej) => {
+        if (!buf) return rej(new Error('cópia embutida js/models/entidades/fatecxie.glb.js não encontrada'));
+        mkLoader().parse(buf, '', g => { this.url = 'fatecxie.glb.js (embutido)'; res(g); }, rej);
+      }));
+      const local = location.protocol === 'file:';
+      this._p = this.ensureDecoder()
+        .then(() => local ? fromEmbedded() : tryUrls(this.candidates(), 0).catch(() => fromEmbedded()))
+        .then(g => { try { this.tpl = this.prepare(g.scene); } catch (e) { return fail('falha ao preparar o modelo', e); }
+          this.status = 'ok'; console.info('[Fatecxie] modelo carregado de ' + this.url + (this.tpl.wings.length ? ' (asas separadas)' : ' (sem asas separadas)')); return this.tpl; })
+        .catch(e => fail('não foi possível carregar o modelo: ' + (e && e.message ? e.message : e), e));
+      return this._p;
+    },
+    // cópia do .glb dentro de um script (window.FATECXIE_GLB_B64, em base64): <script> funciona até em file://
+    embedded() {
+      const decode = () => { const b64 = window.FATECXIE_GLB_B64; if (!b64) return null;
+        const bin = atob(b64), u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+        window.FATECXIE_GLB_B64 = null; return u8.buffer; };                 // libera a string (é grande)
+      if (window.FATECXIE_GLB_B64) return Promise.resolve(decode());
+      const add = src => new Promise(res => { const sc = document.createElement('script'); sc.src = src; sc.onload = sc.onerror = () => res(!!window.FATECXIE_GLB_B64); document.head.appendChild(sc); });
+      return add('js/models/entidades/fatecxie.glb.js').then(ok => ok || add('js/models/entidades/fatecxie/fatecxie.glb.js')).then(() => decode());
+    },
+    candidates() {
+      const m = fc().MODEL, list = [m];
+      if (!/\.glb$/i.test(m)) list.push(m + '.glb');
+      ['js/models/entidades/fatecxie.glb', 'js/models/entidades/fatecxie', 'js/models/entidades/fatecxie/fatecxie.glb', 'js/models/entidades/fatecxie/scene.glb', 'js/models/entidades/fatecxie.gltf']
+        .forEach(u => { if (list.indexOf(u) < 0) list.push(u); });
+      return list;
+    },
+    // o .glb é compactado com meshopt: sem o decodificador o GLTFLoader recusa o arquivo
+    ensureDecoder() {
+      if (window.MeshoptDecoder) return Promise.resolve();
+      const add = src => new Promise(res => { const sc = document.createElement('script'); sc.src = src; sc.onload = sc.onerror = () => res(!!window.MeshoptDecoder); document.head.appendChild(sc); });
+      return add('js/vendor/meshopt_decoder.js')
+        .then(ok => ok || add('https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/libs/meshopt_decoder.js'))
+        .then(ok => { if (!ok) console.error('[Fatecxie] decodificador meshopt não carregou (js/vendor/meshopt_decoder.js)'); });
+    },
+    // separa asas do corpo, ajusta materiais e monta o grupo do modelo (coordenadas do .glb, em metros)
+    prepare(root) {
+      const C = fc(); let src = null; root.updateMatrixWorld(true);
+      root.traverse(o => { if (o.isMesh && !src) src = o; });
+      if (!src) throw new Error('nenhuma malha no .glb');
+      const geo = src.geometry; if (!src.matrixWorld.equals(new THREE.Matrix4())) geo.applyMatrix4(src.matrixWorld);
+      if (!geo.boundingSphere) geo.computeBoundingSphere();
+      const pos = geo.attributes.position, uv = geo.attributes.uv, n = pos.count;
+      const body = Array.isArray(src.material) ? src.material[0] : src.material;
+      // cor da textura reduzida a 256 px: asa = amarelo-clarinho; corpo e mãos = amarelo forte; haste e olhos = escuros
+      let pix = null; const PW = 256;
+      try { const img = body.map && body.map.image; if (img && uv) { const cv = document.createElement('canvas'); cv.width = cv.height = PW; const g = cv.getContext('2d'); g.drawImage(img, 0, 0, PW, PW); pix = g.getImageData(0, 0, PW, PW).data; } } catch (e) { pix = null; }
+      const B = C.BODY, cx = B.CENTER[0], cy = B.CENTER[1], cz = B.CENTER[2], R2 = B.RADIUS * B.RADIUS;
+      // vértice de asa: fora da esfera do corpo, longe do meio, atrás do rosto, acima da haste e longe das mãos
+      // vértice do sinaleiro (caixa + cabo, abaixo do ponto de giro): vai para uma malha própria que balança
+      const SG = C.SIGNAL, side = new Int8Array(n), sem = new Uint8Array(n);
+      for (let i = 0; i < n; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), dx = x - cx, dy = y - cy, dz = z - cz;
+        if (z > SG.MIN_Z && y < SG.CUT_Y && x > SG.MIN_X) { sem[i] = 1; continue; }
+        if (dx * dx + dy * dy + dz * dz < R2 || Math.abs(dz) < 0.05 || x > 0.04 || y < -0.02 || (y < 0.13 && x > -0.06)) continue;
+        if (pix) { let u = uv.getX(i), v = uv.getY(i); u -= Math.floor(u); v -= Math.floor(v);
+          const p = (Math.min(PW - 1, v * PW | 0) * PW + Math.min(PW - 1, u * PW | 0)) * 4;
+          if (!(pix[p] > 178 && pix[p + 1] > 165 && pix[p + 2] > 107)) continue; }
+        side[i] = dz < 0 ? -1 : 1;
+      }
+      const model = new THREE.Group();
+      const share = ia => { const g = new THREE.BufferGeometry(); for (const k in geo.attributes) g.setAttribute(k, geo.attributes[k]);
+        g.setIndex(new THREE.BufferAttribute(ia, 1)); g.boundingSphere = geo.boundingSphere.clone(); return g; };
+      // separa os triângulos em 4 grupos (0 corpo, 1 asa esq., 2 asa dir., 3 sinaleiro) só trocando o índice
+      let bodyGeo = geo, idxL = null, idxR = null, idxS = null;
+      if (geo.index) {
+        const I = geo.index.array, T = I.length / 3, tag = new Uint8Array(T), cnt = [0, 0, 0, 0];
+        for (let t = 0; t < T; t++) { const a = I[3 * t], b = I[3 * t + 1], c = I[3 * t + 2], s = side[a] + side[b] + side[c];
+          const k = sem[a] + sem[b] + sem[c] >= 2 ? 3 : s <= -2 ? 1 : s >= 2 ? 2 : 0; tag[t] = k; cnt[k]++; }
+        const okW = cnt[1] > 500 && cnt[2] > 500, okS = cnt[3] > 500;
+        if (!okW) { cnt[0] += cnt[1] + cnt[2]; cnt[1] = cnt[2] = 0; console.warn('[Fatecxie] asas não encontradas (sem batida de asas)'); }
+        if (!okS) { cnt[0] += cnt[3]; cnt[3] = 0; console.warn('[Fatecxie] sinaleiro não encontrado (sem balanço)'); }
+        if (okW || okS) {
+          const out = cnt.map(c => new Uint32Array(c * 3)), at = [0, 0, 0, 0];
+          for (let t = 0; t < T; t++) { let k = tag[t]; if (!okW && (k === 1 || k === 2)) k = 0; if (!okS && k === 3) k = 0;
+            const d = out[k], j = at[k]; at[k] += 3; d[j] = I[3 * t]; d[j + 1] = I[3 * t + 1]; d[j + 2] = I[3 * t + 2]; }
+          bodyGeo = share(out[0]); if (okW) { idxL = out[1]; idxR = out[2]; } if (okS) idxS = out[3];
+        }
+      }
+      // materiais: brilho próprio (a fada aparece até na pista do fim da tarde); asas translúcidas
+      body.fog = false;
+      if (body.emissive) { body.emissive.setHex(0xffffff); body.emissiveMap = body.map || null; body.emissiveIntensity = C.GLOW; }
+      const wingM = body.clone(); wingM.transparent = true; wingM.opacity = C.WINGS.OPACITY; wingM.depthWrite = false; wingM.side = THREE.DoubleSide;
+      if (wingM.emissive) wingM.emissiveIntensity = C.GLOW * 2.2;   // asas mais luminosas (parte do glow)
+      // cor da pele (topo do corpo, na textura) para a pálpebra da piscada; sRGB -> linear
+      let skin = new THREE.Vector3(1, 0.86, 0.12);
+      if (pix) { let r = 0, g = 0, b = 0, m = 0;
+        for (let i = 0; i < n && m < 4000; i += 7) { const y = pos.getY(i), x = pos.getX(i); if (y < cy + 0.1 || x < cx) continue;
+          let u = uv.getX(i), v = uv.getY(i); u -= Math.floor(u); v -= Math.floor(v); const p = (Math.min(PW - 1, v * PW | 0) * PW + Math.min(PW - 1, u * PW | 0)) * 4;
+          if (pix[p + 2] > 110) continue; r += pix[p]; g += pix[p + 1]; b += pix[p + 2]; m++; }
+        if (m > 50) skin.set(Math.pow(r / m / 255, 2.2), Math.pow(g / m / 255, 2.2), Math.pow(b / m / 255, 2.2)); }
+      // shader do corpo: luzes do semáforo (uOn: 1 = acesa), piscada (uBlink 0..1) e brilho de borda (fresnel) na fada
+      const U = { uOn: { value: [0, 0, 0] }, uLampR: { value: C.LAMP_R },
+        uLampC: { value: C.LAMPS.map(a => new THREE.Vector3().fromArray(a)) },
+        uLampCol: { value: this.ON.map(h => { const c = new THREE.Color(h).convertSRGBToLinear(); return new THREE.Vector3(c.r, c.g, c.b); }) },   // linear: cor pura, sem ficar rosada
+        uBlink: { value: 0 }, uSkin: { value: skin }, uEyeC: { value: C.EYES.map(a => new THREE.Vector3().fromArray(a)) }, uEyeS: { value: new THREE.Vector2().fromArray(C.EYE_SIZE) },
+        uRim: { value: C.RIM }, uRimCol: { value: new THREE.Vector3(1.0, 0.82, 0.25) }, uBodyC: { value: new THREE.Vector3(cx, cy, cz) }, uBodyR: { value: B.RADIUS } };
+      body.onBeforeCompile = sh => {
+        Object.assign(sh.uniforms, U);
+        sh.vertexShader = 'varying vec3 vFxP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvFxP = position;');
+        sh.fragmentShader = ['varying vec3 vFxP;', 'uniform float uOn[3];', 'uniform float uLampR;', 'uniform vec3 uLampC[3];', 'uniform vec3 uLampCol[3];',
+          'uniform float uBlink;', 'uniform vec3 uSkin;', 'uniform vec3 uEyeC[2];', 'uniform vec2 uEyeS;', 'uniform float uRim;', 'uniform vec3 uRimCol;', 'uniform vec3 uBodyC;', 'uniform float uBodyR;', ''].join('\n') +
+          sh.fragmentShader.replace('#include <emissivemap_fragment>', [
+            '#include <emissivemap_fragment>',
+            // piscada: a pálpebra (cor da pele) desce de cima; na borda dela, uma linha escura = olho fechado
+            'if (uBlink > 0.01 && vFxP.x > 0.03) {',
+            '\tfor (int e = 0; e < 2; e++) {',
+            '\t\tvec2 q = vec2(vFxP.z - uEyeC[e].x - uEyeC[e].z * (vFxP.y - uEyeC[e].y), vFxP.y - uEyeC[e].y) / uEyeS;',
+            '\t\tif (dot(q, q) < 1.0) {',
+            '\t\t\tfloat edge = mix(1.05, -0.45, uBlink);',
+            '\t\t\tif (q.y > edge) { diffuseColor.rgb = uSkin; totalEmissiveRadiance = emissive * uSkin; }',
+            '\t\t\tfloat ln = (1.0 - smoothstep(0.09, 0.17, abs(q.y - edge))) * smoothstep(0.0, 0.15, uBlink);',
+            '\t\t\tdiffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.035, 0.025, 0.02), ln); totalEmissiveRadiance *= 1.0 - ln;',
+            '\t\t}',
+            '\t}',
+            '}',
+            // brilho de borda só na fadinha (o semáforo fica de fora)
+            '{ float bm = 1.0 - smoothstep(uBodyR * 1.15, uBodyR * 1.5, distance(vFxP, uBodyC));',
+            '\tfloat fr = pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), 2.0);',
+            '\ttotalEmissiveRadiance += uRimCol * fr * uRim * bm; }',
+            'for (int i = 0; i < 3; i++) {',
+            // lâmpada = só a cúpula de vidro (raio em volta do eixo da lâmpada, que aponta para +X); a viseira fica de fora
+            '\tvec3 ld = vFxP - uLampC[i]; float lr = length(ld.yz);',
+            '\tfloat dome = (1.0 - smoothstep(uLampR - 0.006, uLampR, lr)) * step(0.1, vFxP.x);',
+            '\tfloat spill = smoothstep(uLampR, uLampR + 0.004, lr) * (1.0 - smoothstep(uLampR + 0.01, uLampR + 0.035, lr)) * step(0.105, vFxP.x) * (1.0 - smoothstep(0.155, 0.172, vFxP.x));',
+            '\tif (uOn[i] > 0.5) {',
+            '\t\tfloat core = clamp(1.0 - lr / uLampR, 0.0, 1.0);',
+            // acesa: a cor vem da própria luz (emissiva), sem reflexo branco da iluminação por cima (fica saturada, não "lavada")
+            '\t\tdiffuseColor.rgb = mix(diffuseColor.rgb, uLampCol[i] * 0.2, dome); roughnessFactor = mix(roughnessFactor, 1.0, dome); metalnessFactor = mix(metalnessFactor, 0.0, dome);',
+            '\t\ttotalEmissiveRadiance = mix(totalEmissiveRadiance, uLampCol[i] * (0.95 + 0.6 * core), dome);',
+            '\t\ttotalEmissiveRadiance += uLampCol[i] * 0.4 * spill;',
+            // apagada: escurece a cúpula E o anel colorido pintado na parte de dentro da viseira (senão parece acesa)
+            '\t} else { float off = (1.0 - smoothstep(uLampR + 0.01, uLampR + 0.018, lr)) * step(0.1, vFxP.x) * (1.0 - smoothstep(0.158, 0.17, vFxP.x));',
+            '\t\tdiffuseColor.rgb *= 1.0 - 0.72 * off; totalEmissiveRadiance *= 1.0 - 0.95 * off; }',
+            '}'].join('\n'));
+      };
+      body.customProgramCacheKey = () => 'fatecxie-body-v2';
+      const bodyMesh = new THREE.Mesh(bodyGeo, body); bodyMesh.frustumCulled = false; model.add(bodyMesh);
+      // asas: pivô no centro do corpo; camada 0 = asa "real", demais = rastros do desfoque
+      const center = new THREE.Vector3(cx, cy, cz), G = Math.max(0, Math.round(lowEnd() ? Math.min(1, C.WINGS.BLUR) : C.WINGS.BLUR));
+      const wings = !idxL ? [] : [[-1, idxL], [1, idxR]].map(([sgn, ia]) => {
+        const g = share(ia), piv = new THREE.Group(); piv.position.copy(center); model.add(piv);
+        const layers = [];
+        for (let k = 0; k <= G; k++) {
+          const m = k ? wingM.clone() : wingM; if (k) m.opacity = C.WINGS.OPACITY * 0.5 * (1 - k / (G + 1));
+          const h = new THREE.Group(), mesh = new THREE.Mesh(g, m); mesh.position.copy(center).negate(); mesh.frustumCulled = false; mesh.renderOrder = 20 - k;
+          h.add(mesh); piv.add(h); layers.push(h);
+        }
+        return { sgn, layers };
+      });
+      // brilho na frente de cada lâmpada (o modelo olha para +X)
+      // sinaleiro: pivô no alto do cabo; "swing" recebe a rotação (pêndulo) e o estica-encolhe (mola)
+      const PV = new THREE.Vector3().fromArray(SG.PIVOT), semPiv = new THREE.Group(), swing = new THREE.Group();
+      semPiv.position.copy(PV); semPiv.add(swing); model.add(semPiv);
+      if (idxS) { const sm = new THREE.Mesh(share(idxS), body); sm.position.copy(PV).negate(); sm.frustumCulled = false; swing.add(sm); }
+      // brilho (bloom) da lâmpada acesa: pequeno, logo à frente da cúpula e sem teste de profundidade (não é cortado pela viseira)
+      const glows = C.LAMPS.map((a, k) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: new THREE.Color(this.ON[k]).convertSRGBToLinear(), blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, depthTest: false, fog: false, opacity: 0 }));
+        s.position.set(a[0] + 0.03, a[1], a[2]); s.scale.setScalar(0.15); s.renderOrder = 30;
+        if (idxS) { s.position.sub(PV); swing.add(s); } else model.add(s); return s; });
+      // eixos da tela vistos de dentro do modelo (ele está girado em Y): balanço lateral = eixo Z da tela, frente/trás = eixo X
+      const Yax = new THREE.Vector3(0, 1, 0), axZ = new THREE.Vector3(0, 0, 1).applyAxisAngle(Yax, -C.ROT_Y), axX = new THREE.Vector3(1, 0, 0).applyAxisAngle(Yax, -C.ROT_Y);
+      // escala e giro (frente do modelo para a câmera) com o centro do corpo na origem: a mola e o balanço giram em volta da fada
+      model.scale.setScalar(C.SCALE); model.rotation.y = C.ROT_Y;
+      model.position.copy(center).multiplyScalar(C.SCALE).applyAxisAngle(new THREE.Vector3(0, 1, 0), C.ROT_Y).negate();
+      return { model, U, wings, glows, G, semPiv, swing: idxS ? swing : null, axZ, axX };
+    },
     build(camera) {
       if (this.rig) return;
-      const fB = (c, o) => new THREE.MeshBasicMaterial(Object.assign({ color: c }, o || {}));
       const rig = this.rig = new THREE.Group(); rig.visible = false; camera.add(rig);
-      const fairy = this.fairy = new THREE.Group(); rig.add(fairy);
-      fairy.add(new THREE.Mesh(new THREE.SphereGeometry(0.5, 28, 18), fB(0xfff27a)));
-      fairy.add(new THREE.Mesh(new THREE.SphereGeometry(0.56, 28, 18), fB(0xffe94a, { transparent: true, opacity: 0.35, depthWrite: false })));
-      this.halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: 0xffe94a, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0.95 })); this.halo.scale.setScalar(4.2); fairy.add(this.halo);
-      [-1, 1].forEach(s => {
-        const e = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 10), fB(0x2a1a10)); e.position.set(s * 0.17, 0.08, 0.46); e.scale.set(1, 1.45, 0.6); fairy.add(e);
-        const gl = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 6), fB(0xffffff)); gl.position.set(s * 0.17 + 0.025, 0.13, 0.5); fairy.add(gl);
-        const ch = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 8), fB(0xffa08a)); ch.position.set(s * 0.3, -0.07, 0.4); ch.scale.set(1, 0.6, 0.4); fairy.add(ch);
-      });
-      { const sm = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.02, 6, 14, Math.PI), fB(0x7a3a1a)); sm.rotation.z = Math.PI; sm.position.set(0, -0.07, 0.47); fairy.add(sm); }
-      { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0.45, 0), new THREE.Vector3(0.06, 0.75, -0.04), new THREE.Vector3(0.24, 0.9, 0)]);
-        fairy.add(new THREE.Mesh(new THREE.TubeGeometry(c, 16, 0.03, 8, false), fB(0xd9b81a)));
-        const st = new THREE.Shape(); for (let k = 0; k < 10; k++) { const a = Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 0.07 : 0.17; k ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
-        const sg = new THREE.ExtrudeGeometry(st, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.02, bevelSize: 0.02, bevelSegments: 2 }); sg.translate(0, 0, -0.025);
-        this.star = new THREE.Mesh(sg, fB(0xffc81a)); this.star.position.set(0.27, 0.93, 0); fairy.add(this.star); }
-      const wingShape = sc => { const s = new THREE.Shape(); s.moveTo(0, 0); s.bezierCurveTo(0.2 * sc, 0.95 * sc, 1.25 * sc, 1.25 * sc, 1.45 * sc, 0.55 * sc); s.bezierCurveTo(1.6 * sc, 0, 0.9 * sc, -0.55 * sc, 0, 0); return s; };
-      this.wings = [-1, 1].map(s => { const piv = new THREE.Group(); piv.position.set(s * 0.3, 0.12, -0.25); fairy.add(piv);
-        const w = new THREE.Mesh(new THREE.ShapeGeometry(wingShape(1), 16), fB(0xfffbd0, { transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }));
-        const w2 = new THREE.Mesh(new THREE.ShapeGeometry(wingShape(0.62), 16), fB(0xffffff, { transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false })); w2.position.set(0.15, 0.08, 0.01);
-        const g = new THREE.Group(); g.add(w, w2); g.scale.x = s; g.rotation.z = 0.25 * s; piv.add(g); return piv; });
-      const AT = new THREE.Vector3(2.0, 3.0, -7), TIP = new THREE.Vector3(0, 3.65, -7);
-      { const a = AT.clone().add(new THREE.Vector3(-0.42, -0.25, 0.1)), d = TIP.clone().sub(a), L = d.length();
-        const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.05, L, 10), fB(0xb0782e)); rod.position.copy(a).addScaledVector(d, 0.5); rod.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); rig.add(rod);
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), fB(0xfff27a)); tip.position.copy(TIP); rig.add(tip); }
-      fairy.position.copy(AT);
-      const piv = this.sigPivot = new THREE.Group(); piv.position.copy(TIP); rig.add(piv);
-      { const str = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.2, 6), fB(0xeeeeee)); str.position.y = -0.6; piv.add(str); }
-      const box = new THREE.Group(); box.position.y = -1.75; piv.add(box);
-      box.add(new THREE.Mesh(GEO.rbox(2.6, 0.95, 0.5, 0.22), new THREE.MeshBasicMaterial({ color: 0x22242e })));
-      { const rim = new THREE.Mesh(GEO.rbox(2.75, 1.1, 0.4, 0.26), new THREE.MeshBasicMaterial({ color: 0xffd21a })); rim.position.z = -0.08; box.add(rim); }
-      this.DIM = [0x4a1212, 0x4a3c10, 0x12401a]; this.ON = [0xff2a2a, 0xffd21a, 0x3dff5a];
-      this.lamps = [-0.82, 0, 0.82].map((x, k) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.3, 20, 14), fB(this.DIM[k])); m.position.set(x, 0, 0.2); m.scale.z = 0.55; box.add(m);
-        const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: this.ON[k], blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); gl.position.set(x, 0, 0.45); gl.scale.setScalar(2.2); box.add(gl); return { m, gl }; });
-      this.state = 'off'; this.t = 0; this.spark = 0;
+      this.state = 'off'; this.t = 0; this.spark = 0; this.on = [0, 0, 0]; this.kick = null; this.ph = 0; this.blinkIn = 1.2; this.blink = null;
+      this.preload().then(() => this.attach());
     },
+    // o modelo chegou: entra na câmera (se a contagem já começou, entra com o efeito elástico)
+    attach() {
+      if (!this.rig || !this.tpl || this.fig) return;
+      const fig = this.fig = new THREE.Group(); fig.position.fromArray(fc().POS); this.rig.add(fig); fig.add(this.tpl.model);
+      // glow: halo forte colado ao corpo + aura grande e suave que pulsa devagar
+      const spr = (c, s, o) => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, fog: false, opacity: o })); p.scale.setScalar(s); fig.add(p); return p; };
+      this.aura = spr(0xffd84a, fc().AURA, 0.3); this.halo = spr(0xfff08a, fc().HALO, 0.8);
+      this.applyLamp();
+      if (this.state === 'in' || this.state === 'hold') { this.state = 'in'; this.t = 0; }
+    },
+    applyLamp() {
+      if (!this.tpl) return;
+      this.on.forEach((v, i) => { this.tpl.U.uOn.value[i] = v; this.tpl.glows[i].material.opacity = v ? 0.4 : 0; });
+    },
+    // k: -1 (tudo apagado), uma lâmpada (0 vermelho, 1 amarelo, 2 verde) ou uma lista delas ([0, 1])
     setLamp(k, track) {
-      this.lamps.forEach((l, i) => { l.m.material.color.setHex(i === k ? this.ON[i] : this.DIM[i]); l.gl.material.opacity = i === k ? 0.95 : 0; });
-      if (track && track.archLamps) track.archLamps.forEach((pair, i) => pair.forEach(m => m.material.color.setHex(i === k ? this.ON[i] : this.DIM[i])));
+      const list = k == null || k === -1 ? [] : Array.isArray(k) ? k : [k], prev = this.on || [0, 0, 0];
+      this.on = [0, 1, 2].map(i => list.indexOf(i) >= 0 ? 1 : 0); this.applyLamp();
+      if (track && track.archLamps) track.archLamps.forEach((pair, i) => pair.forEach(m => m.material.color.setHex(this.on[i] ? this.ON[i] : this.DIM[i])));
+      if (list.length && this.state !== 'off' && this.fig) {
+        const go = !!this.on[2]; this.kick = { t: 0 };                       // só o brilho pulsa (sem pulinho da fada)
+        if (this.sw) { this.sw.dir = -(this.sw.dir || 1); const K = fc().SWING.KICK * (go ? 1.5 : 1);   // empurrão alternado + um pouco para a frente
+          this.sw.va += K * this.sw.dir; this.sw.vb += K * 0.35; }
+      }
     },
-    show() { this.state = 'in'; this.t = 0; this.rig.visible = true; this.setLamp(-1); },
+    // sinaleiro pendurado: pêndulo amortecido (mola) nos dois sentidos + cabo que estica e encolhe.
+    // A aceleração do ponto de giro (vista da câmera) entra como inércia: quando a fada pula, quica ou sai voando,
+    // o sinaleiro "fica para trás" e depois oscila até parar. O ângulo é do mundo; desconta-se a inclinação da fada.
+    swingStep(dt, camera, f) {
+      const T = this.tpl, S = fc().SWING, h = Math.min(Math.max(dt, 1 / 240), 1 / 20);
+      const p = (this._pw || (this._pw = new THREE.Vector3())); T.semPiv.getWorldPosition(p); camera.worldToLocal(p);
+      let s = this.sw;
+      if (!s || !s.init) { s = this.sw = Object.assign(s || { a: 0, va: 0, b: 0, vb: 0, s: 0, vs: 0, dir: 1 }, { init: true, px: p.x, py: p.y, pz: p.z, vx: 0, vy: 0, vz: 0 }); }
+      const vx = (p.x - s.px) / h, vy = (p.y - s.py) / h, vz = (p.z - s.pz) / h, cl = v => Math.max(-45, Math.min(45, v));
+      const ax = cl((vx - s.vx) / h), ay = cl((vy - s.vy) / h), az = cl((vz - s.vz) / h);
+      Object.assign(s, { px: p.x, py: p.y, pz: p.z, vx, vy, vz });
+      const w = 2 * Math.PI * S.FREQ, c = 2 * S.DAMP * w, ws = w * 2.6, cs = 2 * 0.22 * ws;
+      // semi-implícito (estável): velocidade primeiro, depois posição
+      s.va += (-w * w * Math.sin(s.a) - c * s.va - S.INERTIA * ax * Math.cos(s.a)) * h; s.a += s.va * h;
+      s.vb += (-w * w * Math.sin(s.b) - c * s.vb + S.INERTIA * 0.6 * az) * h;          s.b += s.vb * h;
+      s.vs += (-ws * ws * s.s - cs * s.vs + 0.004 * ay) * h;                               s.s += s.vs * h;
+      const M = S.MAX; if (Math.abs(s.a) > M) { s.a = Math.sign(s.a) * M; s.va *= -0.4; } if (Math.abs(s.b) > M * 0.6) { s.b = Math.sign(s.b) * M * 0.6; s.vb *= -0.4; }
+      s.s = Math.max(-S.STRETCH, Math.min(S.STRETCH, s.s));
+      const q = this._q || (this._q = new THREE.Quaternion()), q2 = this._q2 || (this._q2 = new THREE.Quaternion());
+      q.setFromAxisAngle(T.axZ, s.a - f.rotation.z); q2.setFromAxisAngle(T.axX, s.b); T.swing.quaternion.copy(q).multiply(q2);
+      T.swing.scale.set(1 - s.s * 0.5, 1 + s.s, 1 - s.s * 0.5);
+    },
+    show() { this.state = 'in'; this.t = 0; this.kick = null; this.sw = null; if (this.rig) this.rig.visible = true; this.setLamp(-1);
+      if (this.status === 'erro' && !this._warned) { this._warned = true; setTimeout(() => UI.toast('Fatecxie não carregou: ' + this.reason, 6000), 2000); } },
     leave() { if (this.state !== 'off') { this.state = 'out'; this.t = 0; } },
-    hide() { if (this.rig) { this.state = 'off'; this.rig.visible = false; } },
+    hide() { if (this.rig) { this.state = 'off'; this.rig.visible = false; this.kick = null; } },
     step(dt, camera) {
       if (!this.rig || this.state === 'off') return;
-      this.t += dt; const t = performance.now() / 1000;
-      const fl = 0.35 + 0.55 * (0.5 + 0.5 * Math.sin(t * 32)); this.wings[0].rotation.y = fl; this.wings[1].rotation.y = -fl;
-      this.fairy.rotation.z = Math.sin(t * 3.1) * 0.1; this.fairy.rotation.y = Math.sin(t * 1.3) * 0.25; this.star.rotation.z += dt * 2;
-      const halfW = Math.tan(camera.fov * Math.PI / 360) * 7 * camera.aspect, sx = Math.min(1, (halfW - 0.4) / 2.6);
-      let ox = 0, oy = 0, sw = 0;
-      if (this.state === 'in') { const k = Math.min(1, this.t / 0.85), e = 1 - Math.pow(1 - k, 3); ox = (1 - e) * 7; oy = (1 - e) * 5; sw = (1 - e) * 0.5; }
-      else if (this.state === 'out') { const k = this.t / 1.5; ox = k * k * 5; oy = k * k * 9; sw = -k * 0.3; if (k >= 1) { this.hide(); return; } }
-      this.rig.scale.set(sx, sx, 1); this.rig.position.set(ox, oy + Math.sin(t * 2.3) * 0.16, 0);
-      this.sigPivot.rotation.z = Math.sin(t * 1.8) * 0.05 + sw; this.halo.material.opacity = 0.8 + 0.2 * Math.sin(t * 9);
-      this.spark -= dt;
-      if (this.spark <= 0) { this.spark = 0.05; const w = new THREE.Vector3(); this.fairy.getWorldPosition(w);
-        Fx.spark(w.x + (Math.random() - 0.5) * 0.6, w.y - 0.3, w.z + (Math.random() - 0.5) * 0.6, (Math.random() - 0.5) * 1.5, 1 + Math.random() * 1.5, (Math.random() - 0.5) * 1.5, Math.random() < 0.5 ? 0xfff27a : 0xffffff, 0.08, 0.6); }
+      this.t += dt; const t = performance.now() / 1000, C = fc();
+      const halfW = Math.tan(camera.fov * Math.PI / 360) * 7 * camera.aspect, sx = Math.max(0.45, Math.min(1, (halfW - 0.3) / 2.5));   // telas estreitas: encolhe
+      let ox = 0, oy = 0, sc = 1, spin = 0;
+      if (this.state === 'in') {                                   // chega voando e "quica" no lugar (elástico)
+        const k = Math.min(1, this.t / 1.25), e = Ease.outElastic(k, 0.45);
+        ox = (1 - e) * 6; oy = (1 - e) * 4.5; spin = (1 - e) * 0.9; sc = 0.35 + 0.65 * Ease.outElastic(Math.min(1, k * 1.15), 0.35);
+        if (k >= 1) this.state = 'hold';
+      } else if (this.state === 'out') {                           // antecipação (abaixa um pouco) e dispara para cima
+        const k = Math.min(1, this.t / 1.2), e = Ease.inBack(k);
+        ox = e * 5.5; oy = e * 8.5; spin = -e * 0.5; sc = 1 + Math.max(0, e) * 0.15;
+        if (k >= 1) { this.hide(); return; }
+      }
+      this.rig.scale.set(sx, sx, 1); this.rig.position.set(ox, oy + Math.sin(t * 2.3) * 0.14, 0);
+      if (!this.fig) return;
+      // mola (oscilação amortecida): começa achatada, estica, balança o semáforo e dá um pulinho
+      // a cada luz só o brilho dá um pulso suave (a fada não pula nem achata)
+      let pop = 0;
+      if (this.kick) { const u = (this.kick.t += dt); pop = Math.exp(-5 * u); if (u > 1.2) this.kick = null; }
+      const f = this.fig, P0 = C.POS;
+      f.position.set(P0[0], P0[1], P0[2]); f.scale.setScalar(sc);
+      f.rotation.set(0, Math.sin(t * 1.3) * 0.16 + spin, Math.sin(t * 3.1) * 0.06);
+      // glow pulsando (mais forte no "soco" de cada luz)
+      const T = this.tpl, pulse = 0.5 + 0.5 * Math.sin(t * 3.2);
+      this.halo.material.opacity = Math.min(1, 0.65 + 0.15 * Math.sin(t * 9) + 0.35 * Math.max(0, pop));
+      this.halo.scale.setScalar(C.HALO * (1 + 0.08 * pulse + 0.15 * Math.max(0, pop)));
+      this.aura.material.opacity = 0.14 + 0.1 * pulse + 0.16 * Math.max(0, pop); this.aura.scale.setScalar(C.AURA * (0.92 + 0.12 * pulse));
+      T.U.uRim.value = C.RIM * (0.85 + 0.3 * pulse + 0.4 * Math.max(0, pop));
+      this.on.forEach((v, i) => { if (v) { T.glows[i].scale.setScalar(0.15 * (1 + 0.3 * pop + 0.05 * Math.sin(t * 7))); T.glows[i].material.opacity = 0.38 + 0.2 * pop; } });
+      if (T.swing) this.swingStep(dt, camera, f);
+      // piscada: a cada 2 a 4,5 s (às vezes duas seguidas); fecha rápido e abre um pouco mais devagar
+      this.blinkIn -= dt;
+      if (!this.blink && this.blinkIn <= 0) { this.blink = { t: 0, again: Math.random() < 0.25 }; }
+      let bl = 0;
+      if (this.blink) { const k = (this.blink.t += dt) / 0.17;
+        bl = k < 0.4 ? k / 0.4 : Math.max(0, 1 - (k - 0.4) / 0.6); bl = bl * bl * (3 - 2 * bl);
+        if (k >= 1) { const again = this.blink.again; this.blink = null;
+          this.blinkIn = again ? 0.12 : C.BLINK[0] + Math.random() * (C.BLINK[1] - C.BLINK[0]); } }
+      T.U.uBlink.value = bl;
+      // asas: batida rápida; os rastros cobrem o arco que a asa percorreu durante este quadro (desfoque de movimento)
+      const W = C.WINGS, w = W.HZ * (this.state === 'out' ? 1.3 : 1) * Math.PI * 2, span = Math.min(Math.PI * 1.8, Math.max(dt, 1 / 120) * w * W.SHUTTER);
+      this.ph = (this.ph + dt * w) % (Math.PI * 2);
+      T.wings.forEach(wg => wg.layers.forEach((h, k) => { const s = Math.sin(this.ph - (T.G ? span * k / T.G : 0));
+        h.rotation.set(-wg.sgn * W.ROLL * s, -wg.sgn * W.YAW * (0.3 + 0.7 * s), 0); }));
     }
   };
+  // começa a baixar a fadinha logo depois que a página abre (fica pronta antes da primeira largada)
+  window.addEventListener('load', () => setTimeout(() => Fairy.preload(), 400));
 
   // ================================ MINIMAPA ================================
   const Mini = {

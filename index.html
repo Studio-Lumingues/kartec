@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610300000">
+<link rel="stylesheet" href="style.css?v=202610300310">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -23,7 +23,7 @@
 <template id="logoTpl">
   <svg class="logo" viewBox="0 0 680 300" role="img" aria-label="Super Kartec">
     <defs>
-      <linearGradient id="lgGold" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="250"><stop offset="0" stop-color="#FFF4A8"/><stop offset=".38" stop-color="#FFD02E"/><stop offset=".78" stop-color="#FF9A00"/><stop offset="1" stop-color="#FF6A00"/></linearGradient>
+      <linearGradient id="lgGold" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="250"><stop offset="0" stop-color="#FFA79A"/><stop offset=".38" stop-color="#FF4D5E"/><stop offset=".78" stop-color="#E8213A"/><stop offset="1" stop-color="#C4102B"/></linearGradient>
       <linearGradient id="lgShine" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="180"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <linearGradient id="lgRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8FA3"/><stop offset="1" stop-color="#E0305A"/></linearGradient>
       <clipPath id="lgClip"><text x="350" y="246" font-size="138" text-anchor="middle" letter-spacing="2" class="lgText" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text></clipPath>
@@ -109,7 +109,7 @@
 <!-- ======================= Menu principal ======================= -->
 <section id="menu" aria-label="Menu principal">
   <nav class="mainNav">
-    <button id="btnPlay" class="cta big" type="button">Jogar <kbd>Enter</kbd></button>
+    <button id="btnPlay" class="cta big" type="button"><span>Jogar</span> <kbd>Enter</kbd></button>
     <button id="btnOnline" class="navBtn" type="button"><span class="ico" data-ic="online"></span><span><strong>Online</strong><small>Corra com os amigos</small></span></button>
     <button id="btnGarage" class="navBtn" type="button"><span class="ico" data-ic="wrench"></span><span><strong>Garagem</strong><small id="menuKart"></small></span></button>
     <button id="btnSettings" class="navBtn" type="button"><span class="ico" data-ic="gear"></span><span><strong>Configurações</strong><small>Som e gráficos</small></span></button>
@@ -320,8 +320,24 @@
 <script>window.THREE || document.write('<script src="js/vendor/three.min.js"><\/script>')</script>
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
+<script src="js/vendor/meshopt_decoder.js"></script>   <!-- descompacta o .glb da Fatecxie (EXT_meshopt_compression) -->
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js?v=202610300000"></script>
+<script>
+/* menu principal: a animação de entrada dos botões (.enter) toca só na primeira vez.
+   Ao voltar da Garagem etc. ela reiniciava (botões invisíveis + atraso) e parecia que os botões sumiam e voltavam. */
+(function () {
+  var nav = document.querySelector('#menu .mainNav'); if (!nav) return;
+  var done = false, timer = 0;
+  function check() {
+    if (!nav.classList.contains('enter')) return;
+    if (done) { nav.classList.remove('enter'); return; }
+    if (!timer) timer = setTimeout(function () { done = true; nav.classList.remove('enter'); }, 1500);   /* depois que a entrada inicial termina */
+  }
+  new MutationObserver(check).observe(nav, { attributes: true, attributeFilter: ['class'] });
+  check();
+})();
+</script>
+<script src="js/config.js?v=202610300100"></script>
 <script src="js/icons.js?v=202610300000"></script>
 <script src="js/audio.js?v=202610300000"></script>
 <script src="js/textures.js?v=202610300000"></script>
@@ -341,7 +357,8 @@
 <script src="js/net.js?v=202610300000"></script>
 <script src="js/online.js?v=202610300000"></script>
 <script src="js/logo.js?v=202610300000"></script>
-<script src="js/ui.js?v=202610300000"></script>
+<script src="js/logo3d.js?v=202610300200"></script>   <!-- KARTEC da logo em 3D (assets/karttec_logo.glb) -->
+<script src="js/ui.js?v=202610300100"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
 <script src="js/settings.js?v=202610300000"></script>
 <script src="js/patchnotes.js?v=202610300000"></script>

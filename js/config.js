@@ -27,6 +27,27 @@ window.CFG = {
   // minimapa: ZOOM = quantas vezes o mapa é aproximado em volta do kart (1 = mapa inteiro);
   // FADE_START = fração do raio onde a pista começa a sumir (o resto até a borda é o degradê de revelação)
   MINIMAP: { ZOOM: 2.4, FADE_START: 0.42, ICON: 0.9 },   // ICON = tamanho da seta e dos pontos (1 = original)
+  // ---------- Fatecxie: a fadinha da contagem regressiva (ui.js > Fairy) ----------
+  // MODEL: arquivo 3D (.glb com o semáforo na mão). Posição/escala em metros no espaço da câmera (a fada fica a 7 m).
+  // LAMPS / BODY: pontos do próprio .glb (centro de cada lâmpada e esfera do corpo; servem para acender as luzes
+  // e separar as asas). WINGS: HZ = batidas por segundo; YAW/ROLL = amplitude (rad); BLUR = rastros do desfoque
+  // de movimento (celular usa no máximo 1); SHUTTER = fração do quadro "exposta" no desfoque.
+  FAIRY: {
+    MODEL: 'js/models/entidades/fatecxie.glb',
+    SCALE: 3.4, POS: [1.2, 2.4, -7], ROT_Y: -Math.PI / 2 + 0.15, GLOW: 0.45,
+    LAMPS: [[0.134, -0.166, 0.3339], [0.135, -0.2801, 0.339], [0.134, -0.4082, 0.3374]], LAMP_R: 0.041,
+    BODY: { CENTER: [-0.047, 0.178, -0.012], RADIUS: 0.1385 },
+    WINGS: { HZ: 12, YAW: 0.55, ROLL: 0.32, OPACITY: 0.9, BLUR: 3, SHUTTER: 0.85 },
+    // piscada: EYES = [centro z, centro y, inclinação] de cada olho no .glb; BLINK = intervalo entre piscadas (s)
+    EYES: [[-0.008, 0.1865, -0.09], [-0.0715, 0.178, -0.16]], EYE_SIZE: [0.024, 0.046], BLINK: [2.0, 4.5],
+    // glow: RIM = brilho de borda no corpo; HALO = halo colado ao corpo; AURA = brilho grande e suave em volta
+    RIM: 1.1, HALO: 3.0, AURA: 6.0,
+    // sinaleiro com mola: SIGNAL = onde o cabo é "cortado" e gira no .glb (não mexer se o modelo for o mesmo);
+    // SWING: FREQ = balanços por segundo, DAMP = amortecimento (menor = balança por mais tempo), INERTIA = quanto
+    // ele atrasa quando a fada se mexe, KICK = empurrão a cada luz, STRETCH = quanto o cabo estica/encolhe, MAX = ângulo máx. (rad)
+    SIGNAL: { PIVOT: [0.064, 0.1, 0.305], CUT_Y: 0.095, MIN_Z: 0.2, MIN_X: -0.06 },
+    SWING: { FREQ: 1.1, DAMP: 0.13, INERTIA: 0.35, KICK: 1.6, STRETCH: 0, MAX: 0.85 }
+  },
   COINS_ON: false,              // sistema de moedas mantido no código, desligado por enquanto
   // preenchimento de cenário (scenery.js): densidade relativa e alcance do horizonte
   FILL: { DENSITY: 1, LITE_DENSITY: 0.45, CHUNK: 300, CULL_EVERY: 0.25 },
@@ -44,7 +65,14 @@ window.CFG = {
     { name: 'Tito Pneu',  top: 0.95 }
   ],
 
-  // ---------- física do kart (unidades: metros e segundos) ----------
+  // ---------- velocidade dos veículos ----------
+  // SPEED_MULT multiplica a velocidade REAL de todos os karts (jogador, bots e online): máxima, ré, aceleração,
+  // freio e giro (o giro acompanha para as curvas continuarem com o mesmo traçado). O velocímetro NÃO muda:
+  // o fator de km/h é dividido pelo mesmo número, então continua mostrando ~135 km/h na máxima e 203 no turbo.
+  // Os valores abaixo em PHYS são os de base (1x); a conta é feita no fim deste arquivo.
+  SPEED_MULT: 1.5,
+
+  // ---------- física do kart (unidades: metros e segundos; valores de base, antes do SPEED_MULT) ----------
   PHYS: {
     MAX: 52,          // velocidade máxima normal (m/s) -> ~135 km/h no velocímetro (antes 46 / ~120 km/h)
     MAXREV: 14,       // ré
@@ -136,3 +164,12 @@ window.CFG = {
     }
   ]
 };
+
+// aplica o SPEED_MULT (uma vez só). PHYS.BASE guarda os valores originais.
+(function () {
+  const C = window.CFG, P = C.PHYS, m = Math.max(0.1, +C.SPEED_MULT || 1);
+  if (P.BASE) return;
+  P.BASE = { MAX: P.MAX, MAXREV: P.MAXREV, ACC: P.ACC, BRAKE: P.BRAKE, TURN: P.TURN, KMH: P.KMH };
+  P.MAX *= m; P.MAXREV *= m; P.ACC *= m; P.BRAKE *= m; P.TURN *= m;
+  P.KMH /= m;          // velocímetro igual: (velocidade x m) x (KMH / m) = mesmo número na tela
+})();

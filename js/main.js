@@ -403,7 +403,7 @@
       this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
       $('signal').hidden = false; UI.countNum(''); UI.Fairy.show();
       UI.cupInfo('');   // sem "Copa Kartec · x/3" no HUD
-      UI.toast(CFG.TRACKS[trackIdx].name, 1800); PL.request();
+      PL.request();   // sem o nome da pista na tela: a largada fica livre para a Fatecxie
       $('help').classList.remove('fade'); clearTimeout(this._hf); this._hf = setTimeout(() => $('help').classList.add('fade'), 9000);
     },
     racePos(k) {
@@ -412,15 +412,16 @@
     },
     countdown(dt) {
       const c = this.cd; if (this.online && this.online.startAt) c.t = 3.6 + (Net.serverNow() - this.online.startAt) / 1000; else c.t += dt;
-      const marks = [[0.9, '3', 0], [1.8, '2', 0], [2.7, '1', 1], [3.6, 'VAI!', 2]];
+      // contagem só no sinaleiro da Fatecxie (sem números na tela): vermelho -> amarelo -> verde = largada
+      const marks = [[1.2, 0], [2.4, 1], [3.6, 2]];
       while (c.step < marks.length && c.t >= marks[c.step][0]) {
-        const [, txt, lamp] = marks[c.step]; UI.countNum(txt, lamp === 2); UI.Fairy.setLamp(lamp, this.track); UI.Sfx.count(lamp === 2, c.step);
-        if (c.step === 1 && Input.keys.up) c.early = true;              // acelerou cedo demais: perde a largada turbo
-        if (c.step === 3) {
+        const lamp = marks[c.step][1], go = lamp === 2; UI.Fairy.setLamp(lamp, this.track); UI.Sfx.count(go, c.step);
+        if (c.step === 1 && Input.keys.up) c.early = true;              // acelerou já no amarelo: perde a largada turbo
+        if (go) {
           this.state = 'race';
           if (Input.keys.up && !c.early) { this.player.boostT = 1.0; this.player.speed = CFG.PHYS.MAX * 0.8; UI.Sfx.boost(); UI.toast('Largada turbo!', 1000); }
           if (!this.online) this.rivals.forEach((b, i) => { const good = Math.random() < 0.45; b.boostT = good ? 0.5 : 0; b.speed = CFG.PHYS.MAX * (good ? 0.45 : 0.18 + Math.random() * 0.14); });   // só parte do pelotão acerta a largada turbo
-          setTimeout(() => UI.Fairy.leave(), 450); setTimeout(() => { if (this.state !== 'menu') UI.countNum(''); }, 1100);
+          setTimeout(() => UI.Fairy.leave(), 450);
         }
         c.step++;
       }
@@ -562,7 +563,7 @@
         UI.screen('race'); this.state = 'waiting'; this.cd = { t: 0, step: 0, early: false };
         this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
         $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); UI.cupInfo(this.onlineTag());
-        UI.toast(prep.cup ? CFG.TRACKS[prep.track].name + ' · corrida ' + prep.cup.round + ' de ' + prep.cup.total : 'Aguardando todos carregarem…', 2500); PL.request();
+        if (!prep.cup) UI.toast('Aguardando todos carregarem…', 2500); PL.request();
         Net.send({ t: 'loaded', raceId: prep.raceId });
       });
     },
@@ -666,7 +667,7 @@
     // vácuo: colado atrás de qualquer kart por ~1 s = empurrão (vale para todos os 8)
     slipstream(dt, a) {
       const s = a.draftS, isPlayer = a === this.player; s.cool -= dt;
-      if (s.cool > 0 || a.speed < 25 || a.air) { s.t = Math.max(0, s.t - dt * 2); return; }
+      if (s.cool > 0 || a.speed < 25 * (CFG.SPEED_MULT || 1) || a.air) { s.t = Math.max(0, s.t - dt * 2); return; }
       const sa = Math.sin(a.ang), ca = Math.cos(a.ang); let behind = false;
       for (const b of this.karts) { if (b === a) continue; const dx = b.pos.x - a.pos.x, dz = b.pos.z - a.pos.z, fwd = dx * sa + dz * ca;
         if (fwd > 4 && fwd < 18 && Math.abs(dx * ca - dz * sa) < 2.6) { behind = true; break; } }
@@ -705,7 +706,7 @@
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
       // tremidinha fina acima de 75% da velocidade (sensação de velocidade, sem enjoar)
       if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
-      const fov = (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2);   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
+      const fov = (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2 / (CFG.SPEED_MULT || 1));   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
       camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // FOV original
       // zoom do turbo: entra com "soco" (mola rápida) e volta suave (mola amortecida); 10% = câmera 10% mais perto
       const B = this.boost;
