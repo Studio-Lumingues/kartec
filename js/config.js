@@ -23,7 +23,7 @@ window.CFG = {
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)
-  ONLINE_SERVER: '',
+  ONLINE_SERVER: 'wss://kartec.onrender.com/ws',
   // minimapa: ZOOM = quantas vezes o mapa é aproximado em volta do kart (1 = mapa inteiro);
   // FADE_START = fração do raio onde a pista começa a sumir (o resto até a borda é o degradê de revelação)
   MINIMAP: { ZOOM: 2.4, FADE_START: 0.42, ICON: 0.9 },   // ICON = tamanho da seta e dos pontos (1 = original)

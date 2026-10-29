@@ -58,13 +58,32 @@
       this.fpsOn(g.fps);
     },
     eachScene(fn) { [window.Game && Game.scene, window.Showroom && Showroom.scene, window.Podium && Podium.scene, window.Intro && Intro.scene].forEach(sc => sc && fn(sc)); },
+    // contador de FPS: placa escura igual às da HUD. Na corrida fica centralizado sob a placa da volta
+    // (dentro de #lapCol); nas outras telas fica no canto superior esquerdo, no mesmo lugar da volta.
     fpsOn(on) {
       let el = $('fpsPill');
       if (!on) { if (el) el.hidden = true; return; }
-      if (!el) { el = document.createElement('div'); el.id = 'fpsPill'; el.className = 'pill small'; document.body.appendChild(el);
-        let n = 0, t0 = performance.now(); const tick = now => { n++; if (now - t0 >= 500) { el.textContent = Math.round(n * 1000 / (now - t0)) + ' FPS'; n = 0; t0 = now; } if (!el.hidden) requestAnimationFrame(tick); else this._fpsRun = false; };
-        this._fpsTick = tick; }
-      el.hidden = false; if (!this._fpsRun) { this._fpsRun = true; requestAnimationFrame(this._fpsTick); }
+      if (!el) {
+        el = document.createElement('div'); el.id = 'fpsPill'; el.className = 'hudPlate'; el.setAttribute('aria-hidden', 'true');
+        el.innerHTML = '<b>--</b><small>FPS</small>'; document.body.appendChild(el);
+        const num = el.firstChild;
+        let n = 0, t0 = performance.now();
+        const tick = now => {
+          n++;
+          if (now - t0 >= 500) { num.textContent = Math.min(999, Math.round(n * 1000 / (now - t0))); n = 0; t0 = now; this.fpsPlace(); }
+          if (!el.hidden) requestAnimationFrame(tick); else this._fpsRun = false;
+        };
+        this._fpsTick = tick;
+      }
+      el.hidden = false; this.fpsPlace();
+      if (!this._fpsRun) { this._fpsRun = true; requestAnimationFrame(this._fpsTick); }
+    },
+    fpsPlace() {
+      const el = $('fpsPill'), col = $('lapCol'); if (!el) return;
+      const race = document.body.dataset.screen === 'race' && col;
+      const parent = race ? col : document.body;
+      if (el.parentNode !== parent) parent.appendChild(el);
+      el.classList.toggle('inHud', !!race);
     },
     // ---------- interface ----------
     init() {

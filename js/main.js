@@ -828,8 +828,7 @@
     if (!c.drag) return; c.yaw -= (e.clientX - c.lx) * 0.006; c.pitch = Math.max(-0.4, Math.min(1, c.pitch + (e.clientY - c.ly) * 0.004)); c.lx = e.clientX; c.ly = e.clientY; });
   addEventListener('pointerup', e => { if (e.button === 2) Game.cam.drag = false; });
   addEventListener('wheel', e => { if (!Game.scene) return; Game.cam.zoom = Math.max(0.6, Math.min(1.8, Game.cam.zoom * (e.deltaY > 0 ? 1.08 : 0.93))); }, { passive: true });
-  // Ctrl+W fecha a aba no navegador e não pode ser bloqueado: durante a corrida o navegador pede confirmação antes
-  addEventListener('beforeunload', e => { if (Game.state === 'race' || Game.state === 'countdown' || Game.state === 'finish' || Game.online) { e.preventDefault(); e.returnValue = ''; } });
+  // (removido) aviso do navegador ao recarregar/fechar a página durante a corrida
   addEventListener('resize', () => { if (window.Logo) Logo.resize(); if (Game.state === 'menu') UI.layoutMenu(); });
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); Podium.resize(); Showroom.resize(); Intro.resize(); });
 

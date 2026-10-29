@@ -50,7 +50,10 @@
 <!-- ======================= HUD da corrida ======================= -->
 <div id="hud">
   <div class="hudTL">
-    <div id="lap" class="pill" aria-label="Volta 1 de 3"><span class="cur">1</span><span class="sl">/</span><span class="tot">3</span></div>
+    <div class="lapCol" id="lapCol">
+      <div id="lap" class="pill" aria-label="Volta 1 de 3"><span class="cur">1</span><span class="sl">/</span><span class="tot">3</span></div>
+      <!-- o contador de FPS (settings.js) entra aqui durante a corrida, centralizado sob a placa da volta -->
+    </div>
     <div id="time" class="pill mono">00’00”00</div>
     <div id="cupInfo" class="pill small"></div>
   </div>
