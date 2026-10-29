@@ -81,41 +81,93 @@
   // ================================ MINIMAPA ================================
   const Mini = {
     build(track, colors) {
-      const c = $('mini'), MW = c.width, MH = c.height;
+      const c = $('mini'), MW = c.width, MH = c.height, BS = this.BS = Math.max(1, (CFG.MINIMAP && CFG.MINIMAP.ZOOM) || 2.4);   // BS: o mapa-base é desenhado BS vezes maior para o zoom ficar nítido
       this.c = c; this.g = c.getContext('2d'); this.colors = colors;
-      const base = this.base = document.createElement('canvas'); base.width = MW; base.height = MH; const g = base.getContext('2d');
+      const base = this.base = document.createElement('canvas'); base.width = Math.round(MW * BS); base.height = Math.round(MH * BS); const g = base.getContext('2d'); g.scale(BS, BS);   // o desenho continua nas coordenadas de 264 px
       let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; track.S.forEach(p => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });
       const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, s = (MW - 64) / Math.max(x1 - x0, z1 - z0);
       const mm = this.mm = (x, z) => [MW / 2 - (x - cx) * s, MH / 2 - (z - cz) * s]; this.s = s;
-      const rr = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-      const bg = { classic: ['#bdeaa0', '#8fd47a'], city: ['#d8dcef', '#b8bed8'], beach: ['#7fd2ff', '#3aa8e8'] }[track.def.id];
-      g.save(); rr(4, 4, MW - 8, MH - 8, 34); const gr = g.createLinearGradient(0, 0, 0, MH); gr.addColorStop(0, bg[0]); gr.addColorStop(1, bg[1]); g.fillStyle = gr; g.globalAlpha = 0.88; g.fill(); g.globalAlpha = 1; g.clip();
+      // Sem fundo, grama, água nem moldura: só o que importa fica no desenho (pista, ilhas, prédios, trilho, ponte, túnel).
+      const INK = '#1f2026', ROAD = '#f6f8fc', EDGE = '#ffffff';
+      const N = track.N, node = i => track.S[((i % N) + N) % N];
+      // traçado suave: em vez de ligar os pontos por retas (que forma quinas nas curvas com o zoom), cada ponto vira o
+      // controle de uma curva quadrática que passa pelos pontos médios; a pista fica contínua e arredondada
+      const mp = i => { const q = node(i); return mm(q.x, q.z); };
+      const pathPts = (from, to, step) => {
+        const idx = []; for (let i = from; i < to; i += step) idx.push(i); idx.push(to);
+        const P = idx.map(mp), n = P.length, mid = (a, b) => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; g.beginPath();
+        if (from === 0 && to === N) {                                  // volta fechada (sem ponta repetida)
+          P.pop(); const m = P.length, st = mid(P[m - 1], P[0]); g.moveTo(st[0], st[1]);
+          for (let k = 0; k < m; k++) { const nx = mid(P[k], P[(k + 1) % m]); g.quadraticCurveTo(P[k][0], P[k][1], nx[0], nx[1]); }
+        } else {                                                       // trecho aberto (túnel)
+          g.moveTo(P[0][0], P[0][1]);
+          for (let k = 1; k < n - 1; k++) { const nx = mid(P[k], P[k + 1]); g.quadraticCurveTo(P[k][0], P[k][1], nx[0], nx[1]); }
+          g.lineTo(P[n - 1][0], P[n - 1][1]);
+        }
+      };
+      const ang = i => { const t = track.T[((i % N) + N) % N]; return Math.atan2(-t.z, -t.x); };   // sentido da pista na tela (o mapa é espelhado em x e z)
+      // ilhas (praia): areia suave com borda clara
       track.minimap.forEach(e => {
-        const poly = (pts, col) => { g.fillStyle = col; g.beginPath(); pts.forEach((p, k) => { const [a, b] = mm(p[0], p[1]); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.closePath(); g.fill(); };
-        if (e.type === 'island') poly(e.poly, '#ffe7a8');
-        if (e.type === 'pond') poly(e.poly, '#3aa8ff');
-        if (e.type === 'river') { g.lineJoin = g.lineCap = 'round'; g.strokeStyle = '#3aa8ff'; g.lineWidth = 14 * s; g.beginPath(); e.pts.forEach((p, k) => { const [a, b] = mm(p[0], p[1]); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.stroke(); }
-        if (e.type === 'rail') { const [a, b] = mm(e.a[0], e.a[1]), [c2, d] = mm(e.b[0], e.b[1]); g.lineCap = 'butt'; g.strokeStyle = '#5a5c70'; g.lineWidth = 6; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([2, 4]); g.strokeStyle = '#e8e8f0'; g.lineWidth = 4; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([]); }
-        if (e.type === 'building') { const [a, b] = mm(e.x, e.z); g.save(); g.translate(a, b); g.rotate(e.rot); g.fillStyle = 'rgba(120,128,170,.55)'; g.fillRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s); g.restore(); }
+        if (e.type !== 'island') return;
+        g.beginPath(); e.poly.forEach((p, k) => { const [a, b] = mm(p[0], p[1]); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.closePath();
+        g.fillStyle = 'rgba(255, 226, 150, .78)'; g.fill(); g.lineWidth = 1.6; g.strokeStyle = 'rgba(255, 255, 255, .85)'; g.stroke();
       });
-      g.restore();
-      g.lineWidth = 6; g.strokeStyle = '#ffffff'; rr(4, 4, MW - 8, MH - 8, 34); g.stroke();
-      const path = () => { g.beginPath(); for (let i = 0; i <= track.N; i += 2) { const q = track.S[i % track.N], [a, b] = mm(q.x, q.z); i ? g.lineTo(a, b) : g.moveTo(a, b); } g.closePath(); };
-      g.lineJoin = g.lineCap = 'round'; path(); g.lineWidth = 20; g.strokeStyle = '#2a1d4a'; g.stroke(); path(); g.lineWidth = 13; g.strokeStyle = '#ffffff'; g.stroke();
-      // trecho coberto (túnel): faixa escura por cima da pista
-      track.minimap.filter(e => e.type === 'tunnel').forEach(e => { g.beginPath(); for (let i = e.from; i <= e.to; i++) { const q = track.S[i % track.N], [a, b] = mm(q.x, q.z); i === e.from ? g.moveTo(a, b) : g.lineTo(a, b); } g.lineCap = 'butt'; g.lineWidth = 20; g.strokeStyle = '#2a1d4a'; g.stroke(); g.lineWidth = 9; g.strokeStyle = '#7a80a8'; g.stroke(); });
-      track.pads.forEach(p => { const [a, b] = mm(p.x, p.z); g.fillStyle = '#ff4ad8'; g.beginPath(); g.arc(a, b, 3.4, 0, 6.2832); g.fill(); });
-      { const i = track.startIdx, q = track.S[i], t = track.T[i], W = track.W, [a, b] = mm(q.x - t.z * W, q.z + t.x * W), [c2, d] = mm(q.x + t.z * W, q.z - t.x * W);
-        g.lineCap = 'butt'; g.lineWidth = 6; g.strokeStyle = '#2a1d4a'; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([3, 3]); g.lineWidth = 4; g.strokeStyle = '#fff'; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([]); }
+      // trilho do trem (cidade): dormentes e trilhos
+      track.minimap.forEach(e => {
+        if (e.type !== 'rail') return;
+        const [a, b] = mm(e.a[0], e.a[1]), [c2, d] = mm(e.b[0], e.b[1]); g.lineCap = 'butt';
+        g.strokeStyle = 'rgba(40, 42, 54, .85)'; g.lineWidth = 6; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke();
+        g.setLineDash([1.6, 2.6]); g.strokeStyle = '#e9ebf3'; g.lineWidth = 4.2; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([]);
+        g.strokeStyle = '#e9ebf3'; g.lineWidth = .9; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke();
+      });
+      // prédios: bloco azulado com contorno fino
+      track.minimap.forEach(e => {
+        if (e.type !== 'building') return; const [a, b] = mm(e.x, e.z);
+        g.save(); g.translate(a, b); g.rotate(e.rot); g.fillStyle = 'rgba(132, 142, 196, .62)'; g.fillRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s);
+        g.lineWidth = .9; g.strokeStyle = 'rgba(70, 78, 130, .75)'; g.strokeRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s); g.restore();
+      });
+      g.lineJoin = g.lineCap = 'round';
+      // sombra suave embaixo da pista
+      g.save(); g.translate(.8, 1.4); pathPts(0, N, 2); g.closePath(); g.lineWidth = 13; g.strokeStyle = 'rgba(0, 0, 0, .28)'; g.stroke(); g.restore();
+      // pista: meio-fio escuro, asfalto claro e faixa central tracejada
+      pathPts(0, N, 2); g.closePath(); g.lineWidth = 12.5; g.strokeStyle = INK; g.stroke();
+      pathPts(0, N, 2); g.closePath(); g.lineWidth = 10; g.strokeStyle = EDGE; g.stroke();
+      pathPts(0, N, 2); g.closePath(); g.lineWidth = 8; g.strokeStyle = ROAD; g.stroke();
+      // trecho coberto (túnel): faixa mais escura com listras
+      track.minimap.filter(e => e.type === 'tunnel').forEach(e => {
+        g.lineCap = 'butt'; pathPts(e.from, e.to, 2); g.lineWidth = 12.5; g.strokeStyle = INK; g.stroke();
+        pathPts(e.from, e.to, 2); g.lineWidth = 8; g.strokeStyle = '#8a90b4'; g.stroke();
+      });
+      // turbos: bolinha rosa com anel branco
+      track.pads.forEach(p => { const [a, b] = mm(p.x, p.z); g.beginPath(); g.arc(a, b, 2.8, 0, 6.2832); g.fillStyle = '#ff4ad8'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#fff'; g.stroke(); });
+      // linha de largada quadriculada: ocupa a largura toda da pista (faixa branca de 10 px, de borda a borda)
+      { const i = track.startIdx, q = node(i), [a, b] = mm(q.x, q.z); g.save(); g.translate(a, b); g.rotate(ang(i)); g.lineJoin = 'miter';
+        const RW = 10, cw = RW / 4, rw = 2.5;   // 4 colunas através da pista, 2 fileiras ao longo dela
+        for (let r = 0; r < 2; r++) for (let k = 0; k < 4; k++) { g.fillStyle = (r + k) % 2 ? INK : '#fff'; g.fillRect(-rw + r * rw, -RW / 2 + k * cw, rw, cw); }
+        g.lineWidth = .8; g.strokeStyle = INK; g.strokeRect(-rw, -RW / 2, rw * 2, RW);
+        g.restore(); }
     },
+    // minimapa aproximado: recorta o mapa-base em volta do kart (o kart fica sempre no centro) e aplica um degradê radial:
+    // a pista é nítida perto do kart e some suavemente com a distância, então o trajeto "aparece" conforme você avança
     draw(player, bot) {
-      if (!this.base) return; const g = this.g; g.clearRect(0, 0, this.c.width, this.c.height); g.drawImage(this.base, 0, 0);
-      const dot = (k, col, r) => { const [x, y] = this.mm(k.pos.x, k.pos.z); g.fillStyle = col; g.strokeStyle = '#2a1d4a'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, r + 3, 0, 6.2832); g.fillStyle = '#fff'; g.fill(); g.stroke(); g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); };
+      if (!this.base) return; const g = this.g, W = this.c.width, H = this.c.height, BS = this.BS, cfg = CFG.MINIMAP || {};
+      const [mx, my] = this.mm(player.pos.x, player.pos.z), sx = mx * BS - W / 2, sy = my * BS - H / 2;   // canto do recorte no mapa-base
+      g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, W, H); g.drawImage(this.base, sx, sy, W, H, 0, 0, W, H);
+      const R = Math.min(W, H) / 2, f0 = cfg.FADE_START == null ? 0.42 : cfg.FADE_START;
+      if (!this.fade || this.fade.R !== R) { const gr = g.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(f0, 'rgba(0,0,0,1)'); gr.addColorStop(0.72, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); this.fade = { R, gr }; }
+      g.globalCompositeOperation = 'destination-in'; g.fillStyle = this.fade.gr; g.fillRect(0, 0, W, H); g.globalCompositeOperation = 'source-over';
+      // escala dos ícones (pontos dos rivais e seta do jogador); ajuste em config.js: MINIMAP.ICON (1 = tamanho original)
+      const K = cfg.ICON || 0.9;
+      const dot = (k, col, r) => {
+        const [qx, qy] = this.mm(k.pos.x, k.pos.z), x = qx * BS - sx, y = qy * BS - sy, d = Math.hypot(x - W / 2, y - H / 2);
+        if (d > R * 0.94) return;                                                   // fora do alcance do minimapa
+        g.globalAlpha = Math.max(0, Math.min(1, (R * 0.94 - d) / (R * 0.22)));     // some suavemente na borda
+        r *= K; g.strokeStyle = '#1d1d1d'; g.lineWidth = 3 * K; g.beginPath(); g.arc(x, y, r + 3 * K, 0, 6.2832); g.fillStyle = '#fff'; g.fill(); g.stroke(); g.fillStyle = col; g.beginPath(); g.arc(x, y, r, 0, 6.2832); g.fill(); g.globalAlpha = 1;
+      };
       // rivais: aceita um kart ou a lista dos 7 (cada um com a própria cor, k.mapColor)
       (Array.isArray(bot) ? bot : bot ? [bot] : []).forEach(k => dot(k, k.mapColor || this.colors.bot, 5));
-      const [px, py] = this.mm(player.pos.x, player.pos.z);
-      g.save(); g.translate(px, py); g.rotate(-player.ang); g.beginPath(); g.moveTo(0, -13); g.lineTo(10, 10); g.lineTo(0, 5); g.lineTo(-10, 10); g.closePath();
-      g.lineJoin = 'round'; g.lineWidth = 7; g.strokeStyle = '#2a1d4a'; g.stroke(); g.lineWidth = 3.5; g.strokeStyle = '#fff'; g.stroke(); g.fillStyle = this.colors.player; g.fill(); g.restore();
+      g.save(); g.translate(W / 2, H / 2); g.rotate(-player.ang); g.scale(K, K); g.beginPath(); g.moveTo(0, -13); g.lineTo(10, 10); g.lineTo(0, 5); g.lineTo(-10, 10); g.closePath();
+      g.lineJoin = 'round'; g.lineWidth = 7; g.strokeStyle = '#1d1d1d'; g.stroke(); g.lineWidth = 3.5; g.strokeStyle = '#fff'; g.stroke(); g.fillStyle = this.colors.player; g.fill(); g.restore();
     }
   };
 
@@ -193,12 +245,77 @@
     }
   };
 
+  // ================================ HUD 3D DINÂMICO ================================
+  // Os elementos do HUD (menos o cronômetro, que fica 100% parado) ganham perspectiva 3D e molas, como o velocímetro 3D:
+  // acelerar inclina o topo para trás, a inércia da curva balança para fora, o turbo e o aumento do FOV da câmera empurram
+  // e ampliam, o ar faz flutuar. Lado direito (minimapa, junto do velocímetro) inclina para dentro; lado esquerdo
+  // (volta, posição) recebe a inclinação ESPELHADA, formando uma moldura simétrica.
+  const HudFx = {
+    items: [], on: false, t0: 0, prevAng: null, prevFr: 0, acc: 0, lat: 0, boost: 0, wasBoost: false, wasAir: false,
+    sp() { return { x: 0, v: 0 }; },
+    init() {
+      const mot = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0.35 : 1; this.mot = mot;
+      // side: +1 = lado do velocímetro (direita), -1 = espelhado (esquerda); rx/ry/rz em graus; o: transform-origin
+      const defs = [
+        { id: 'mini', side: 1, vy: -1, rx: 7, ry: 15, rz: 3, o: '50% 50%', k: 1 },
+        { id: 'pos', side: -1, vy: 1, rx: 7, ry: 17, rz: -4, o: '0% 100%', k: 1.15 },
+        { id: 'lap', side: -1, vy: -1, rx: 5, ry: 13, rz: -1.5, o: '0% 50%', k: 0.8 },
+        { id: 'cupInfo', side: -1, vy: -1, rx: 5, ry: 13, rz: -1.5, o: '0% 50%', k: 0.8 }
+      ];
+      this.items = defs.map(d => { const el = $(d.id); if (!el) return null; el.style.transformOrigin = d.o; el.style.willChange = 'transform'; return Object.assign(d, { el, ph: Math.random() * 6 }); }).filter(Boolean);
+      const S = () => this.sp();
+      this.S = { rx: S(), ry: S(), rz: S(), px: S(), py: S(), sc: S() };
+      this.t = 0; this.on = true;
+    },
+    reset() { this.prevAng = null; this.prevFr = 0; this.acc = 0; this.lat = 0; this.boost = 0; this.t0 = 0; if (this.S) for (const k in this.S) { this.S[k].x = 0; this.S[k].v = 0; } },
+    stepSpring(s, to, k, c, dt) { s.v += (k * (to - s.x) - c * s.v) * dt; s.x += s.v * dt; },
+    step(p) {
+      if (!this.on) return;
+      const now = performance.now(); let dt = this.t0 ? (now - this.t0) / 1000 : 0; this.t0 = now;
+      dt = Math.max(0, Math.min(dt, 0.05)); if (dt <= 0) return;
+      const M = this.mot, S = this.S, clamp = (v, a, b) => v < a ? a : v > b ? b : v, damp = (c, to, r) => c + (to - c) * (1 - Math.exp(-r * dt));
+      this.t += dt;
+      // entradas: velocidade, aceleração, curva (variação do rumo do kart), turbo, FOV, ar
+      const fr = clamp(Math.abs(p.speed) / CFG.PHYS.MAX, 0, 1.15);
+      this.acc = damp(this.acc, clamp((fr - this.prevFr) / dt, -3, 3), 4); this.prevFr = fr;
+      let steer = 0;
+      if (this.prevAng != null) { let d = p.ang - this.prevAng; d = Math.atan2(Math.sin(d), Math.cos(d)); steer = clamp(-d / dt / 1.6, -1, 1); }
+      this.prevAng = p.ang;
+      this.lat = damp(this.lat, steer * Math.min(1, fr * 1.4), 3.5);
+      const ci = window.Speedo3D && window.Speedo3D.camInfo, fovK = ci ? clamp((ci.fov - ci.fov0) / 28, 0, 1) : 0;
+      const boost = Math.max(p.boostT > 0 ? 1 : 0, fovK), air = !!(p.airborne || p.air);
+      if (boost > 0.5 && !this.wasBoost) { S.sc.v += 3 * M; S.py.v += 40 * M; S.rz.v += 25 * M * (Math.random() < .5 ? -1 : 1); }
+      if (this.wasAir && !air) { S.py.v += 90 * M; S.rx.v += 60 * M; S.sc.v -= 1.5 * M; }
+      this.wasBoost = boost > 0.5; this.wasAir = air;
+      this.boost = damp(this.boost, boost, boost > this.boost ? 14 : 4);
+      const a = clamp(this.acc, -1.2, 1.2) * M, l = this.lat * M, b = this.boost, t = this.t;
+      const floatY = air ? -5 + Math.sin(t * 5.2) * 1.5 : Math.sin(t * 1.7) * 0.7 * M;
+      const n = 2; for (let i = 0; i < n; i++) { const h = dt / n;
+        this.stepSpring(S.rx, -a * 5 + (air ? Math.sin(t * 3.1) * 3 * M : 0), 120, 12, h);        // graus: frear/acelerar inclina
+        this.stepSpring(S.ry, -l * 7, 110, 12, h);
+        this.stepSpring(S.rz, -l * 5 + (air ? Math.sin(t * 2.3) * 2.5 * M : 0), 130, 11, h);
+        this.stepSpring(S.px, l * 7, 100, 12, h);                                                  // pixels: inércia para fora da curva
+        this.stepSpring(S.py, floatY + a * 4, 120, 11, h);
+        this.stepSpring(S.sc, b * 0.06 + fovK * 0.16, 220, 14, h); }
+      // vibração: velocidade alta e turbo
+      const amp = (0.015 + fr * fr * 0.07 + b * 0.09) * M, nz = (Math.sin(t * 53.1) + Math.sin(t * 77.7 + 1.3)) * 0.5, ny = (Math.sin(t * 61.3 + 2) + Math.sin(t * 89.1)) * 0.5;
+      for (const it of this.items) {
+        const sd = it.side, k = it.k;
+        // base espelhada: direita gira ry negativo (vira para dentro), esquerda ry positivo; o FOV aumenta a inclinação
+        const ry = -sd * (it.ry + fovK * 16) + S.ry.x * k, rx = it.rx + S.rx.x * k + ny * amp * 0.6, rz = it.rz + S.rz.x * k + nz * amp;
+        const tx = S.px.x * k + sd * (fovK * 60 + b * 8), ty = S.py.x * k + ny * amp * 0.8 + it.vy * fovK * 28, sc = 1 + S.sc.x * k;
+        it.el.style.transform = 'perspective(650px) translate3d(' + tx.toFixed(2) + 'px,' + ty.toFixed(2) + 'px,0) rotateX(' + rx.toFixed(2) + 'deg) rotateY(' + ry.toFixed(2) + 'deg) rotateZ(' + rz.toFixed(2) + 'deg) scale(' + sc.toFixed(4) + ')';
+      }
+    }
+  };
+
   const UI = {
-    Sfx, Fairy, Mini, Records, fmt, SpeedLines,
+    Sfx, Fairy, Mini, Records, fmt, SpeedLines, HudFx,
     trackIdx: 0, mode: 'cup', diff: 'normal', laps: CFG.LAPS,
     init(h) {
       this.h = h;
       SpeedLines.init();
+      HudFx.init();
       // efeito gelatina em qualquer botão ou bolinha de cor
       document.addEventListener('pointerdown', e => { const b = e.target.closest && e.target.closest('button, .swatch, .trackCard'); if (!b) return; b.classList.remove('jelly'); void b.offsetWidth; b.classList.add('jelly'); });
       document.addEventListener('animationend', e => { if (e.animationName === 'jelly') e.target.classList.remove('jelly'); });
@@ -321,13 +438,19 @@
     },
     // número grande em SVG: contorno de tinta ATRÁS do preenchimento (paint-order no SVG funciona em todos os
     // navegadores), degradê de verdade e sombra sólida — sem os defeitos do texto HTML com background-clip
-    bigText(txt, kind) {
-      txt = String(txt); const F = 100, sw = kind === 'small' ? 12 : 16, w = Math.max(1, txt.length) * F * 0.74 + sw * 2, h = F * 1.18;
-      const fill = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', go: 'url(#gNumGo)', small: '#fff' }[kind] || 'url(#gNumGold)';
+    bigText(txt, kind, thin) {
+      if (kind === 'dot') return this.posDot(thin);
+      txt = String(txt); const F = 100, sw = thin ? 10 : kind === 'small' ? 12 : 16, sd = thin ? 5 : 8, w = Math.max(1, txt.length) * F * 0.74 + sw * 2, h = F * 1.18;
+      const fill = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', bronze: 'url(#gNumBronze)', white: 'url(#gNumWhite)', go: 'url(#gNumGo)', small: '#fff' }[kind] || 'url(#gNumGold)';
       const esc = txt.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
       const t = (dy, f, st) => '<text x="' + (w / 2) + '" y="' + (F * 0.92 + dy) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" stroke="#2a1d4a" stroke-width="' + st + '" stroke-linejoin="round" paint-order="stroke fill" fill="' + f + '">' + esc + '</text>';
-      return '<svg class="bigNum" viewBox="0 0 ' + w.toFixed(0) + ' ' + (h + 8).toFixed(0) + '" aria-hidden="true">' + t(8, '#2a1d4a', sw) + t(0, fill, sw) +
-        '<text x="' + (w / 2) + '" y="' + (F * 0.92) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2.2" transform="translate(-2 -3)">' + esc + '</text></svg>';
+      return '<svg class="bigNum" viewBox="0 0 ' + w.toFixed(0) + ' ' + (h + 8).toFixed(0) + '" aria-hidden="true">' + t(sd, '#2a1d4a', sw) + t(0, fill, sw) + (thin ? '' :
+        '<text x="' + (w / 2) + '" y="' + (F * 0.92) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2.2" transform="translate(-2 -3)">' + esc + '</text>') + '</svg>';
+    },
+    // bolinha do "º" da posição: desenhada (não é glifo), grande, com o mesmo contorno fino do número
+    posDot(mk) {
+      const f = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', bronze: 'url(#gNumBronze)' }[mk] || 'url(#gNumWhite)';   // mesma cor do número da posição
+      return '<svg class="bigNum" viewBox="0 0 64 70" aria-hidden="true"><circle cx="32" cy="37" r="27" fill="#2a1d4a"/><circle cx="32" cy="32" r="27" fill="#2a1d4a"/><circle cx="32" cy="32" r="21" fill="' + f + '"/><circle cx="32" cy="32" r="8.5" fill="#2a1d4a"/></svg>';
     },
     countNum(txt, go) {
       const el = $('cdnum'); el.innerHTML = txt ? this.bigText(txt, go ? 'go' : 'gold') : ''; el.setAttribute('aria-label', txt || ''); el.className = go ? 'go' : ''; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; el.hidden = !txt;
@@ -336,18 +459,33 @@
     _f: 0, _pos: 0,
     hud(player, bot, race) {
       const pos = race.position(player);
-      if (pos !== this._pos) { const el = $('pos'); el.firstChild.innerHTML = this.bigText(pos, pos === 1 ? 'gold' : pos === 2 ? 'silver' : 'gold'); el.dataset.p = pos; el.setAttribute('aria-label', pos + 'º lugar'); if (!el.lastChild.firstChild || el.lastChild.firstChild.nodeType === 3) el.lastChild.innerHTML = this.bigText('º', 'small'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); this._pos = pos; }
-      $('lap').textContent = 'Volta ' + Math.min(CFG.LAPS, Math.max(1, player.lap)) + '/' + CFG.LAPS;
-      $('time').textContent = fmt(race.time);
+      if (pos !== this._pos) {
+        const el = $('pos'), prev = this._pos, up = prev && pos < prev;   // up: você ganhou posição
+        const mk = pos === 1 ? 'gold' : pos === 2 ? 'silver' : pos === 3 ? 'bronze' : 'white';
+        const nb = el.querySelector('b'), nd = el.querySelector('i');
+        // o número antigo vira um "fantasma" que sai (para baixo se você subiu, para cima se caiu)
+        el.querySelectorAll('.posGhost').forEach(x => x.remove());   // troca rápida: não acumula fantasmas
+        if (prev && nb.firstChild) { const g = document.createElement('span'); g.className = 'posGhost ' + (up ? 'up' : 'down'); g.innerHTML = nb.innerHTML; el.appendChild(g); g.addEventListener('animationend', () => g.remove()); setTimeout(() => g.remove(), 400); }
+        nb.innerHTML = this.bigText(pos, mk, true); nd.innerHTML = this.bigText('º', 'dot', mk);
+        el.dataset.p = pos; el.setAttribute('aria-label', pos + 'º lugar');
+        // o novo entra por cima da animação (sem mexer no transform do #pos, que é da inclinação 3D do HudFx)
+        const cls = prev ? (up ? 'in up' : 'in down') : 'in first';
+        [nb, nd].forEach(n => { n.className = ''; void n.offsetWidth; n.className = cls; });
+        this._pos = pos; }
+      const lapN = Math.min(CFG.LAPS, Math.max(1, player.lap)), lapTxt = lapN + '/' + CFG.LAPS;
+      if (lapTxt !== this._lapTxt) { this._lapTxt = lapTxt; const el = $('lap'); el.innerHTML = '<span class="cur">' + lapN + '</span><span class="sl">/</span><span class="tot">' + CFG.LAPS + '</span>'; el.setAttribute('aria-label', 'Volta ' + lapN + ' de ' + CFG.LAPS); }   // só mexe no DOM quando muda
+      const tTxt = fmt(race.time); if (tTxt !== this._timeTxt) { this._timeTxt = tTxt; $('time').textContent = tTxt; }
+      const run = race.time > 0.05 && !player.finished; if (run !== this._timeRun) { this._timeRun = run; $('time').classList.toggle('run', run); }   // ponteiros do relógio só giram com a corrida valendo
       // os dois canvas do HUD são redesenhados a 30 quadros/s (metade do custo, diferença invisível)
       if ((this._f++ & 1) === 0) { drawSpeedo(player); Mini.draw(player, bot); }
       SpeedLines.step(player);
+      HudFx.step(player);
     },
     clock(dayT, nightF) {
       const hh = Math.floor(dayT * 24), mn = Math.floor((dayT * 24 - hh) * 60);
       const night = nightF > 0.5, txt = String(hh).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
-      if (this._clkN !== night) { this._clkN = night; $('clock').innerHTML = Icon.svg(night ? 'moon' : 'sun') + '<span></span>'; }
-      $('clock').lastChild.textContent = txt;
+      if (this._clkN !== night) { this._clkN = night; this._clkTxt = null; $('clock').innerHTML = Icon.svg(night ? 'moon' : 'sun') + '<span></span>'; }
+      if (txt !== this._clkTxt) { this._clkTxt = txt; $('clock').lastChild.textContent = txt; }
     },
     // tabela: rows = [{name, color, player, a, b}] com colunas configuráveis
     table(el, head, rows) {

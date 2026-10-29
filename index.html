@@ -13,7 +13,9 @@
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
   <linearGradient id="gNumGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6a8"/><stop offset=".42" stop-color="#ffd23f"/><stop offset=".78" stop-color="#ff9a1a"/><stop offset="1" stop-color="#ff5a2a"/></linearGradient>
-  <linearGradient id="gNumSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#b9f4ff"/><stop offset="1" stop-color="#3dd6ff"/></linearGradient>
+  <linearGradient id="gNumSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".45" stop-color="#dde2ea"/><stop offset=".8" stop-color="#a7afbd"/><stop offset="1" stop-color="#8790a1"/></linearGradient>
+  <linearGradient id="gNumBronze" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffd9ae"/><stop offset=".45" stop-color="#d9893f"/><stop offset=".8" stop-color="#a95a22"/><stop offset="1" stop-color="#7a3f14"/></linearGradient>
+  <linearGradient id="gNumWhite" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".6" stop-color="#f4f5fa"/><stop offset="1" stop-color="#d9dbe8"/></linearGradient>
   <linearGradient id="gNumGo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2ffd8"/><stop offset=".5" stop-color="#4cff6a"/><stop offset="1" stop-color="#12b84a"/></linearGradient>
 </defs></svg>
 
@@ -48,7 +50,7 @@
 <!-- ======================= HUD da corrida ======================= -->
 <div id="hud">
   <div class="hudTL">
-    <div id="lap" class="pill">Volta 1/3</div>
+    <div id="lap" class="pill" aria-label="Volta 1 de 3"><span class="cur">1</span><span class="sl">/</span><span class="tot">3</span></div>
     <div id="time" class="pill mono">00’00”00</div>
     <div id="cupInfo" class="pill small"></div>
   </div>
@@ -63,8 +65,12 @@
   <canvas id="speedo" width="300" height="190" aria-label="Velocímetro"></canvas>
   <!-- velocímetro 3D: esta caixa só marca onde ele aparece; o desenho é feito pelo js/speedo3d.js no canvas do jogo -->
   <div id="speedo3d" aria-hidden="true"></div>
+  <!-- barra de turbo 3D (3 seções que enchem no drift): desenhada pelo js/speedo3d.js -->
+  <div id="boost3d" aria-hidden="true"></div>
   <div id="pos" aria-live="polite"><b></b><i></i></div>
-  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
+  <!-- placa do piloto que está logo à frente: posição + nome, presa ao kart por uma linha (main.js: rivalTag) -->
+  <div id="rivalTag" hidden aria-hidden="true"><div class="rt"><b class="rp"></b><span class="rn"></span></div></div>
+  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift (enche o turbo) · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
 </div>
 <div id="signal" hidden><div id="cdnum" hidden></div></div>
 <div id="toast" role="status"></div>

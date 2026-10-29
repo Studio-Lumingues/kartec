@@ -59,28 +59,46 @@
       victims.push(o);
     });
     victims.forEach(o => o.parent && o.parent.remove(o));
-    const v = new THREE.Vector3();
+    const v = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3(), CELL = opts.cell || 0, meshes = [];
+    // opts.cell (metros): em vez de UMA malha por material para o mapa inteiro, cria uma malha por material E por quadrado do mapa.
+    // Cada bloco tem a própria esfera envolvente, então o Three.js descarta (frustum culling) o que está fora da câmera
+    // e também fora da área de sombra. Sem opts.cell o comportamento é o antigo (karts e pilotos usam assim).
     buckets.forEach(b => {
-      let n = 0; b.parts.forEach(p => n += p.count);
-      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), useCol = !!b.m.vertexColors, col = useCol ? new Float32Array(n * 3) : null;
-      let w = 0;
+      const cells = new Map();   // chave do quadrado -> lista de triângulos {p: parte, k: índice do 1º vértice}
       b.parts.forEach(p => {
-        const ga = p.g.attributes, idx = p.g.index, P = ga.position, Nn = ga.normal, U = ga.uv, C = ga.color;
-        for (let k = 0; k < p.count; k++) {
-          const i = idx ? idx.getX(p.start + k) : p.start + k;
-          v.fromBufferAttribute(P, i).applyMatrix4(p.M); pos[w * 3] = v.x; pos[w * 3 + 1] = v.y; pos[w * 3 + 2] = v.z;
-          if (Nn) { v.fromBufferAttribute(Nn, i).applyMatrix3(p.NM).normalize(); nor[w * 3] = v.x; nor[w * 3 + 1] = v.y; nor[w * 3 + 2] = v.z; } else nor[w * 3 + 1] = 1;
-          if (U) { uv[w * 2] = U.getX(i); uv[w * 2 + 1] = U.getY(i); }
-          if (useCol) { if (C) { col[w * 3] = C.getX(i); col[w * 3 + 1] = C.getY(i); col[w * 3 + 2] = C.getZ(i); } else { col[w * 3] = col[w * 3 + 1] = col[w * 3 + 2] = 1; } }
-          w++;
+        const idx = p.g.index, P = p.g.attributes.position, tri = p.count - (p.count % 3);
+        for (let k = 0; k < tri; k += 3) {
+          let key = 0;
+          if (CELL) {
+            const i0 = idx ? idx.getX(p.start + k) : p.start + k, i1 = idx ? idx.getX(p.start + k + 1) : p.start + k + 1, i2 = idx ? idx.getX(p.start + k + 2) : p.start + k + 2;
+            v.fromBufferAttribute(P, i0).applyMatrix4(p.M); v2.fromBufferAttribute(P, i1).applyMatrix4(p.M); v3.fromBufferAttribute(P, i2).applyMatrix4(p.M);
+            key = Math.floor((v.x + v2.x + v3.x) / 3 / CELL) * 100003 + Math.floor((v.z + v2.z + v3.z) / 3 / CELL);
+          }
+          let L = cells.get(key); if (!L) cells.set(key, L = []); L.push(p, k);
         }
       });
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-      if (useCol) g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-      g.computeBoundingSphere();
-      const mesh = new THREE.Mesh(g, b.m); mesh.castShadow = b.cast; mesh.receiveShadow = b.recv; mesh.renderOrder = b.ro; mesh.userData.merged = true; root.add(mesh);
+      cells.forEach(L => {
+        const n = L.length / 2 * 3;
+        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2), useCol = !!b.m.vertexColors, col = useCol ? new Float32Array(n * 3) : null;
+        let w = 0;
+        for (let t = 0; t < L.length; t += 2) {
+          const p = L[t], k0 = L[t + 1], ga = p.g.attributes, idx = p.g.index, P = ga.position, Nn = ga.normal, U = ga.uv, C = ga.color;
+          for (let k = k0; k < k0 + 3; k++) {
+            const i = idx ? idx.getX(p.start + k) : p.start + k;
+            v.fromBufferAttribute(P, i).applyMatrix4(p.M); pos[w * 3] = v.x; pos[w * 3 + 1] = v.y; pos[w * 3 + 2] = v.z;
+            if (Nn) { v.fromBufferAttribute(Nn, i).applyMatrix3(p.NM).normalize(); nor[w * 3] = v.x; nor[w * 3 + 1] = v.y; nor[w * 3 + 2] = v.z; } else nor[w * 3 + 1] = 1;
+            if (U) { uv[w * 2] = U.getX(i); uv[w * 2 + 1] = U.getY(i); }
+            if (useCol) { if (C) { col[w * 3] = C.getX(i); col[w * 3 + 1] = C.getY(i); col[w * 3 + 2] = C.getZ(i); } else { col[w * 3] = col[w * 3 + 1] = col[w * 3 + 2] = 1; } }
+            w++;
+          }
+        }
+        const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        if (useCol) g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        g.computeBoundingSphere();
+        const mesh = new THREE.Mesh(g, b.m); mesh.castShadow = b.cast; mesh.receiveShadow = b.recv; mesh.renderOrder = b.ro; mesh.userData.merged = true; root.add(mesh); meshes.push(mesh);
+      });
     });
-    return { before: victims.length, after: buckets.size };
+    return { before: victims.length, after: meshes.length, meshes };
   }
   mergeByMaterial.sid = 0;
   window.GEO = { rbox, smoothSeams, mergeByMaterial };
@@ -100,10 +118,12 @@
       this.box = []; this.boxI = 0;
       for (let i = 0; i < 90; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.starTex(), color: 0xffffff, transparent: true, depthWrite: false })); m.visible = false; scene.add(m); this.box.push({ m, v: new THREE.Vector3(), l: 0, ml: 1, s: 0.2 }); }
       // marcas de pneu: 700 traços reaproveitados em anel (os mais antigos somem primeiro)
-      const SK = 700, sg = new THREE.PlaneGeometry(0.42, 1).rotateX(-Math.PI / 2);
-      this.skids = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0x3a2d5c, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }), SK);
+      const SK = 700, sg = new THREE.PlaneGeometry(0.504, 1).rotateX(-Math.PI / 2);
+      this.skids = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0x3a2d5c, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+        stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp }), SK);   // stencil: cada pixel é pintado uma vez só -> o traço fica contínuo, sem faixas escuras nas emendas
       const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < SK; i++) this.skids.setMatrixAt(i, z);
-      this.skids.frustumCulled = false; this.skids.renderOrder = 1; scene.add(this.skids); this.skidI = 0; this._d = new THREE.Object3D();
+      this.skids.frustumCulled = false; this.skids.renderOrder = -1;   // marcas desenhadas ANTES da fumaça (ordem 0): a fumaça passa por cima do borrachão
+      scene.add(this.skids); this.skidI = 0; this._d = new THREE.Object3D();
     },
     rate: 1,   // partículas: 1 = normal, < 1 = menos (configurações)
     puff(kind, x, y, z, vx, vy, vz, col, s0, s1, life, op, up) {
@@ -116,7 +136,7 @@
     // um traço de marca de pneu de (x0,z0) até (x1,z1), na altura y
     skid(x0, z0, x1, z1, y) {
       if (!this.skids) return; const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz); if (L < 0.05 || L > 4) return;
-      const d = this._d; d.position.set((x0 + x1) / 2, y + 0.06, (z0 + z1) / 2); d.rotation.set(0, Math.atan2(dx, dz), 0); d.scale.set(1, 1, L + 0.1); d.updateMatrix();
+      const d = this._d; d.position.set((x0 + x1) / 2, y + 0.06, (z0 + z1) / 2); d.rotation.set(0, Math.atan2(dx, dz), 0); d.scale.set(1, 1, L + 0.3); d.updateMatrix();
       this.skids.setMatrixAt(this.skidI++ % this.skids.count, d.matrix); this.skids.instanceMatrix.needsUpdate = true;
     },
     step(dt) {
@@ -374,7 +394,7 @@
           if (last[i]) Fx.skid(last[i].x, last[i].z, w.x, w.z, this.pos.y); last[i] = { x: w.x, z: w.z }; });
       } else this.skidLast = null;
       if (mode && this.smokeCD <= 0) {
-        this.smokeCD = mode === 'drift' ? 0.025 : mode === 'dust' ? 0.045 : 0.06;
+        this.smokeCD = mode === 'drift' ? 0.07 : mode === 'dust' ? 0.11 : 0.14;   // fumaça ~60% menor (antes 0,025 / 0,045 / 0,06 s)
         const dustCol = this.track.dustColor || 0xc9a878;
         (this.m.moto ? [0] : [-1, 1]).forEach(s => {
           if (mode === 'drift' && s && s !== -this.driftDir && Math.random() < 0.5) return;

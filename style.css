@@ -32,6 +32,14 @@
   --shadow: 0 7px 0 var(--ink), 0 16px 30px rgba(42, 29, 74, .28);
   --outline: 0 3px 0 var(--ink), 0 -2px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink), 2px 3px 0 var(--ink), -2px 3px 0 var(--ink);
 }
+/* HUD da corrida e avisos: o roxo-escuro (tinta) vira cinza só aqui; menus e telas continuam com a paleta original */
+#hud, #signal, #toast {
+  --ink: #1f1f21; --ink-2: #5a5a5e;
+  /* estas variáveis do :root já guardam o roxo "resolvido", então precisam ser refeitas aqui com o cinza */
+  --line: 4px solid var(--ink); --pop: 0 6px 0 var(--ink);
+  --shadow: 0 7px 0 var(--ink), 0 16px 30px rgba(20, 20, 20, .28);
+  --outline: 0 3px 0 var(--ink), 0 -2px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink), 2px 3px 0 var(--ink), -2px 3px 0 var(--ink);
+}
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky-deep); font-family: var(--ui); color: var(--ink); -webkit-user-select: none; user-select: none; touch-action: none; }
 body > canvas:first-child { position: fixed; inset: 0; display: block; }
@@ -54,20 +62,60 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
 .hudTL, .hudTR { position: fixed; top: calc(14px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 8px; z-index: 3; pointer-events: none; }
 .hudTL { left: calc(16px + env(safe-area-inset-left, 0px)); align-items: flex-start; }
 .hudTR { right: calc(16px + env(safe-area-inset-right, 0px)); align-items: flex-end; }
-#lap { font-family: var(--display); font-weight: 700; font-size: 32px; letter-spacing: .5px; }
-#mini { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); top: calc(112px + env(safe-area-inset-top, 0px)); width: 172px; height: 172px; z-index: 3; pointer-events: none; filter: drop-shadow(0 6px 0 var(--ink)); }
+/* volta: placa escura igual à do tempo, com bandeira quadriculada e "1 / 3" (número atual grande, total menor) */
+.hudTL { top: calc(18px + env(safe-area-inset-top, 0px)); }   /* mesma altura da placa do tempo */
+#lap.pill {
+  position: relative; gap: 0; height: 50px; padding: 0 30px 0 64px; min-width: 180px; justify-content: center; align-items: baseline; border: 0; border-radius: 0; box-shadow: none;
+  background: linear-gradient(180deg, rgba(46, 48, 54, .88), rgba(22, 23, 27, .9));
+  color: #fff; font: 700 30px var(--display); letter-spacing: 1px; line-height: 50px; text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+  clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+}
+#lap .cur { font-size: 40px; }
+#lap .tot { font-size: 28px; }   /* total de voltas menor que a volta atual */
+/* a barra é desenhada (não é o caractere "/"): inclinada, grossa e da altura dos números */
+#lap .sl { display: none; }   /* a barra agora é o ::before do .tot: mesma linha de base e altura do 3 */
+#lap .tot::before { content: ""; display: inline-block; width: .15em; height: .72em; margin: 0 .38em 0 .42em; vertical-align: baseline; border-radius: 3px; background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(255, 255, 255, .6)); transform: skewX(-20deg); }
+#lap.pill::after { content: ""; position: absolute; inset: 3px; z-index: -1; pointer-events: none; background: rgba(255, 255, 255, .28);
+  clip-path: polygon(evenodd, 18px 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 18px 100%, 0 50%,
+    20.5px 2px, calc(100% - 20.5px) 2px, calc(100% - 2.5px) 50%, calc(100% - 20.5px) calc(100% - 2px), 20.5px calc(100% - 2px), 2.5px 50%); }
+#lap.pill::before { content: ""; position: absolute; left: 20px; top: 50%; width: 36px; height: 36px; transform: translateY(-50%);
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='f' gradientUnits='userSpaceOnUse' x1='7' y1='0' x2='14.4' y2='0' spreadMethod='repeat'><stop offset='0' stop-color='%23ffffff'/><stop offset='0.45' stop-color='%23f6f7fb'/><stop offset='0.78' stop-color='%23d9dde8'/><stop offset='1' stop-color='%23ffffff'/><animateTransform attributeName='gradientTransform' type='translate' values='0 0;-7.4 0' dur='1.4s' repeatCount='indefinite'/></linearGradient><linearGradient id='m' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23c9ced9'/></linearGradient></defs><rect x='4' y='2.6' width='2.8' height='28.6' rx='1.4' fill='url(%23m)'/><circle cx='5.4' cy='2.8' r='2.1' fill='%23fff'/><path d='M7.00,4.00 L8.47,4.13 L9.94,4.32 L11.41,4.52 L12.88,4.64 L14.34,4.63 L15.81,4.46 L17.28,4.12 L18.75,3.66 L20.22,3.18 L21.69,2.78 L23.16,2.56 L24.62,2.62 L26.09,2.97 L27.56,3.59 L29.03,4.37 L30.50,5.18 L30.50,20.18 L29.03,19.37 L27.56,18.59 L26.09,17.97 L24.62,17.62 L23.16,17.56 L21.69,17.78 L20.22,18.18 L18.75,18.66 L17.28,19.12 L15.81,19.46 L14.34,19.63 L12.88,19.64 L11.41,19.52 L9.94,19.32 L8.47,19.13 L7.00,19.00Z' fill='url(%23f)'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M7.00,4.00 L8.47,4.13 L9.94,4.32 L11.41,4.52 L12.88,4.64 L14.34,4.63 L15.81,4.46 L17.28,4.12 L18.75,3.66 L20.22,3.18 L21.69,2.78 L23.16,2.56 L24.62,2.62 L26.09,2.97 L27.56,3.59 L29.03,4.37 L30.50,5.18 L30.50,20.18 L29.03,19.37 L27.56,18.59 L26.09,17.97 L24.62,17.62 L23.16,17.56 L21.69,17.78 L20.22,18.18 L18.75,18.66 L17.28,19.12 L15.81,19.46 L14.34,19.63 L12.88,19.64 L11.41,19.52 L9.94,19.32 L8.47,19.13 L7.00,19.00Z;M7.00,3.83 L8.47,3.69 L9.94,3.60 L11.41,3.61 L12.88,3.77 L14.34,4.05 L15.81,4.42 L17.28,4.79 L18.75,5.08 L20.22,5.18 L21.69,5.05 L23.16,4.67 L24.62,4.08 L26.09,3.38 L27.56,2.71 L29.03,2.21 L30.50,2.01 L30.50,17.01 L29.03,17.21 L27.56,17.71 L26.09,18.38 L24.62,19.08 L23.16,19.67 L21.69,20.05 L20.22,20.18 L18.75,20.08 L17.28,19.79 L15.81,19.42 L14.34,19.05 L12.88,18.77 L11.41,18.61 L9.94,18.60 L8.47,18.69 L7.00,18.83Z;M7.00,4.17 L8.47,4.18 L9.94,4.08 L11.41,3.87 L12.88,3.59 L14.34,3.32 L15.81,3.13 L17.28,3.09 L18.75,3.26 L20.22,3.64 L21.69,4.17 L23.16,4.77 L24.62,5.30 L26.09,5.65 L27.56,5.70 L29.03,5.42 L30.50,4.81 L30.50,19.81 L29.03,20.42 L27.56,20.70 L26.09,20.65 L24.62,20.30 L23.16,19.77 L21.69,19.17 L20.22,18.64 L18.75,18.26 L17.28,18.09 L15.81,18.13 L14.34,18.32 L12.88,18.59 L11.41,18.87 L9.94,19.08 L8.47,19.18 L7.00,19.17Z;M7.00,4.00 L8.47,4.13 L9.94,4.32 L11.41,4.52 L12.88,4.64 L14.34,4.63 L15.81,4.46 L17.28,4.12 L18.75,3.66 L20.22,3.18 L21.69,2.78 L23.16,2.56 L24.62,2.62 L26.09,2.97 L27.56,3.59 L29.03,4.37 L30.50,5.18 L30.50,20.18 L29.03,19.37 L27.56,18.59 L26.09,17.97 L24.62,17.62 L23.16,17.56 L21.69,17.78 L20.22,18.18 L18.75,18.66 L17.28,19.12 L15.81,19.46 L14.34,19.63 L12.88,19.64 L11.41,19.52 L9.94,19.32 L8.47,19.13 L7.00,19.00Z'/></path><g fill='%23151518'><path d='M7.00,4.00 L8.96,4.19 L10.92,4.46 L10.92,8.21 L8.96,7.94 L7.00,7.75Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M7.00,4.00 L8.96,4.19 L10.92,4.46 L10.92,8.21 L8.96,7.94 L7.00,7.75Z;M7.00,3.83 L8.96,3.65 L10.92,3.60 L10.92,7.35 L8.96,7.40 L7.00,7.58Z;M7.00,4.17 L8.96,4.16 L10.92,3.95 L10.92,7.70 L8.96,7.91 L7.00,7.92Z;M7.00,4.00 L8.96,4.19 L10.92,4.46 L10.92,8.21 L8.96,7.94 L7.00,7.75Z'/></path><path d='M14.83,4.59 L16.79,4.25 L18.75,3.66 L18.75,7.41 L16.79,8.00 L14.83,8.34Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M14.83,4.59 L16.79,4.25 L18.75,3.66 L18.75,7.41 L16.79,8.00 L14.83,8.34Z;M14.83,4.17 L16.79,4.67 L18.75,5.08 L18.75,8.83 L16.79,8.42 L14.83,7.92Z;M14.83,3.24 L16.79,3.08 L18.75,3.26 L18.75,7.01 L16.79,6.83 L14.83,6.99Z;M14.83,4.59 L16.79,4.25 L18.75,3.66 L18.75,7.41 L16.79,8.00 L14.83,8.34Z'/></path><path d='M22.67,2.61 L24.62,2.62 L26.58,3.15 L26.58,6.90 L24.62,6.37 L22.67,6.36Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M22.67,2.61 L24.62,2.62 L26.58,3.15 L26.58,6.90 L24.62,6.37 L22.67,6.36Z;M22.67,4.82 L24.62,4.08 L26.58,3.15 L26.58,6.90 L24.62,7.83 L22.67,8.57Z;M22.67,4.57 L24.62,5.30 L26.58,5.70 L26.58,9.45 L24.62,9.05 L22.67,8.32Z;M22.67,2.61 L24.62,2.62 L26.58,3.15 L26.58,6.90 L24.62,6.37 L22.67,6.36Z'/></path><path d='M10.92,8.21 L12.88,8.39 L14.83,8.34 L14.83,12.09 L12.88,12.14 L10.92,11.96Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M10.92,8.21 L12.88,8.39 L14.83,8.34 L14.83,12.09 L12.88,12.14 L10.92,11.96Z;M10.92,7.35 L12.88,7.52 L14.83,7.92 L14.83,11.67 L12.88,11.27 L10.92,11.10Z;M10.92,7.70 L12.88,7.34 L14.83,6.99 L14.83,10.74 L12.88,11.09 L10.92,11.45Z;M10.92,8.21 L12.88,8.39 L14.83,8.34 L14.83,12.09 L12.88,12.14 L10.92,11.96Z'/></path><path d='M18.75,7.41 L20.71,6.78 L22.67,6.36 L22.67,10.11 L20.71,10.53 L18.75,11.16Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M18.75,7.41 L20.71,6.78 L22.67,6.36 L22.67,10.11 L20.71,10.53 L18.75,11.16Z;M18.75,8.83 L20.71,8.92 L22.67,8.57 L22.67,12.32 L20.71,12.67 L18.75,12.58Z;M18.75,7.01 L20.71,7.55 L22.67,8.32 L22.67,12.07 L20.71,11.30 L18.75,10.76Z;M18.75,7.41 L20.71,6.78 L22.67,6.36 L22.67,10.11 L20.71,10.53 L18.75,11.16Z'/></path><path d='M26.58,6.90 L28.54,7.85 L30.50,8.93 L30.50,12.68 L28.54,11.60 L26.58,10.65Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M26.58,6.90 L28.54,7.85 L30.50,8.93 L30.50,12.68 L28.54,11.60 L26.58,10.65Z;M26.58,6.90 L28.54,6.10 L30.50,5.76 L30.50,9.51 L28.54,9.85 L26.58,10.65Z;M26.58,9.45 L28.54,9.30 L30.50,8.56 L30.50,12.31 L28.54,13.05 L26.58,13.20Z;M26.58,6.90 L28.54,7.85 L30.50,8.93 L30.50,12.68 L28.54,11.60 L26.58,10.65Z'/></path><path d='M7.00,11.50 L8.96,11.69 L10.92,11.96 L10.92,15.71 L8.96,15.44 L7.00,15.25Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M7.00,11.50 L8.96,11.69 L10.92,11.96 L10.92,15.71 L8.96,15.44 L7.00,15.25Z;M7.00,11.33 L8.96,11.15 L10.92,11.10 L10.92,14.85 L8.96,14.90 L7.00,15.08Z;M7.00,11.67 L8.96,11.66 L10.92,11.45 L10.92,15.20 L8.96,15.41 L7.00,15.42Z;M7.00,11.50 L8.96,11.69 L10.92,11.96 L10.92,15.71 L8.96,15.44 L7.00,15.25Z'/></path><path d='M14.83,12.09 L16.79,11.75 L18.75,11.16 L18.75,14.91 L16.79,15.50 L14.83,15.84Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M14.83,12.09 L16.79,11.75 L18.75,11.16 L18.75,14.91 L16.79,15.50 L14.83,15.84Z;M14.83,11.67 L16.79,12.17 L18.75,12.58 L18.75,16.33 L16.79,15.92 L14.83,15.42Z;M14.83,10.74 L16.79,10.58 L18.75,10.76 L18.75,14.51 L16.79,14.33 L14.83,14.49Z;M14.83,12.09 L16.79,11.75 L18.75,11.16 L18.75,14.91 L16.79,15.50 L14.83,15.84Z'/></path><path d='M22.67,10.11 L24.62,10.12 L26.58,10.65 L26.58,14.40 L24.62,13.87 L22.67,13.86Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M22.67,10.11 L24.62,10.12 L26.58,10.65 L26.58,14.40 L24.62,13.87 L22.67,13.86Z;M22.67,12.32 L24.62,11.58 L26.58,10.65 L26.58,14.40 L24.62,15.33 L22.67,16.07Z;M22.67,12.07 L24.62,12.80 L26.58,13.20 L26.58,16.95 L24.62,16.55 L22.67,15.82Z;M22.67,10.11 L24.62,10.12 L26.58,10.65 L26.58,14.40 L24.62,13.87 L22.67,13.86Z'/></path><path d='M10.92,15.71 L12.88,15.89 L14.83,15.84 L14.83,19.59 L12.88,19.64 L10.92,19.46Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M10.92,15.71 L12.88,15.89 L14.83,15.84 L14.83,19.59 L12.88,19.64 L10.92,19.46Z;M10.92,14.85 L12.88,15.02 L14.83,15.42 L14.83,19.17 L12.88,18.77 L10.92,18.60Z;M10.92,15.20 L12.88,14.84 L14.83,14.49 L14.83,18.24 L12.88,18.59 L10.92,18.95Z;M10.92,15.71 L12.88,15.89 L14.83,15.84 L14.83,19.59 L12.88,19.64 L10.92,19.46Z'/></path><path d='M18.75,14.91 L20.71,14.28 L22.67,13.86 L22.67,17.61 L20.71,18.03 L18.75,18.66Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M18.75,14.91 L20.71,14.28 L22.67,13.86 L22.67,17.61 L20.71,18.03 L18.75,18.66Z;M18.75,16.33 L20.71,16.42 L22.67,16.07 L22.67,19.82 L20.71,20.17 L18.75,20.08Z;M18.75,14.51 L20.71,15.05 L22.67,15.82 L22.67,19.57 L20.71,18.80 L18.75,18.26Z;M18.75,14.91 L20.71,14.28 L22.67,13.86 L22.67,17.61 L20.71,18.03 L18.75,18.66Z'/></path><path d='M26.58,14.40 L28.54,15.35 L30.50,16.43 L30.50,20.18 L28.54,19.10 L26.58,18.15Z'><animate attributeName='d' dur='2.8s' repeatCount='indefinite' values='M26.58,14.40 L28.54,15.35 L30.50,16.43 L30.50,20.18 L28.54,19.10 L26.58,18.15Z;M26.58,14.40 L28.54,13.60 L30.50,13.26 L30.50,17.01 L28.54,17.35 L26.58,18.15Z;M26.58,16.95 L28.54,16.80 L30.50,16.06 L30.50,19.81 L28.54,20.55 L26.58,20.70Z;M26.58,14.40 L28.54,15.35 L30.50,16.43 L30.50,20.18 L28.54,19.10 L26.58,18.15Z'/></path></g></svg>") center / contain no-repeat; }
+/* tempo da corrida: placa escura no meio do topo, com cronômetro ao lado (estilo timer do Kirby Air Ride) */
+#time.pill {
+  position: fixed; left: 50%; top: calc(18px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 3; pointer-events: none;   /* centro na mesma altura do "Volta" */
+  gap: 0; padding: 7px 34px 7px 62px; width: 250px; justify-content: center; opacity: 1;   /* largura fixa: a placa não muda de tamanho */
+  border: 0; border-radius: 0; box-shadow: none;
+  background: linear-gradient(180deg, rgba(46, 48, 54, .88), rgba(22, 23, 27, .9));
+  color: #fff; font: 700 30px var(--display); letter-spacing: 1.5px; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 rgba(0, 0, 0, .45);
+  clip-path: polygon(20px 0, calc(100% - 20px) 0, 100% 50%, calc(100% - 20px) 100%, 20px 100%, 0 50%);
+}
+#time .d { display: inline-block; width: .64em; text-align: center; }   /* cada dígito ocupa a mesma largura: o número não balança */
+#time .s { display: inline-block; width: .32em; text-align: center; }
+#time.pill::after { content: ""; position: absolute; inset: 3px; z-index: -1; pointer-events: none; background: rgba(255, 255, 255, .28);
+  /* moldura em anel (evenodd): sem bordas retas, então nenhuma barra clara aparece nas pontas da placa */
+  clip-path: polygon(evenodd, 18px 0, calc(100% - 18px) 0, 100% 50%, calc(100% - 18px) 100%, 18px 100%, 0 50%,
+    20.5px 2px, calc(100% - 20.5px) 2px, calc(100% - 2.5px) 50%, calc(100% - 20.5px) calc(100% - 2px), 20.5px calc(100% - 2px), 2.5px 50%); }
+#time.pill::before { content: ""; position: absolute; left: 26px; top: 50%; width: 30px; height: 30px; transform: translateY(-50%);
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='12' y='1' width='8' height='4' rx='1.5' fill='%23fff'/><rect x='24' y='5' width='4' height='3' rx='1' fill='%23fff' transform='rotate(40 26 6.5)'/><circle cx='16' cy='18' r='12' fill='%23fff'/><g stroke='%231f1f21' stroke-linecap='round' fill='none'><path d='M16 18V8.6' stroke-width='2.4'><animateTransform attributeName='transform' type='rotate' from='0 16 18' to='360 16 18' dur='3s' repeatCount='indefinite'/></path><path d='M16 18V12.6' stroke-width='3.2'><animateTransform attributeName='transform' type='rotate' from='120 16 18' to='480 16 18' dur='36s' repeatCount='indefinite'/></path></g><circle cx='16' cy='18' r='1.8' fill='%231f1f21'/></svg>") center / contain no-repeat; }
+/* canto superior direito: só o minimapa (horário, engrenagem e Menu saíram da corrida; Esc continua abrindo o menu) */
+.hudTR { display: none !important; }
+/* minimapa maior, no topo; o fundo fica translúcido (main.js: glassMinimap) e a sombra suave segue a pista */
+/* ~28% menor que o original (era clamp(220px, 21vw, 320px)), encostado no canto superior direito (a margem negativa compensa o espaço vazio em volta do desenho) e com 50% de opacidade */
+#mini { position: fixed; right: calc(-15px + env(safe-area-inset-right, 0px)); top: calc(-12px + env(safe-area-inset-top, 0px)); width: clamp(159px, 15.2vw, 231px); height: clamp(159px, 15.2vw, 231px); z-index: 3; pointer-events: none; opacity: .5; filter: drop-shadow(0 2px 3px rgba(30, 30, 30, .45)); }
 #speedo { display: none; }   /* velocímetro 2D antigo: substituído pelo 3D (#speedo3d) */
 /* velocímetro 3D no canto inferior direito: a caixa define posição e tamanho; js/speedo3d.js desenha dentro dela */
 #speedo3d { position: fixed; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); width: clamp(180px, 26vmin, 280px); aspect-ratio: 1; z-index: 3; pointer-events: none; }
+/* barra de turbo 3D: centro inferior, acima da faixa de ajuda */
+#boost3d { position: fixed; left: 0; top: 0; width: clamp(210px, 24vw, 320px); aspect-ratio: 4.5; z-index: 3; pointer-events: none; }   /* posição (ao lado da cabeça do piloto) definida pelo main.js: placeBoostBar */
 /* posição: número grande no canto inferior direito */
 #pos { position: fixed; left: calc(22px + env(safe-area-inset-left, 0px)); bottom: calc(6px + env(safe-area-inset-bottom, 0px)); z-index: 3; pointer-events: none; font-family: var(--display); line-height: 1; display: flex; align-items: flex-start; transform: rotate(-4deg); }
 #pos b { font-weight: 700; font-size: 160px; background: linear-gradient(180deg, #fff6a8 0%, var(--gold) 40%, var(--orange) 75%, var(--red) 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-stroke: 6px var(--ink); paint-order: stroke fill; filter: drop-shadow(0 8px 0 var(--ink)); }
 #pos i { font: 700 54px var(--display); font-style: normal; margin-top: 22px; color: var(--white); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; filter: drop-shadow(0 5px 0 var(--ink)); }
 #pos[data-p="2"] b { background: linear-gradient(180deg, #ffffff 0%, #b9f4ff 50%, var(--select) 100%); -webkit-background-clip: text; background-clip: text; }
-#pos.bump { animation: posbump .55s cubic-bezier(.2, 1.8, .4, 1); }
 @keyframes posbump { 0% { transform: rotate(-4deg) scale(1.5, .7); } 40% { transform: rotate(-4deg) scale(.9, 1.15); } 70% { transform: rotate(-4deg) scale(1.05, .95); } 100% { transform: rotate(-4deg) scale(1); } }
 #help { position: fixed; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none; padding: 6px 14px; border-radius: 999px; background: var(--white); border: 3px solid var(--ink); font: 800 13px var(--ui); white-space: nowrap; transition: opacity .8s; }
 #help.fade { opacity: 0; }
+#help { display: none !important; }   /* faixa de teclas removida do HUD */
 
 /* contagem regressiva sob o semáforo da Fatecxie */
 #signal { position: fixed; inset: 0; align-items: center; justify-content: center; pointer-events: none; z-index: 4; padding-top: 12vh; }
@@ -94,9 +142,15 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
   body[data-screen="race"] #touch { display: flex; }
   #help { display: none; }
   #speedo3d { width: clamp(130px, 24vmin, 180px); bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+  #boost3d { width: clamp(170px, 34vw, 240px); }
   #pos { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
   #pos b { font-size: 90px; }
-  #mini { width: 120px; height: 120px; }
+  #time.pill { font-size: 22px; padding: 5px 26px 5px 50px; width: 185px; }
+  #lap.pill { height: 36px; line-height: 36px; padding: 0 22px 0 46px; min-width: 136px; font-size: 22px; }
+  #lap .cur { font-size: 29px; } #lap .tot { font-size: 20px; }
+  #lap.pill::before { left: 14px; width: 26px; height: 26px; }
+  #time.pill::before { left: 20px; width: 23px; height: 23px; }
+  #mini { width: clamp(101px, 21.7vmin, 138px); height: clamp(101px, 21.7vmin, 138px); right: calc(-7px + env(safe-area-inset-right, 0px)); top: calc(-5px + env(safe-area-inset-top, 0px)); }
 }
 @media (max-width: 1000px) { #help { display: none; } }
 
@@ -452,11 +506,12 @@ kbd .icn { width: 1em; height: 1em; vertical-align: -0.15em; }
 /* números grandes em SVG (posição e contagem): sem background-clip/text-stroke, que davam "textura bugada" */
 #pos b, #pos i { background: none !important; -webkit-text-stroke: 0 !important; color: inherit; filter: none !important; font-size: 0 !important; line-height: 0; display: block; }
 #pos b .bigNum { height: 150px; width: auto; display: block; }
-#pos i .bigNum { height: 52px; width: auto; display: block; margin-top: 16px; }
+#pos i { margin-top: 0; }
+#pos i .bigNum { height: 44px; width: auto; display: block; margin: 10px 0 0 -20px; }   /* bolinha grande, no canto superior direito do número */
 #cdnum { background: none !important; -webkit-text-stroke: 0 !important; color: inherit; filter: none !important; font-size: 0 !important; line-height: 0; }
 #cdnum .bigNum { height: clamp(110px, 18vw, 220px); width: auto; display: block; }
 .bigNum { overflow: visible; }
-@media (max-width: 760px) { #pos b .bigNum { height: 88px; } #pos i .bigNum { height: 32px; margin-top: 8px; } }
+@media (max-width: 760px) { #pos b .bigNum { height: 88px; } #pos i .bigNum { height: 28px; margin: 5px 0 0 -12px; } }
 
 /* ======================= LOGO (logo.js): camadas desenhadas uma vez + animação só de transform ======================= */
 /* a logo fica SEMPRE no lugar dela no menu; na abertura um transform a leva ao centro (sem animar layout) */
@@ -498,3 +553,56 @@ body[data-screen="menu"] #brand { width: min(500px, 44vw); top: calc(22px + env(
 .pnote h3 { margin: 4px 0 6px; font: 400 19px var(--display); color: var(--ink); }
 .pnote ul { margin: 0; padding-left: 20px; display: grid; gap: 3px; font-weight: 700; color: var(--ink); }
 @media (prefers-reduced-motion: reduce) { .newBadge { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #lap.pill::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='f' gradientUnits='userSpaceOnUse' x1='7' y1='0' x2='14.4' y2='0' spreadMethod='repeat'><stop offset='0' stop-color='%23ffffff'/><stop offset='0.45' stop-color='%23f6f7fb'/><stop offset='0.78' stop-color='%23d9dde8'/><stop offset='1' stop-color='%23ffffff'/></linearGradient><linearGradient id='m' x1='0' y1='0' x2='0' y2='1'><stop offset='0' stop-color='%23fff'/><stop offset='1' stop-color='%23c9ced9'/></linearGradient></defs><rect x='4' y='2.6' width='2.8' height='28.6' rx='1.4' fill='url(%23m)'/><circle cx='5.4' cy='2.8' r='2.1' fill='%23fff'/><path d='M7.00,4.00 L8.47,4.13 L9.94,4.32 L11.41,4.52 L12.88,4.64 L14.34,4.63 L15.81,4.46 L17.28,4.12 L18.75,3.66 L20.22,3.18 L21.69,2.78 L23.16,2.56 L24.62,2.62 L26.09,2.97 L27.56,3.59 L29.03,4.37 L30.50,5.18 L30.50,20.18 L29.03,19.37 L27.56,18.59 L26.09,17.97 L24.62,17.62 L23.16,17.56 L21.69,17.78 L20.22,18.18 L18.75,18.66 L17.28,19.12 L15.81,19.46 L14.34,19.63 L12.88,19.64 L11.41,19.52 L9.94,19.32 L8.47,19.13 L7.00,19.00Z' fill='url(%23f)'></path><g fill='%23151518'><path d='M7.00,4.00 L8.96,4.19 L10.92,4.46 L10.92,8.21 L8.96,7.94 L7.00,7.75Z'></path><path d='M14.83,4.59 L16.79,4.25 L18.75,3.66 L18.75,7.41 L16.79,8.00 L14.83,8.34Z'></path><path d='M22.67,2.61 L24.62,2.62 L26.58,3.15 L26.58,6.90 L24.62,6.37 L22.67,6.36Z'></path><path d='M10.92,8.21 L12.88,8.39 L14.83,8.34 L14.83,12.09 L12.88,12.14 L10.92,11.96Z'></path><path d='M18.75,7.41 L20.71,6.78 L22.67,6.36 L22.67,10.11 L20.71,10.53 L18.75,11.16Z'></path><path d='M26.58,6.90 L28.54,7.85 L30.50,8.93 L30.50,12.68 L28.54,11.60 L26.58,10.65Z'></path><path d='M7.00,11.50 L8.96,11.69 L10.92,11.96 L10.92,15.71 L8.96,15.44 L7.00,15.25Z'></path><path d='M14.83,12.09 L16.79,11.75 L18.75,11.16 L18.75,14.91 L16.79,15.50 L14.83,15.84Z'></path><path d='M22.67,10.11 L24.62,10.12 L26.58,10.65 L26.58,14.40 L24.62,13.87 L22.67,13.86Z'></path><path d='M10.92,15.71 L12.88,15.89 L14.83,15.84 L14.83,19.59 L12.88,19.64 L10.92,19.46Z'></path><path d='M18.75,14.91 L20.71,14.28 L22.67,13.86 L22.67,17.61 L20.71,18.03 L18.75,18.66Z'></path><path d='M26.58,14.40 L28.54,15.35 L30.50,16.43 L30.50,20.18 L28.54,19.10 L26.58,18.15Z'></path></g></svg>"); } }
+
+/* minimapa: centrado na mesma coluna do velocímetro (direita), com o topo na faixa do tempo e da volta */
+#mini { right: calc(14px + clamp(90px, 13vmin, 140px) - clamp(159px, 15.2vw, 231px) / 2 + env(safe-area-inset-right, 0px)); top: calc(4px + env(safe-area-inset-top, 0px)); }
+@media (pointer: coarse) { #mini { right: calc(14px + clamp(65px, 12vmin, 90px) - clamp(101px, 21.7vmin, 138px) / 2 + env(safe-area-inset-right, 0px)); top: calc(0px + env(safe-area-inset-top, 0px)); } }
+
+@media (prefers-reduced-motion: reduce) { #time.pill::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='12' y='1' width='8' height='4' rx='1.5' fill='%23fff'/><rect x='24' y='5' width='4' height='3' rx='1' fill='%23fff' transform='rotate(40 26 6.5)'/><circle cx='16' cy='18' r='12' fill='%23fff'/><path d='M16 10.5V18l5 3' stroke='%231f1f21' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>"); } }
+
+/* relógio do cronômetro (flat): parado até a corrida começar (classe .run, ligada pelo ui.js); depois os ponteiros giram bem devagar */
+#time.pill::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='12' y='1' width='8' height='4' rx='1.5' fill='%23fff'/><rect x='24' y='5' width='4' height='3' rx='1' fill='%23fff' transform='rotate(40 26 6.5)'/><circle cx='16' cy='18' r='12' fill='%23fff'/><g stroke='%231f1f21' stroke-linecap='round' fill='none'><path d='M16 18V10' stroke-width='2.6'></path><path d='M16 18V13.2' stroke-width='3.2' transform='rotate(120 16 18)'></path></g></svg>"); }
+@media (prefers-reduced-motion: no-preference) { #time.pill.run::before { background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='12' y='1' width='8' height='4' rx='1.5' fill='%23fff'/><rect x='24' y='5' width='4' height='3' rx='1' fill='%23fff' transform='rotate(40 26 6.5)'/><circle cx='16' cy='18' r='12' fill='%23fff'/><g stroke='%231f1f21' stroke-linecap='round' fill='none'><path d='M16 18V10' stroke-width='2.6'><animateTransform attributeName='transform' type='rotate' from='0 16 18' to='360 16 18' dur='12s' repeatCount='indefinite'/></path><path d='M16 18V13.2' stroke-width='3.2' transform='rotate(120 16 18)'><animateTransform attributeName='transform' type='rotate' from='120 16 18' to='480 16 18' dur='120s' repeatCount='indefinite'/></path></g></svg>"); } }
+
+/* placas de volta e tempo: moldura cinza com espessura igual em todo o contorno (a antiga era cortada nas pontas) */
+#time.pill { height: 50px; padding-top: 0; padding-bottom: 0; line-height: 50px; }
+#lap.pill::after, #time.pill::after { inset: 0; background: linear-gradient(180deg, rgba(255, 255, 255, .42), rgba(255, 255, 255, .2)); clip-path: polygon(evenodd, 1.02px 50%, 20.38px 0.8px, calc(100% - 20.38px) 0.8px, calc(100% - 1.02px) 50%, calc(100% - 20.38px) calc(100% - 0.8px), 20.38px calc(100% - 0.8px), 1.02px 50%, 4.35px 50%, 21.63px calc(100% - 3.4px), calc(100% - 21.63px) calc(100% - 3.4px), calc(100% - 4.35px) 50%, calc(100% - 21.63px) 3.4px, 21.63px 3.4px, 4.35px 50%); }
+@media (pointer: coarse) {
+  #time.pill { height: 36px; line-height: 36px; }
+  #lap.pill::after, #time.pill::after { clip-path: polygon(evenodd, 1.2px 50%, 20.31px 0.8px, calc(100% - 20.31px) 0.8px, calc(100% - 1.2px) 50%, calc(100% - 20.31px) calc(100% - 0.8px), 20.31px calc(100% - 0.8px), 1.2px 50%, 5.08px 50%, 21.3px calc(100% - 3.4px), calc(100% - 21.3px) calc(100% - 3.4px), calc(100% - 5.08px) 50%, calc(100% - 21.3px) 3.4px, 21.3px 3.4px, 5.08px 50%); }
+}
+
+/* placa do piloto logo à frente: [posição] nome, em paralelogramo com contorno de tinta e ponteiro apontando para o kart */
+#rivalTag { position: fixed; left: 0; top: 0; z-index: 3; pointer-events: none; transform-origin: 50% 100%; will-change: transform, opacity; font-family: var(--display);
+  filter: drop-shadow(2.5px 0 0 var(--ink)) drop-shadow(-2.5px 0 0 var(--ink)) drop-shadow(0 2.5px 0 var(--ink)) drop-shadow(0 -2.5px 0 var(--ink)) drop-shadow(0 5px 0 rgba(42, 29, 74, .55)); }
+#rivalTag[hidden] { display: none; }
+#rivalTag .rt { position: relative; display: flex; align-items: stretch; height: 36px; background: linear-gradient(180deg, #3b3d46 0%, #23242a 55%, #17181c 100%); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
+#rivalTag .rt::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 45%; background: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0)); pointer-events: none; }
+#rivalTag .rp { position: relative; display: grid; place-items: center; min-width: 46px; padding: 0 12px 0 16px; font-size: 24px; line-height: 36px; color: var(--ink); background: linear-gradient(180deg, #fff, #d9dbe8); clip-path: polygon(0 0, 100% 0, calc(100% - 10px) 100%, 0 100%); text-shadow: 0 1px 0 rgba(255, 255, 255, .6); }
+#rivalTag[data-p="1"] .rp { background: linear-gradient(180deg, #fff6a8, #ffd23f 45%, #ff9a1a); }
+#rivalTag[data-p="2"] .rp { background: linear-gradient(180deg, #fff, #dde2ea 45%, #a7afbd); }
+#rivalTag[data-p="3"] .rp { background: linear-gradient(180deg, #ffd9ae, #d9893f 45%, #a95a22); }
+#rivalTag .rn { position: relative; padding: 0 20px 0 6px; font-size: 20px; line-height: 36px; color: #fff; letter-spacing: .6px; white-space: nowrap; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+#rivalTag::after { content: ""; position: absolute; left: 50%; top: 100%; width: 20px; height: 11px; margin: -1px 0 0 -10px; background: #17181c; clip-path: polygon(0 0, 100% 0, 50% 100%); }
+@media (max-width: 760px) { #rivalTag .rt { height: 28px; } #rivalTag .rp { min-width: 36px; font-size: 18px; line-height: 28px; padding: 0 9px 0 13px; } #rivalTag .rn { font-size: 15px; line-height: 28px; padding: 0 15px 0 5px; } #rivalTag::after { width: 16px; height: 9px; margin-left: -8px; } }
+
+/* troca de posição: o número novo entra e o antigo sai como fantasma. As animações ficam nos filhos (b, i, .posGhost):
+   o #pos já tem transform inline da inclinação 3D (HudFx), e uma animação de transform nele a sobrescrevia e dava "tranco" */
+#pos b, #pos i { transform-origin: 25% 85%; }
+#pos b.in.up { animation: posUp .55s cubic-bezier(.2, 1.3, .4, 1) .2s both; }   /* espera o número antigo sair (.2s) antes de entrar: nunca ficam um sobre o outro */
+#pos b.in.down { animation: posDown .5s cubic-bezier(.2, 1.2, .4, 1) .2s both; }
+#pos b.in.first { animation: posFirst .5s cubic-bezier(.2, 1.5, .4, 1) both; }
+#pos i.in { animation: posDotIn .45s cubic-bezier(.2, 1.8, .4, 1) .34s both; }
+.posGhost { position: absolute; left: 0; top: 0; display: block; pointer-events: none; transform-origin: 25% 85%; }
+.posGhost .bigNum { height: 150px; width: auto; display: block; }
+.posGhost.up { animation: ghostDown .2s cubic-bezier(.4, 0, 1, 1) forwards; }
+.posGhost.down { animation: ghostUp .2s cubic-bezier(.4, 0, 1, 1) forwards; }
+@keyframes posUp { 0% { transform: translateY(60%) scale(.5) rotate(10deg); opacity: 0; } 50% { transform: translateY(-10%) scale(1.16) rotate(-4deg); opacity: 1; } 75% { transform: translateY(2%) scale(.97) rotate(1deg); } 100% { transform: none; opacity: 1; } }
+@keyframes posDown { 0% { transform: translateY(-60%) scale(1.35) rotate(-8deg); opacity: 0; } 50% { transform: translateY(7%) scale(.9) rotate(3deg); opacity: 1; } 75% { transform: translateY(-2%) scale(1.03); } 100% { transform: none; opacity: 1; } }
+@keyframes posFirst { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes posDotIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes ghostDown { to { transform: translateY(45%) scale(.7) rotate(-8deg); opacity: 0; } }
+@keyframes ghostUp { to { transform: translateY(-45%) scale(1.15) rotate(8deg); opacity: 0; } }
+@media (max-width: 760px) { .posGhost .bigNum { height: 88px; } }
+@media (prefers-reduced-motion: reduce) { #pos b.in, #pos i.in, .posGhost { animation: none !important; } .posGhost { display: none; } }

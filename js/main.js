@@ -19,8 +19,114 @@
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
   // velocímetro 3D (js/speedo3d.js): objeto 3D preso no canto inferior direito, desenhado por cima da corrida
   let speedo3d = null;
-  try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 160, camera }); else console.warn('[velocímetro 3D] js/speedo3d.js não carregou'); }
+  try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 203, camera }); else console.warn('[velocímetro 3D] js/speedo3d.js não carregou'); }
   catch (e) { console.error('[velocímetro 3D]', e); }
+  // ---------------- minimapa: sem painel/moldura, sem grama e sem água ----------------
+  // O ui.js desenha o minimapa com um painel (quadrado arredondado + moldura) e o miolo verde. Depois de cada
+  // redesenho, este passo (olhando só os pixels, sem máscara guardada, então a seta nunca é apagada):
+  //   1. apaga o verde grande (grama) e o azul da água (rio e lago);
+  //   2. acha os "blocos" de pixels sólidos: o que encosta na borda do canvas (a moldura do quadrado) é apagado;
+  //      sobra a pista, o rio, os pontos e a seta. Tudo que está longe deles (névoa do painel) também some;
+  //   3. a pista (branca), os pontos e a seta ficam como estão; só o contorno roxo-escuro vira cinza.
+  // A transparência de 50% é do CSS (#mini { opacity: .5 }).
+  const glassMinimap = (() => {
+    let A = null;   // buffers reaproveitados entre chamadas
+    const isGreen = (d, i, k) => d[i + 3] > 40 && d[i + 1] > 100 && d[i + 1] - d[i] > k && d[i + 1] - d[i + 2] > k;
+    const EDGE = 8;
+    // água: azul forte (rio e lago); o branco levemente azulado da pista não entra
+    const isWater = (d, i, k) => d[i + 3] > 0 && d[i + 2] > 140 && d[i + 2] - d[i] > k && d[i + 2] >= d[i + 1];
+    // agora roda UMA vez por pista, no mapa-base em alta resolução (ui.js: Mini.build); o jogo só recorta e aplica o fade
+    return function (c) {
+      const g = c.getContext('2d'); if (!g) return;
+      const W = c.width, H = c.height, N = W * H, S = W + 1; let img;
+      try { img = g.getImageData(0, 0, W, H); } catch (e) { return; }
+      const d = img.data;
+      if (!A || A.n !== N) A = { n: N, green: new Uint8Array(N), mask: new Uint8Array(N), integ: new Int32Array(S * (H + 1)), vis: new Uint8Array(N), keep: new Uint8Array(N), frm: new Uint8Array(N), q: new Int32Array(N) };
+      const { green, mask, integ, vis, keep, frm, q } = A;
+      // 1) grama: verde em área grande (janela 7x7 com pelo menos 28 pixels verdes); pontinho verde isolado fica
+      for (let p = 0; p < N; p++) green[p] = isGreen(d, p * 4, 14) ? 1 : 0;
+      for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += green[y * W + x]; integ[(y + 1) * S + x + 1] = integ[y * S + x + 1] + row; } }
+      const R = 3, MIN = 28;
+      for (let y = 0; y < H; y++) {
+        const y0 = Math.max(0, y - R), y1 = Math.min(H - 1, y + R);
+        for (let x = 0; x < W; x++) {
+          const p = y * W + x; mask[p] = 0; if (!green[p]) continue;
+          const x0 = Math.max(0, x - R), x1 = Math.min(W - 1, x + R);
+          if (integ[(y1 + 1) * S + x1 + 1] - integ[y0 * S + x1 + 1] - integ[(y1 + 1) * S + x0] + integ[y0 * S + x0] >= MIN) mask[p] = 1;
+        }
+      }
+      for (let pass = 0; pass < 2; pass++) {   // franja esverdeada na borda da grama
+        const add = [];
+        for (let p = 0; p < N; p++) {
+          if (mask[p]) continue; const x = p % W;
+          if (((x > 0 && mask[p - 1]) || (x < W - 1 && mask[p + 1]) || (p >= W && mask[p - W]) || (p < N - W && mask[p + W])) && isGreen(d, p * 4, 5)) add.push(p);
+        }
+        for (let k = 0; k < add.length; k++) mask[add[k]] = 1;
+      }
+      for (let p = 0; p < N; p++) if (mask[p]) d[p * 4 + 3] = 0;
+      // água: azul forte some; 1 passe em volta pega a suavização da borda
+      for (let p = 0; p < N; p++) mask[p] = isWater(d, p * 4, 45) ? 1 : 0;
+      {
+        const add = [];
+        for (let p = 0; p < N; p++) {
+          if (mask[p]) continue; const x = p % W;
+          if (((x > 0 && mask[p - 1]) || (x < W - 1 && mask[p + 1]) || (p >= W && mask[p - W]) || (p < N - W && mask[p + W])) && isWater(d, p * 4, 30)) add.push(p);
+        }
+        for (let k = 0; k < add.length; k++) mask[add[k]] = 1;
+      }
+      for (let p = 0; p < N; p++) if (mask[p]) d[p * 4 + 3] = 0;
+      // 2) blocos de pixels sólidos: quem chega perto da borda do canvas (ou cobre quase tudo) é a moldura do quadrado
+      vis.fill(0); keep.fill(0); frm.fill(0);
+      for (let s = 0; s < N; s++) {
+        if (vis[s] || d[s * 4 + 3] < 128) continue;
+        let h = 0, t = 0, x0 = W, y0 = H, x1 = 0, y1 = 0; q[t++] = s; vis[s] = 1;
+        while (h < t) {
+          const p = q[h++], x = p % W, y = (p / W) | 0;
+          if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+          if (x > 0 && !vis[p - 1] && d[(p - 1) * 4 + 3] >= 128) { vis[p - 1] = 1; q[t++] = p - 1; }
+          if (x < W - 1 && !vis[p + 1] && d[(p + 1) * 4 + 3] >= 128) { vis[p + 1] = 1; q[t++] = p + 1; }
+          if (y > 0 && !vis[p - W] && d[(p - W) * 4 + 3] >= 128) { vis[p - W] = 1; q[t++] = p - W; }
+          if (y < H - 1 && !vis[p + W] && d[(p + W) * 4 + 3] >= 128) { vis[p + W] = 1; q[t++] = p + W; }
+        }
+        const isFrame = x0 < EDGE || y0 < EDGE || x1 > W - 1 - EDGE || y1 > H - 1 - EDGE || (x1 - x0) * (y1 - y0) > 0.7 * N;
+        const arr = isFrame ? frm : keep;
+        for (let k = 0; k < t; k++) arr[q[k]] = 1;
+      }
+      // contorno suave da pista: 2 passes de 1 px em volta do que ficou
+      for (let pass = 0; pass < 2; pass++) {
+        const add = [];
+        for (let p = 0; p < N; p++) {
+          if (keep[p] || frm[p] || d[p * 4 + 3] === 0) continue; const x = p % W;
+          if ((x > 0 && keep[p - 1]) || (x < W - 1 && keep[p + 1]) || (p >= W && keep[p - W]) || (p < N - W && keep[p + W])) add.push(p);
+        }
+        for (let k = 0; k < add.length; k++) keep[add[k]] = 1;
+      }
+      // 3) apaga o que sobrou longe da pista (névoa do painel)
+      for (let p = 0; p < N; p++) {
+        const i = p * 4;
+        if (!keep[p]) { d[i + 3] = 0; continue; }
+        const r = d[i], gg = d[i + 1], b = d[i + 2];
+        if (Math.max(r, gg, b) < 150 && b - gg > 8) d[i] = d[i + 1] = d[i + 2] = (r + gg + b) / 3 * 0.6;   // contorno roxo-escuro vira cinza escuro
+      }
+      g.putImageData(img, 0, 0);
+    };
+  })();
+  window.glassBase = glassMinimap;
+
+  // barra de turbo 3D (centro inferior): 3 seções que enchem no drift
+  let boostBar = null;
+  try { if (window.Speedo3D && Speedo3D.createBoostBar) boostBar = Speedo3D.createBoostBar(renderer, { el: '#boost3d' }); } catch (e) { console.error('[barra de turbo]', e); }
+  // turbo do drift: tempo de drift para encher cada seção; ganho e duração por nº de seções cheias
+  // Velocidade final do turbo por nº de seções cheias, em km/h (a mesma unidade do velocímetro):
+  //   3 seções = TOP_KMH (203). As seções menores dividem o ganho entre a velocidade normal e 203 de forma
+  //   progressiva: SHARE = fração do ganho total (0 = sem turbo, 1 = 203). Cada seção vale um pouco mais que a anterior.
+  //   Com o ganho G = 203 - velocidade normal: 1ª seção = normal + 28% de G, 2ª = normal + 61% de G, 3ª = 203.
+  const BOOST = { SECTION: 0.9, TOP_KMH: 203, SHARE: [0, 0.28, 0.61, 1], DUR: [0, 0.8, 1.3, 1.9], ZOOM: [1, 1.15, 1.32, 1] };   // ZOOM: câmera mais perto a cada seção cheia (1ª = 15%, 2ª = 32%; a 3ª volta ao normal)
+  const kmhK = () => CFG.PHYS.KMH || CFG.KMH || 3.6;                    // km/h por m/s (config.js: PHYS.KMH = 2.6)
+  const boostTarget = n => {                                            // alvo de velocidade (unidades do jogo) com n seções
+    const base = CFG.PHYS.MAX, top = Math.max(base, BOOST.TOP_KMH / kmhK());
+    return base + (top - base) * BOOST.SHARE[Math.max(0, Math.min(3, n | 0))];
+  };
   renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); console.warn('contexto WebGL perdido — aguardando restauração'); });
   renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -163,7 +269,7 @@
       this.track = Toon.during(() => Tracks.build(def, root));
       this.propStats = Props.build(this.track, def, root);            // cones, pneus e balões de brinquedo
       // agrupa toda a geometria parada por material: de ~1.300 para algumas dezenas de chamadas de desenho
-      const st = GEO.mergeByMaterial(root); this.mergeStats = st;
+      const st = GEO.mergeByMaterial(root, { cell: 120 }); this.mergeStats = st; this._cullT = 0;   // blocos de 120 m: o que está fora da câmera/sombra não é desenhado
       // preenchimento do mundo até o horizonte (instanciado, em blocos com culling por câmera e por distância)
       const dens = window.Settings ? Settings.sceneryDensity() * (this.lite && Settings.autoPerf() ? 0.6 : 1) : (this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY);
       this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: dens }));
@@ -277,8 +383,8 @@
       UI.screen('race'); this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
       this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
       $('signal').hidden = false; UI.countNum(''); UI.Fairy.show();
-      UI.cupInfo(this.cup ? CFG.CUP.name + ' · ' + (this.cup.round + 1) + '/3' : '');
-      UI.toast(CFG.TRACKS[trackIdx].name, 1800);
+      UI.cupInfo('');   // sem "Copa Kartec · x/3" no HUD
+      UI.toast(CFG.TRACKS[trackIdx].name, 1800); PL.request();
       $('help').classList.remove('fade'); clearTimeout(this._hf); this._hf = setTimeout(() => $('help').classList.add('fade'), 9000);
     },
     racePos(k) {
@@ -379,6 +485,7 @@
         this.rivals.forEach((k, i) => { const inp = this.ais[i].think(dt, this.karts.filter(o => o !== k), P.progress); if (k.finished) { inp.up = false; inp.drift = false; } k.update(dt, inp, racing); });
         for (let a = 0; a < K.length; a++) for (let b = a + 1; b < K.length; b++) Kart.collidePair(K[a], K[b]);
       }
+      safe('turbo', () => this.boostStep(dt, inP, racing));
       if (tr.collectCoins) K.forEach(k => tr.collectCoins(k));
       if (this.state === 'race') { (ON ? [P] : K).forEach(k => this.slipstream(dt, k)); this.wrongWay(dt, P); }
       (ON ? [P] : K).forEach(k => { if (racing && !k.finished && k.lap > CFG.LAPS) { k.finished = true; k.finishTime = this.race.time;
@@ -430,7 +537,7 @@
         UI.screen('race'); this.state = 'waiting'; this.cd = { t: 0, step: 0, early: false };
         this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
         $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); UI.cupInfo('Online · ' + (Net.room ? Net.room.name : ''));
-        UI.toast('Aguardando todos carregarem…', 2500);
+        UI.toast('Aguardando todos carregarem…', 2500); PL.request();
         Net.send({ t: 'loaded', raceId: prep.raceId });
       });
     },
@@ -488,10 +595,13 @@
     },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
+      // zoom do turbo é um "avanço" da câmera em direção ao kart (o FOV fica como sempre foi):
+      // desfaz o avanço do quadro anterior antes de calcular a câmera normal
+      if (c.zoomOff) { camera.position.sub(c.zoomOff); c.zoomOff = null; }
       if (this.state === 'finish') { c.ang += dt * 0.6; this.orbitCam(); return; }
       c.ang += wrapA(P.mvAng - c.ang) * Math.min(1, 5 * dt);
-      if (!c.drag) { c.yaw *= Math.max(0, 1 - 2 * dt); c.pitch *= Math.max(0, 1 - 2 * dt); }
-      const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = (12.5 + Math.abs(P.speed) * 0.04) * c.zoom, h = (5.6 - spN * 0.55 + c.pitch * 8) * c.zoom;   // câmera desce um pouco na velocidade
+      if (!c.drag && !(PL.locked() && performance.now() - (c.lookT || 0) < 2500)) { c.yaw *= Math.max(0, 1 - 2 * dt); c.pitch *= Math.max(0, 1 - 2 * dt); }
+      const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55 + c.pitch * 8) * c.zoom;   // câmera desce um pouco na velocidade
       const tx = P.pos.x - Math.sin(a) * dist, tz = P.pos.z - Math.cos(a) * dist; let ty = Math.max(P.pos.y + h, 1.5);
       const tr = this.track, ceil = tr.ceilingAt ? Math.min(tr.ceilingAt({ x: tx, z: tz }, P.idx), tr.ceilingAt(camera.position, P.idx)) : Infinity;   // túnel: câmera não passa do teto
       ty = Math.min(ty, ceil);
@@ -502,14 +612,37 @@
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
       // tremidinha fina acima de 75% da velocidade (sensação de velocidade, sem enjoar)
       if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
-      const fov = 60 + (P.boostT > 0 ? 9 : 0) + Math.min(8, Math.abs(P.speed) * 0.1);
-      camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();
+      const fov = (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2);   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
+      camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // FOV original
+      // zoom do turbo: entra com "soco" (mola rápida) e volta suave (mola amortecida); 10% = câmera 10% mais perto
+      const B = this.boost;
+      if (B) { const k = B.zT > 1 ? 260 : 40, d = B.zT > 1 ? 20 : 12.6;
+        B.zv += (k * (B.zT - B.zoom) - d * B.zv) * dt; B.zoom += B.zv * dt;
+        const z = Math.max(0.9, Math.min(1.45, B.zoom));
+        if (Math.abs(z - 1) > 1e-4) {
+          const look = new THREE.Vector3(P.pos.x + Math.sin(c.ang) * 4, P.pos.y + 2, P.pos.z + Math.cos(c.ang) * 4);
+          c.zoomOff = look.sub(camera.position).multiplyScalar(1 - 1 / z);
+          camera.position.add(c.zoomOff);
+        } }
       this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
     },
     // modo leve: esconde os contornos (metade dos triângulos dos karts e pilotos) na cena atual e nas próximas
     lite: false,
     setLite(on) { this.lite = on;   // o preenchimento de cenário da PRÓXIMA pista também fica mais leve (CFG.FILL.LITE_DENSITY)
       const f = sc => sc && sc.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) o.visible = !on; }); f(this.scene); if (on) console.info('[desempenho] modo leve ativado: contornos desligados'); },
+    // culling por distância dos blocos da pista: o que passa do fim da névoa fica invisível (4x por segundo).
+    // O frustum culling do Three.js já cuida do que está fora do campo de visão.
+    cullTrack() {
+      const ms = this.mergeStats && this.mergeStats.meshes; if (!ms) return;
+      const now = performance.now(); if (now - (this._cullT || 0) < 250) return; this._cullT = now;
+      const cp = camera.position, lim = (this.scene.fog ? this.scene.fog.far : 1500) + 60;
+      for (const m of ms) {
+        const bs = m.geometry.boundingSphere; if (!bs) continue;
+        const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, mt = m.material;
+        const off = this.lite && mt && mt.userData && mt.userData.outline;   // modo leve: contornos continuam escondidos
+        m.visible = !off && Math.sqrt(dx * dx + dz * dz) - bs.radius < lim;
+      }
+    },
     render() {
       if (this.state === 'boot') return;
       // logo na tela (e enquanto ela voa para o canto): o 3D fica congelado no último quadro -> a GPU fica só para a animação
@@ -517,15 +650,126 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) { renderer.render(this.scene, camera); this.drawSpeedo(); }
+      else if (this.scene) { this.cullTrack(); renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+      if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
+    },
+    // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa
+    rivalTag() {
+      const el = $('rivalTag'); if (!el) return;
+      const P = this.player, hide = () => { if (!el.hidden) el.hidden = true; };
+      if (!P || this.state !== 'race' || P.finished) return hide();
+      const score = x => x.finished ? 1e9 - x.finishTime : x.progress, ps = score(P);
+      let tgt = null, best = Infinity;
+      for (const k of this.karts) { if (k === P || !k.pos) continue; const s = score(k); if (s > ps && s < best) { best = s; tgt = k; } }   // o mais perto à frente
+      if (!tgt) return hide();
+      // só aparece quando ele está muito perto (some devagar entre 26 e 34 unidades de distância)
+      const gap = Math.hypot(tgt.pos.x - P.pos.x, tgt.pos.z - P.pos.z), NEAR = 26, FAR = 34;
+      if (gap > FAR) return hide();
+      camera.updateMatrixWorld();
+      const v = this._tagV || (this._tagV = new THREE.Vector3());
+      v.set(tgt.pos.x, tgt.pos.y + 3.4, tgt.pos.z); const dist = camera.position.distanceTo(v); v.project(camera);
+      if (v.z > 1 || v.z < -1 || Math.abs(v.x) > 1.05 || v.y > 1.05 || v.y < -1.05) return hide();   // fora da tela ou atrás da câmera
+      const p = this.racePos(tgt), key = p + '|' + tgt.name;
+      if (key !== this._tagKey) { this._tagKey = key; el.dataset.p = p; el.querySelector('.rp').textContent = p; el.querySelector('.rn').textContent = tgt.name || ('Piloto ' + p); }
+      const sc = Math.max(0.75, Math.min(1.1, 30 / Math.max(1, dist)));
+      el.style.opacity = Math.max(0, Math.min(1, (FAR - gap) / (FAR - NEAR))).toFixed(2);
+      el.style.transform = 'translate(' + ((v.x * 0.5 + 0.5) * innerWidth).toFixed(1) + 'px,' + ((-v.y * 0.5 + 0.5) * innerHeight).toFixed(1) + 'px) translate(-50%, calc(-100% - 14px)) scale(' + sc.toFixed(3) + ')';
+      if (el.hidden) el.hidden = false;
+    },
+    // ---------------- turbo do drift (3 seções) ----------------
+    // Segurar a tecla de drift enche a barra sozinha (uma seção a cada BOOST.SECTION s, até 3).
+    // Soltar o drift dispara o turbo com a força das seções cheias (a seção pela metade se perde).
+    // Cada seção cheia dá um "soco" de zoom na câmera (15% na 1ª, 32% na 2ª); o zoom volta suave quando a barra
+    // fica cheia (3/3) ou quando o turbo acaba.
+    boostStep(dt, inP, racing) {
+      const P = this.player; if (!P) return;
+      let B = this.boost;
+      if (!B || B.race !== this.race) B = this.boost = { race: this.race, charge: 0, firing: 0, fired: 0, fireT: 0, fireDur: 0, mult: 1, zoom: 1, zv: 0, zT: 1, ang: null, yaw: 0, dir: 1 };
+      const dA = B.ang == null ? 0 : wrapA(P.ang - B.ang); B.ang = P.ang;
+      const turn = Math.abs(dA) / Math.max(dt, 1e-3);
+      // lado do drift para a barra de turbo: sentido do giro do kart (+1 = direita, -1 = esquerda), com histerese
+      const yawNow = Math.max(-1, Math.min(1, -dA / Math.max(dt, 1e-3) / 1.6));
+      B.yaw += (yawNow - B.yaw) * Math.min(1, 10 * dt);
+      if (!B.holding && Math.abs(B.yaw) > 0.18) B.dir = B.yaw > 0 ? 1 : -1;   // só acompanha o giro ANTES do drift: ao começar, o lado fica TRAVADO até soltar (a barra nunca vira no meio)
+      const live = racing && this.state === 'race' && !P.finished;
+      // teto do turbo: a física leva qualquer turbo até ~203 km/h; aqui a velocidade fica limitada ao alvo da seção disparada
+      if (B.cap) { if (P.boostT > 0 || B.firing > 0) { if (P.speed > B.cap) P.speed = B.cap; } else B.cap = 0; }
+      // disparando: puxa a velocidade até o alvo enquanto o turbo dura e a barra esvazia
+      if (B.firing > 0) {
+        B.fireT -= dt; B.firing = Math.max(0, B.fireT / B.fireDur);
+        const target = B.target;
+        if (live && P.speed > 0 && P.speed < target) P.speed += (target - P.speed) * Math.min(1, 5 * dt);
+        if (B.firing <= 0) { B.firing = 0; B.fired = 0; B.zT = 1; }
+        B.holding = false;
+        return;
+      }
+      if (!live) { B.charge = 0; B.zT = 1; B.holding = false; return; }
+      const holding = !!inP.drift || P.drifting === true;     // segurar a tecla de drift já conta (não precisa estar curvando)
+      B.holding = holding && Math.abs(P.speed) > CFG.PHYS.MAX * 0.15;
+      if (holding) {
+        // enche sozinha enquanto a tecla está segurada: só precisa estar no chão e com velocidade
+        if (!P.air && Math.abs(P.speed) > CFG.PHYS.MAX * 0.3) {
+          const before = Math.floor(B.charge);
+          B.charge = Math.min(3, B.charge + dt / BOOST.SECTION);
+          const now = Math.floor(B.charge);
+          if (now > before) this.boostSection(now);
+        }
+      } else if (B.charge > 0) {
+        const n = Math.floor(B.charge); B.charge = 0;
+        if (n > 0) this.fireBoost(n); else B.zT = 1;
+      }
+    },
+    boostSection(n) {
+      const B = this.boost;
+      B.zT = BOOST.ZOOM[Math.min(3, n)];   // zoom cresce a cada seção; cheia (3/3): volta ao zoom normal
+      B.zv += 0.9 + 0.5 * n;                // "soco" do zoom, mais forte a cada seção (também na 2ª, que já está com zoom)
+      this.cam.shake = Math.min(0.6, this.cam.shake + 0.08 * n);
+      try { if (UI.Sfx.coin) UI.Sfx.coin(); } catch (e) { }
+      if (n >= 3) UI.toast('Turbo máximo!', 900);
+    },
+    fireBoost(n) {
+      const B = this.boost, P = this.player;
+      B.fired = n; B.fireDur = B.fireT = BOOST.DUR[n]; B.firing = 1; B.target = B.cap = boostTarget(n); B.mult = B.target / CFG.PHYS.MAX;
+      P.boostT = Math.max(P.boostT || 0, BOOST.DUR[n]);
+      this.cam.shake = Math.min(0.6, this.cam.shake + 0.1 * n);
+      try { UI.Sfx.boost(); } catch (e) { }
+    },
+    // barra de turbo ao lado da cabeça do piloto: acompanha a cabeça (projetada na tela) em vez de ficar fixa embaixo
+    placeBoostBar() {
+      const el = $('boost3d'), P = this.player; if (!el || !P || !P.m || !P.m.group) return;
+      let hl = P._headL;
+      if (!hl) {   // posição da cabeça no espaço do kart: mede o piloto uma vez; se não der, usa uma estimativa
+        hl = new THREE.Vector3(0, 2.0, 0);
+        try {
+          const po = P.m.pilot, obj = po && (po.isObject3D ? po : (po.group || po.root || po.obj || po.model));
+          if (obj && obj.isObject3D) {
+            P.m.group.updateWorldMatrix(true, true);
+            const bb = new THREE.Box3().setFromObject(obj);
+            if (!bb.isEmpty()) { const c = new THREE.Vector3((bb.min.x + bb.max.x) / 2, bb.max.y - 0.4, (bb.min.z + bb.max.z) / 2); P.m.group.worldToLocal(c); if (isFinite(c.x + c.y + c.z) && c.y > 0.5 && c.y < 4) hl = c; }
+          }
+        } catch (e) { }
+        P._headL = hl;
+      }
+      const v = this._headV || (this._headV = new THREE.Vector3());
+      v.copy(hl); P.m.group.localToWorld(v); camera.updateMatrixWorld(); v.project(camera);
+      const x = (v.x * 0.5 + 0.5) * innerWidth, y = (-v.y * 0.5 + 0.5) * innerHeight, w = el.offsetWidth, h = el.offsetHeight;
+      // a barra fica do lado do drift (esquerda/direita da cabeça) e desliza suave quando o lado muda
+      const dtb = Math.min(0.1, this.rawDt || 1 / 60), B = this.boost, tgt = B && B.dir < 0 ? -1 : 1;
+      const hold = !!(B && B.holding);
+      if (this._bbSide == null) this._bbSide = tgt;
+      else if (hold) this._bbSide = this._bbHold ? this._bbSide + (tgt - this._bbSide) * (1 - Math.exp(-10 * dtb)) : tgt;   // drift novo: a barra nova já nasce no lado certo
+      this._bbHold = hold;                                            // sem drift: a caixa fica onde está (a barra que some não pula de lado)
+      const cx = x + this._bbSide * (innerHeight * 0.075 + w * 0.34);
+      const px = Math.max(4, Math.min(innerWidth - w - 4, cx - w / 2)), py = Math.max(4, Math.min(innerHeight - h - 4, y - h / 2 + w * 0.03));
+      el.style.transform = 'translate(' + px.toFixed(1) + 'px,' + py.toFixed(1) + 'px)';
     },
     // velocímetro 3D: arco = fração da velocidade máxima; número = o mesmo do velocímetro antigo (km/h)
     drawSpeedo() {
       const P = this.player, st = this.state;
       if (!speedo3d || !P || !(st === 'race' || st === 'countdown' || st === 'waiting' || st === 'finish')) return;
       const inp = this.inP || {}, old = Speedo3D.readOld && Speedo3D.readOld();
-      const fill = Math.abs(P.speed) / CFG.PHYS.MAX;
-      const kmh = old ? old.speed : Math.abs(P.speed) * (CFG.KMH || 3.6);
+      const fill = Math.abs(P.speed) * kmhK() / BOOST.TOP_KMH;                 // o arco vai de 0 a 203 km/h (turbo completo)
+      const kmh = old ? old.speed : Math.abs(P.speed) * kmhK();
       // curva pela rotação real do kart (ângulo crescente = virando para a esquerda na tela)
       const dt = Math.min(0.1, this.rawDt || 1 / 60);
       const dA = this._spAng == null ? 0 : wrapA(P.ang - this._spAng); this._spAng = P.ang;
@@ -534,10 +778,12 @@
         speedo3d.update(dt, {
           speed: P.speed < 0 ? -kmh : kmh, fill, steer,
           boost: P.boostT > 0,
-          drift: inp.drift && Math.abs(steer) > 0.2 ? (P.driftLevel || P.sparkLevel || 1) : 0,
+          drift: this.boost && this.boost.charge > 0 ? Math.min(3, Math.floor(this.boost.charge) + 1) : 0,
+          full: !!(this.boost && this.boost.charge >= 3 && this.boost.holding),   // barra de drift cheia (3/3): hue do velocímetro gira
           airborne: !!P.air, offroad: !!(P.offroad || P.onGrass)
         });
         speedo3d.render();
+        if (boostBar) { const B = this.boost || {}; boostBar.update(dt, { charge: B.charge || 0, show: !!B.holding, dir: B.dir || 1, steer: B.yaw || 0, speed: Math.abs(this.player.speed) * kmhK() / BOOST.TOP_KMH, air: !!this.player.air, offroad: !!(this.player.offroad || this.player.onGrass), boost: this.player.boostT > 0 }); this.placeBoostBar(); boostBar.invalidate && boostBar.invalidate(); boostBar.render(); }
       } catch (e) { if (!this._spErr) { this._spErr = true; console.error('[velocímetro 3D]', e); } }
     }
   };
@@ -553,9 +799,33 @@
     s.scale.set(6, 1.5, 1); s.position.y = 5.6; s.renderOrder = 5; s.userData.noOutline = true; return s;
   }
 
+  // ---------------- mouse travado (Pointer Lock) durante a partida ----------------
+  // Trava o mouse quando a corrida começa e só destrava com Esc (que também abre o menu, como sempre foi) ou quando a
+  // partida acaba (resultados e menu precisam do mouse). Em telas de toque não trava. Se o travamento se perder por outro
+  // motivo (Alt+Tab), um clique na tela do jogo trava de novo.
+  const PL = {
+    ok: !!(renderer.domElement.requestPointerLock && !matchMedia('(pointer: coarse)').matches),
+    lastEsc: 0,
+    racing() { return Game.state === 'countdown' || Game.state === 'race' || Game.state === 'finish' || Game.state === 'waiting'; },
+    locked() { return document.pointerLockElement === renderer.domElement; },
+    request() { if (!this.ok || this.locked()) return; try { const r = renderer.domElement.requestPointerLock(); if (r && r.catch) r.catch(() => { }); } catch (e) { } },
+    release() { if (document.pointerLockElement) { try { document.exitPointerLock(); } catch (e) { } } }
+  };
+  addEventListener('keydown', e => { if (e.code === 'Escape') PL.lastEsc = performance.now(); }, true);
+  document.addEventListener('pointerlockchange', () => {
+    if (PL.locked() || !PL.racing()) return;                                          // travou, ou destravou fora da corrida (de propósito)
+    // destravou no meio da corrida: Esc = sair para o menu; perder o foco (Alt+Tab) não faz nada
+    if (document.hasFocus() && performance.now() - PL.lastEsc > 400 && UI.h && UI.h.onEscape) UI.h.onEscape();
+  });
+  document.addEventListener('pointerdown', e => { if (e.button === 0 && PL.racing() && !PL.locked() && e.target === renderer.domElement) PL.request(); });
+  setInterval(() => { if (!PL.racing()) PL.release(); }, 200);                         // fim da corrida / resultados / menu: devolve o mouse
+
   // ---------------- câmera: botão direito gira, roda do mouse aproxima ----------------
   addEventListener('pointerdown', e => { if (e.button === 2) { Game.cam.drag = true; Game.cam.lx = e.clientX; Game.cam.ly = e.clientY; } });
-  addEventListener('pointermove', e => { const c = Game.cam; if (!c.drag) return; c.yaw -= (e.clientX - c.lx) * 0.006; c.pitch = Math.max(-0.4, Math.min(1, c.pitch + (e.clientY - c.ly) * 0.004)); c.lx = e.clientX; c.ly = e.clientY; });
+  addEventListener('pointermove', e => { const c = Game.cam;
+    // mouse travado: mexer o mouse gira a câmera (sem segurar botão); a câmera volta sozinha para trás do kart depois de 2,5 s parada
+    if (PL.locked() && PL.racing()) { c.yaw = Math.max(-2.8, Math.min(2.8, c.yaw - e.movementX * 0.004)); c.pitch = Math.max(-0.4, Math.min(1, c.pitch + e.movementY * 0.003)); c.lookT = performance.now(); return; }
+    if (!c.drag) return; c.yaw -= (e.clientX - c.lx) * 0.006; c.pitch = Math.max(-0.4, Math.min(1, c.pitch + (e.clientY - c.ly) * 0.004)); c.lx = e.clientX; c.ly = e.clientY; });
   addEventListener('pointerup', e => { if (e.button === 2) Game.cam.drag = false; });
   addEventListener('wheel', e => { if (!Game.scene) return; Game.cam.zoom = Math.max(0.6, Math.min(1.8, Game.cam.zoom * (e.deltaY > 0 ? 1.08 : 0.93))); }, { passive: true });
   // Ctrl+W fecha a aba no navegador e não pode ser bloqueado: durante a corrida o navegador pede confirmação antes
@@ -610,24 +880,93 @@
   if (document.fonts && document.fonts.load) { Promise.all([document.fonts.load('400 64px "Titan One"'), document.fonts.ready]).then(boot, boot); setTimeout(boot, 2500); } else boot();
 
   // ---------------- laço principal ----------------
-  // resolução adaptativa: mede o tempo médio de quadro e ajusta o pixelRatio entre DPR_MIN e DPR_MAX
-  let last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0;
+  // resolução adaptativa: mede o tempo médio de quadro e ajusta o pixelRatio entre DPR_MIN e DPR_MAX.
+  // Só reage a lentidão SEGUIDA (2 janelas de 2 s) e ignora travadinhas isoladas e o tempo com a aba escondida;
+  // quando o aparelho volta a dar conta, a resolução sobe de novo (e o modo leve sai sozinho).
+  let last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0, slowWin = 0, fastWin = 0, liteOffAt = -1e9;
   renderer.setPixelRatio(dpr);
+  const resetPerf = () => { last = performance.now(); acc = 0; cnt = 0; slowWin = 0; fastWin = 0; };
+  document.addEventListener('visibilitychange', resetPerf);   // trocar de aba/voltar não conta como "jogo lento"
+  window.addEventListener('focus', resetPerf);
+  window.addEventListener('blur', resetPerf);
   const safe = (name, fn) => { try { fn(); } catch (e) { if (errs++ < 20) console.error('[' + name + ']', e); } };
   function loop(now) {
     requestAnimationFrame(loop);
     const raw = Math.max(0, (now - last) / 1000) || 0, dt = Math.min(0.05, raw); last = now;
-    if (Game.scene) { acc += raw; cnt++;
+    // quadros muito longos (aba escondida, travada de carregamento) não entram na média; os demais valem no máximo 50 ms
+    if (Game.scene && !document.hidden && raw < 0.25) { acc += Math.min(raw, 0.05); cnt++;
       if (acc > 2) { const avg = acc / cnt * 1000; acc = 0; cnt = 0;
+        slowWin = avg > 24 ? slowWin + 1 : 0; fastWin = avg < 17.5 ? fastWin + 1 : 0;
         const fixed = window.Settings ? Settings.fixedDpr() : 0;   // resolução escolhida nas configurações (0 = automática)
-        const target = fixed ? fixed : avg > 21 ? Math.max(CFG.PERF.DPR_MIN, dpr - 0.15) : avg < 15 ? Math.min(window.Settings ? Settings.dprMax() : CFG.PERF.DPR_MAX, devicePixelRatio, dpr + 0.1) : dpr;
+        const auto = !window.Settings || Settings.autoPerf();
+        const maxD = Math.min(window.Settings ? Settings.dprMax() : CFG.PERF.DPR_MAX, devicePixelRatio);
+        const atMin = dpr <= CFG.PERF.DPR_MIN + 0.01;
+        let target = dpr;
+        if (fixed) target = fixed;
+        else if (slowWin >= 2 && !atMin) { target = Math.max(CFG.PERF.DPR_MIN, dpr - 0.15); slowWin = 1; }
+        else if (avg < 18.5 && dpr < maxD) target = Math.min(maxD, dpr + 0.1);
         if (Math.abs(target - dpr) > 0.01) { dpr = target; renderer.setPixelRatio(dpr); }
-        // aparelho muito fraco (só no modo automático): já na resolução mínima e ainda lento -> sem contornos de tinta
-        else if (avg > 26 && dpr <= CFG.PERF.DPR_MIN + 0.01 && !Game.lite && (!window.Settings || Settings.autoPerf())) Game.setLite(true); } }
+        if (!fixed && auto) {
+          // aparelho muito fraco: já na resolução mínima e ainda lento por 6 s seguidos -> sem contornos de tinta
+          if (atMin && avg > 26 && slowWin >= 3 && !Game.lite && now - liteOffAt > 60000) Game.setLite(true);
+          // voltou a render rápido por 6 s seguidos: contornos de volta
+          else if (Game.lite && fastWin >= 3 && dpr >= Math.min(maxD, 1.0)) { Game.setLite(false); liteOffAt = now; fastWin = 0; }
+        } } }
     Game.rawDt = raw; safe('jogo', () => Game.update(dt));
     if (Game.player && Game.scene && (!isFinite(Game.player.speed) || !isFinite(Game.player.pos.x))) Game.player.respawn();
     if (Game.bot && Game.scene && (!isFinite(Game.bot.speed) || !isFinite(Game.bot.pos.x))) Game.bot.respawn();
     safe('render', () => Game.render());
   }
+  // ---------------- tempo da corrida no formato do Kirby: 0:27.43 ----------------
+  // O ui.js escreve o tempo como 00’27”43; aqui o texto é reescrito como m:ss.cc (sem zero à esquerda nos minutos).
+  (() => {
+    const el = $('time'); if (!el) return; let busy = false, spans = [], lastTxt = '';
+    const conv = () => {
+      if (busy) return; const m = /^\s*(\d+)\s*[’'′]\s*(\d+)\s*(?:[”"″]|’’|'')\s*(\d+)\s*$/.exec(el.textContent || ''); if (!m) return;
+      const txt = (+m[1]) + ':' + m[2].padStart(2, '0') + '.' + m[3].padEnd(2, '0').slice(0, 2);
+      busy = true;
+      if (txt.length !== spans.length || !spans.every(sp => sp.parentNode === el)) {   // estrutura mudou: recria os <span> (raro)
+        el.textContent = ''; spans = []; lastTxt = '';
+        for (const ch of txt) { const sp = document.createElement('span'); sp.className = /\d/.test(ch) ? 'd' : 's'; el.appendChild(sp); spans.push(sp); }
+      }
+      for (let i = 0; i < txt.length; i++) if (txt[i] !== lastTxt[i]) spans[i].textContent = txt[i];   // só mexe nos dígitos que mudaram
+      lastTxt = txt; busy = false;
+    };
+    new MutationObserver(conv).observe(el, { childList: true, characterData: true, subtree: true }); conv();
+  })();
+  // ---------------- números do HUD (posição, contagem): roxo-escuro vira cinza ----------------
+  // Os números grandes são desenhados pelo ui.js (SVG/imagem) com contorno roxo-escuro fixo no desenho.
+  // Aqui, sempre que o número é redesenhado, trocamos qualquer cor roxo-escura dele por cinza escuro.
+  const HUD_GRAY = [31, 31, 33];
+  const parseCol = v => {
+    v = String(v || '').trim().toLowerCase(); let m;
+    if ((m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})?$/.exec(v))) return { r: parseInt(m[1], 16), g: parseInt(m[2], 16), b: parseInt(m[3], 16), a: m[4] ? parseInt(m[4], 16) / 255 : 1 };
+    if ((m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/.exec(v))) return { r: parseInt(m[1] + m[1], 16), g: parseInt(m[2] + m[2], 16), b: parseInt(m[3] + m[3], 16), a: 1 };
+    if ((m = /^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)(?:[\s,\/]+([\d.]+))?/.exec(v))) return { r: +m[1], g: +m[2], b: +m[3], a: m[4] == null ? 1 : +m[4] };
+    return null;
+  };
+  const inkPurple = p => p && Math.max(p.r, p.g, p.b) < 150 && p.b - p.g > 12 && p.b >= p.r;
+  const grayOf = p => 'rgba(' + HUD_GRAY.join(',') + ',' + p.a + ')';
+  const grayHudNumbers = root => {
+    if (!root) return;
+    const els = [root].concat(Array.from(root.querySelectorAll ? root.querySelectorAll('*') : []));
+    els.forEach(el => {
+      ['stroke', 'fill', 'flood-color', 'stop-color', 'color'].forEach(a => { const v = el.getAttribute && el.getAttribute(a), p = parseCol(v); if (inkPurple(p)) el.setAttribute(a, grayOf(p)); });
+      if (el.style) ['stroke', 'fill', 'floodColor', 'stopColor', 'color', 'webkitTextStrokeColor'].forEach(a => { const p = parseCol(el.style[a]); if (inkPurple(p)) el.style[a] = grayOf(p); });
+      if (el.tagName === 'IMG' && /^data:image\/svg\+xml/i.test(el.src || '') && !el.dataset.grayed) {   // número entregue como imagem SVG embutida
+        try {
+          const src = el.src, b64 = /;base64,/i.test(src), raw = src.slice(src.indexOf(',') + 1);
+          let txt = b64 ? atob(raw) : decodeURIComponent(raw);
+          const out = txt.replace(/#([0-9a-f]{6})\b/gi, (all, h) => inkPurple(parseCol('#' + h)) ? '#1f1f21' : all);
+          if (out !== txt) { el.dataset.grayed = '1'; el.src = 'data:image/svg+xml;' + (b64 ? 'base64,' + btoa(out) : 'charset=utf-8,' + encodeURIComponent(out)); }
+        } catch (e) { }
+      }
+    });
+  };
+  ['pos', 'cdnum'].forEach(id => {
+    const el = $(id); if (!el) return;
+    grayHudNumbers(el);
+    new MutationObserver(list => list.forEach(r => { r.addedNodes.forEach(n => { if (n.nodeType === 1) grayHudNumbers(n); }); if (r.target !== el) grayHudNumbers(r.target.nodeType === 1 ? r.target : null); })).observe(el, { childList: true, subtree: true });
+  });
   window.__kart = { Game, Env, Showroom, Intro, renderer, camera, boot };
 })();
