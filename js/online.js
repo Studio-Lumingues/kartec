@@ -86,7 +86,7 @@
       if (!list.length) { box.innerHTML = '<p class="empty">Nenhuma sala aberta. Crie a sua na aba ao lado!</p>'; return; }
       list.forEach(r => {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'roomItem' + (this.selected === r.id ? ' on' : '') + (r.state !== 'lobby' ? ' busy' : '');
-        b.innerHTML = '<span class="lock">🔒</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(CFG.TRACKS[r.track] ? CFG.TRACKS[r.track].name : '') + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (r.state !== 'lobby' ? ' · correndo' : '') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span><code>' + r.id + '</code>';
+        b.innerHTML = '<span class="lock">' + Icon.svg('lock') + '</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(CFG.TRACKS[r.track] ? CFG.TRACKS[r.track].name : '') + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (r.state !== 'lobby' ? ' · correndo' : '') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span><code>' + r.id + '</code>';
         b.addEventListener('click', () => { this.selected = r.id; $('onCode').value = r.id; $('onPass').value = ''; $('onPass').focus(); box.querySelectorAll('.roomItem').forEach(x => x.classList.toggle('on', x === b)); });
         box.appendChild(b);
       });
@@ -118,9 +118,9 @@
       r.players.forEach(p => {
         const li = document.createElement('li'); li.className = (p.id === Net.id ? 'me ' : '') + (p.ready || p.id === r.host ? 'ready' : '');
         li.innerHTML = '<i style="background:' + esc(p.spec.color) + '"></i><span class="pn">' + esc(p.name) + (p.id === Net.id ? ' <small>(você)</small>' : '') + '</span>' +
-          (p.id === r.host ? '<span class="tag host">👑 anfitrião</span>' : '<span class="tag ' + (p.ready ? 'ok' : '') + '">' + (p.ready ? '✔ pronto' : 'esperando') + '</span>') +
+          (p.id === r.host ? '<span class="tag host">' + Icon.svg('crown') + ' anfitrião</span>' : '<span class="tag ' + (p.ready ? 'ok' : '') + '">' + (p.ready ? Icon.svg('check') + ' pronto' : 'esperando') + '</span>') +
           '<span class="ping">' + (p.away ? 'reconectando…' : (p.ping ? p.ping + ' ms' : '')) + '</span>';
-        if (host && p.id !== Net.id) { const k = document.createElement('button'); k.type = 'button'; k.className = 'kick'; k.textContent = '✕'; k.title = 'Remover ' + p.name; k.addEventListener('click', () => Net.send({ t: 'kick', id: p.id })); li.appendChild(k); }
+        if (host && p.id !== Net.id) { const k = document.createElement('button'); k.type = 'button'; k.className = 'kick'; k.innerHTML = Icon.svg('close'); k.title = 'Remover ' + p.name; k.addEventListener('click', () => Net.send({ t: 'kick', id: p.id })); li.appendChild(k); }
         ul.appendChild(li);
       });
       const free = r.max - r.players.length; if (free > 0) { const li = document.createElement('li'); li.className = 'free'; li.innerHTML = '<i></i><span class="pn">' + free + (free > 1 ? ' vagas livres' : ' vaga livre') + '</span>'; ul.appendChild(li); }

@@ -19,3 +19,14 @@ cheer
   (via https://github.com/iamrequest/disco-queen-dancing-fever)
 
 Conversões: mono, OGG Vorbis e MP3 (para o Safari), sem outras alterações.
+
+kart-engine  (motor dos karts)
+  "Go Kart Engine Medium Speed 02" — arquivo fornecido pelo dono do jogo (prévia da biblioteca Soundstripe).
+  Cortado no trecho estável e emendado em laço. ATENÇÃO: prévias de bibliotecas pagas normalmente NÃO
+  liberam uso publicado; confira a licença antes de colocar o jogo no ar.
+race-start  (som da contagem 3-2-1-VAI)
+  "Mario Kart Race Start" — arquivo fornecido pelo dono do jogo. É um som da Nintendo (protegido por direitos
+  autorais); para publicar o jogo, troque por um som próprio ou licenciado. Para trocar, basta substituir este
+  som no pacote: o jogo corta os 3 bipes e o "vai" pelos tempos definidos em audio.js (COUNT_CUTS).
+
+Fonte dos títulos e números: Titan One — Rodrigo Fuenzalida — SIL Open Font License 1.1 (assets/fonts/TitanOne-OFL.txt)

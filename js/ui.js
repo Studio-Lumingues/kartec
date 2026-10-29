@@ -275,8 +275,17 @@
     },
     // ---------- carregamento e abertura ----------
     bootProgress(p, note) { $('bootBar').style.width = Math.round(p * 100) + '%'; if (note) $('bootNote').textContent = note; },
+    // menu: os botões começam logo abaixo da logo e, se a tela for baixa, encolhem para caber (nunca ficam por baixo dela)
+    layoutMenu() {
+      const nav = document.querySelector('#menu .mainNav'), brand = $('brand'); if (!nav || !brand) return;
+      const mobile = innerWidth <= 860, bw = brand.offsetWidth, top = brand.offsetTop + bw * (mobile ? 0.36 : 0.37) + 10;
+      nav.style.transform = ''; nav.style.top = 'auto'; nav.style.bottom = '';
+      const h = nav.offsetHeight, bottomGap = mobile ? 18 : 44, avail = innerHeight - top - bottomGap;
+      if (h > avail) { const s = Math.max(0.62, avail / h); nav.style.top = top + 'px'; nav.style.bottom = 'auto'; nav.style.transformOrigin = mobile ? 'top center' : 'top left'; nav.style.transform = (mobile ? 'translateX(-50%) ' : '') + 'scale(' + s.toFixed(3) + ')'; }
+    },
     introPhase(ph) {   // 'film' | 'logo'
       document.body.classList.toggle('logoPhase', ph === 'logo'); document.body.classList.toggle('film', ph === 'film');
+      if (ph === 'logo') { const c = document.querySelector('body > canvas'); if (c) c.style.filter = 'blur(10px) brightness(1.12)'; if (window.Logo) Logo.enter(); }
       if (ph === 'film') this.introBlur(0);
     },
     introBlur(k) { const c = document.querySelector('body > canvas'); if (c) c.style.filter = k > 0.001 ? 'blur(' + (k * 14).toFixed(1) + 'px) brightness(' + (1 + k * 0.5).toFixed(2) + ')' : ''; $('introFlash').style.opacity = (k * 0.7).toFixed(2); },
@@ -293,9 +302,9 @@
       const prev = document.body.dataset.screen;
       document.body.dataset.screen = name;
       SCREENS.forEach(n => { const e = $(n === 'round' ? 'roundUI' : n === 'podium' ? 'podiumUI' : n); if (e && n !== 'race') e.hidden = n !== name; });
-      if (name !== 'intro') { document.body.classList.remove('film', 'logoPhase'); if (prev === 'intro') this.introBlur(0); }
+      if (name !== 'intro') { document.body.classList.remove('film', 'logoPhase'); if (prev === 'intro') { if (window.Logo && Logo.exit(() => this.introBlur(0))) { } else this.introBlur(0); } }
       if (name !== 'menu' && this.modal) this.closeModal(true);
-      if (name === 'menu') { this.refreshTracks();
+      if (name === 'menu') { this.refreshTracks(); this.layoutMenu();
         // entrada animada dos botões só ao chegar no menu; a classe sai no fim -> nada reinicia depois
         if (prev !== 'menu') { const nav = document.querySelector('#menu .mainNav'); if (nav) { nav.classList.remove('enter'); void nav.offsetWidth; nav.classList.add('enter'); clearTimeout(this._navT); this._navT = setTimeout(() => nav.classList.remove('enter'), 1500); } } }
     },
@@ -310,14 +319,24 @@
       const el = $('toast'); el.textContent = txt; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
       clearTimeout(this._tt); this._tt = setTimeout(() => el.classList.remove('show'), ms || 1400);
     },
+    // número grande em SVG: contorno de tinta ATRÁS do preenchimento (paint-order no SVG funciona em todos os
+    // navegadores), degradê de verdade e sombra sólida — sem os defeitos do texto HTML com background-clip
+    bigText(txt, kind) {
+      txt = String(txt); const F = 100, sw = kind === 'small' ? 12 : 16, w = Math.max(1, txt.length) * F * 0.74 + sw * 2, h = F * 1.18;
+      const fill = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', go: 'url(#gNumGo)', small: '#fff' }[kind] || 'url(#gNumGold)';
+      const esc = txt.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+      const t = (dy, f, st) => '<text x="' + (w / 2) + '" y="' + (F * 0.92 + dy) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" stroke="#2a1d4a" stroke-width="' + st + '" stroke-linejoin="round" paint-order="stroke fill" fill="' + f + '">' + esc + '</text>';
+      return '<svg class="bigNum" viewBox="0 0 ' + w.toFixed(0) + ' ' + (h + 8).toFixed(0) + '" aria-hidden="true">' + t(8, '#2a1d4a', sw) + t(0, fill, sw) +
+        '<text x="' + (w / 2) + '" y="' + (F * 0.92) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2.2" transform="translate(-2 -3)">' + esc + '</text></svg>';
+    },
     countNum(txt, go) {
-      const el = $('cdnum'); el.textContent = txt; el.className = go ? 'go' : ''; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; el.hidden = !txt;
+      const el = $('cdnum'); el.innerHTML = txt ? this.bigText(txt, go ? 'go' : 'gold') : ''; el.setAttribute('aria-label', txt || ''); el.className = go ? 'go' : ''; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; el.hidden = !txt;
     },
     cupInfo(txt) { $('cupInfo').textContent = txt || ''; },
     _f: 0, _pos: 0,
     hud(player, bot, race) {
       const pos = race.position(player);
-      if (pos !== this._pos) { const el = $('pos'); el.firstChild.textContent = pos; el.dataset.p = pos; el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); this._pos = pos; }
+      if (pos !== this._pos) { const el = $('pos'); el.firstChild.innerHTML = this.bigText(pos, pos === 1 ? 'gold' : pos === 2 ? 'silver' : 'gold'); el.dataset.p = pos; el.setAttribute('aria-label', pos + 'º lugar'); if (!el.lastChild.firstChild || el.lastChild.firstChild.nodeType === 3) el.lastChild.innerHTML = this.bigText('º', 'small'); el.classList.remove('bump'); void el.offsetWidth; el.classList.add('bump'); this._pos = pos; }
       $('lap').textContent = 'Volta ' + Math.min(CFG.LAPS, Math.max(1, player.lap)) + '/' + CFG.LAPS;
       $('time').textContent = fmt(race.time);
       // os dois canvas do HUD são redesenhados a 30 quadros/s (metade do custo, diferença invisível)
@@ -326,7 +345,9 @@
     },
     clock(dayT, nightF) {
       const hh = Math.floor(dayT * 24), mn = Math.floor((dayT * 24 - hh) * 60);
-      $('clock').textContent = (nightF > 0.5 ? '🌙 ' : '☀️ ') + String(hh).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
+      const night = nightF > 0.5, txt = String(hh).padStart(2, '0') + ':' + String(mn).padStart(2, '0');
+      if (this._clkN !== night) { this._clkN = night; $('clock').innerHTML = Icon.svg(night ? 'moon' : 'sun') + '<span></span>'; }
+      $('clock').lastChild.textContent = txt;
     },
     // tabela: rows = [{name, color, player, a, b}] com colunas configuráveis
     table(el, head, rows) {

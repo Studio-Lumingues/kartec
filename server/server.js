@@ -38,6 +38,11 @@ const gzCache = new Map();
 const server = http.createServer((req, res) => {
   try {
     let url = decodeURIComponent((req.url || '/').split('?')[0]);
+    if (url === '/deploy.json') {
+      let newest = 0; const scan = d => { try { fs.readdirSync(d, { withFileTypes: true }).forEach(e => { const p = path.join(d, e.name);
+        if (e.isDirectory()) { if (!['node_modules', 'server', 'vendor'].includes(e.name) && !e.name.startsWith('.')) scan(p); } else if (/\.(js|css|html)$/.test(e.name)) newest = Math.max(newest, fs.statSync(p).mtimeMs); }); } catch (e) { } };
+      scan(ROOT); const idx = (() => { try { return fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'); } catch (e) { return ''; } })(), m = idx.match(/main\.js\?v=(\d+)/);
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }); res.end(JSON.stringify({ deployedAt: newest ? new Date(newest).toISOString() : null, version: m ? m[1] : null })); return; }
     if (url === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, rooms: rooms.size, players: clients.size })); return; }
     if (!SERVE_STATIC) { res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Servidor online do Super Kartec. Jogo: abra o site do jogo.'); return; }
     if (url.endsWith('/')) url += 'index.html';

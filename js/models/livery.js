@@ -22,18 +22,35 @@
     const pts = [P(0, 0), P(0.45, 1.6), P(0.42, 0.35), P(1, 0), P(0.55, -1.6), P(0.58, -0.35)];
     g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill();
   }
-  // caveira estilizada (vazada: olhos, nariz e dentes ficam com a cor da lataria)
+  // caveira de desenho animado: crânio BRANCO, ossos cruzados na COR do adesivo; órbitas, nariz (coração de
+  // cabeça para baixo) e o vão entre os dentes ficam vazados (aparece a lataria). O contorno de tinta é automático.
+  // Coordenadas: unidade = tamanho s; y para cima.
   function skull(g, x, y, s) {
     g.save(); g.translate(x, y); g.scale(s, s);
+    // ossos cruzados atrás (cor do adesivo)
     g.fillStyle = RED;
-    g.beginPath(); g.ellipse(0, 0.12, 0.5, 0.46, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.moveTo(-0.3, -0.18); g.lineTo(0.3, -0.18); g.lineTo(0.26, -0.48); g.quadraticCurveTo(0, -0.58, -0.26, -0.48); g.closePath(); g.fill();
+    [-1, 1].forEach(k => {
+      g.save(); g.translate(0, -0.12); g.rotate(k * 0.68);
+      g.beginPath(); g.roundRect ? g.roundRect(-0.07, -0.72, 0.14, 1.44, 0.07) : g.rect(-0.07, -0.72, 0.14, 1.44); g.fill();
+      [[-0.075, 0.72], [0.075, 0.72], [-0.075, -0.72], [0.075, -0.72]].forEach(([bx, by]) => { g.beginPath(); g.arc(bx, by, 0.1, 0, Math.PI * 2); g.fill(); });
+      g.restore();
+    });
+    // crânio + maxilar (branco)
+    g.fillStyle = GREEN;
+    g.beginPath(); g.arc(0, 0.12, 0.47, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(-0.33, -0.05); g.lineTo(0.33, -0.05); g.lineTo(0.29, -0.4); g.quadraticCurveTo(0.27, -0.5, 0.17, -0.5); g.lineTo(-0.17, -0.5); g.quadraticCurveTo(-0.27, -0.5, -0.29, -0.4); g.closePath(); g.fill();
+    // bochechas (dá o formato de caveira de verdade em vez de um ovo)
+    [-1, 1].forEach(k => { g.beginPath(); g.ellipse(k * 0.3, -0.08, 0.15, 0.13, 0, 0, Math.PI * 2); g.fill(); });
+    // vazados
     g.globalCompositeOperation = 'destination-out';
-    [-1, 1].forEach(k => { g.beginPath(); g.ellipse(k * 0.19, 0.08, 0.14, 0.16, k * 0.25, 0, Math.PI * 2); g.fill(); });
-    g.beginPath(); g.moveTo(0, -0.06); g.lineTo(-0.06, -0.18); g.lineTo(0.06, -0.18); g.closePath(); g.fill();
-    for (let k = -2; k <= 2; k++) g.fillRect(k * 0.1 - 0.015, -0.47, 0.03, 0.2);
+    [-1, 1].forEach(k => { g.beginPath(); g.ellipse(k * 0.19, 0.06, 0.155, 0.175, k * -0.35, 0, Math.PI * 2); g.fill(); });
+    g.beginPath(); g.arc(-0.035, -0.12, 0.04, 0, Math.PI * 2); g.arc(0.035, -0.12, 0.04, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.moveTo(-0.072, -0.13); g.lineTo(0.072, -0.13); g.lineTo(0, -0.23); g.closePath(); g.fill();
+    g.fillRect(-0.24, -0.355, 0.48, 0.035);                                  // vão entre os dentes de cima e de baixo
+    [-0.12, 0, 0.12].forEach(tx => g.fillRect(tx - 0.012, -0.46, 0.024, 0.2)); // separação dos dentes
     g.globalCompositeOperation = 'source-over';
-    [-1, 1].forEach(k => { g.save(); g.translate(k * 0.5, -0.55); g.rotate(k * 0.75); g.fillRect(-0.04, -0.32, 0.08, 0.64); g.beginPath(); g.arc(0, 0.32, 0.08, 0, 7); g.arc(0, -0.32, 0.08, 0, 7); g.fill(); g.restore(); });
+    // brilho nas órbitas (branco) para dar vida
+    g.fillStyle = GREEN; [-1, 1].forEach(k => { g.beginPath(); g.arc(k * 0.19 - 0.05, 0.12, 0.035, 0, Math.PI * 2); g.fill(); });
     g.restore();
   }
   // língua de fogo (do ponto x0 para trás, ponta em x1)
@@ -52,8 +69,8 @@
   // ---------- estampas ----------
   // side(g, L, H): L = comprimento (frente em x = L), H = altura | top(g, W, L): W = largura (lado esquerdo em x = 0), L = comprimento (frente em y = L)
   const PATTERNS = [
-    { id: 'none', name: 'Sem adesivo', icon: '○' },
-    { id: 'tribal', name: 'Tribal', icon: '〰',
+    { id: 'none', name: 'Sem adesivo', icon: 'none' },
+    { id: 'tribal', name: 'Tribal', icon: 'tribal',
       side(g, L, H) {
         const y = H * 0.5;
         thorn(g, L * 0.98, y, L * 0.30, y + H * 0.08, H * 0.12, -H * 0.12);
@@ -68,7 +85,7 @@
           thorn(g, cx + s * W * 0.18, L * 0.80, cx + s * W * 0.06, L * 0.40, W * 0.05, 0);
           thorn(g, cx + s * W * 0.30, L * 0.62, cx + s * W * 0.44, L * 0.30, W * 0.04, 0); });
       } },
-    { id: 'flames', name: 'Chamas', icon: '🔥',
+    { id: 'flames', name: 'Chamas', icon: 'flames',
       side(g, L, H) {
         const y = H * 0.48, tips = [[0.42, 0.18, 0.1], [0.28, 0.13, -0.2], [0.55, 0.12, 0.25], [0.18, 0.09, 0.05], [0.62, 0.08, -0.1]];
         g.fillRect(L * 0.86, y - H * 0.26, L * 0.14, H * 0.52);
@@ -79,20 +96,20 @@
         [[0.2, 0.55, 0.08], [0.5, 0.42, 0.11], [0.8, 0.55, 0.08], [0.35, 0.62, 0.06], [0.65, 0.62, 0.06]].forEach(([x, t, w]) => {
           g.save(); g.translate(W * x, L * 0.9); g.rotate(-Math.PI / 2); flame(g, 0, 0, L * (0.9 - t), W * w, 0.1); g.restore(); });
       } },
-    { id: 'stripes', name: 'Listras de corrida', icon: '∥',
+    { id: 'stripes', name: 'Listras de corrida', icon: 'stripes',
       side(g, L, H) { g.fillRect(0, H * 0.58, L, H * 0.06); g.fillRect(0, H * 0.70, L, H * 0.03); },
       top(g, W, L) { [-1, 1].forEach(s => g.fillRect(W / 2 + s * W * 0.07 - (s < 0 ? W * 0.16 : 0), 0, W * 0.16, L)); } },
-    { id: 'stars', name: 'Estrelas', icon: '★',
+    { id: 'stars', name: 'Estrelas', icon: 'stars',
       side(g, L, H) { let s = 7; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
         for (let k = 0; k < 9; k++) { const x = L * (0.08 + 0.84 * k / 8), y = H * (0.3 + r() * 0.45), sz = H * (0.07 + r() * 0.09); star(g, x, y, sz, sz * 0.45, 5, r() * 0.6); } },
       top(g, W, L) { star(g, W / 2, L * 0.7, W * 0.2, W * 0.09, 5, 0); [-1, 1].forEach(sx => { star(g, W / 2 + sx * W * 0.3, L * 0.45, W * 0.08, W * 0.035, 5, 0.3); star(g, W / 2 + sx * W * 0.22, L * 0.25, W * 0.06, W * 0.027, 5, 0.1); }); } },
-    { id: 'skull', name: 'Caveira', icon: '☠',
+    { id: 'skull', name: 'Caveira', icon: 'skull',
       side(g, L, H) { skull(g, L * 0.5, H * 0.5, H * 0.42); },
       top(g, W, L) { skull(g, W / 2, L * 0.68, W * 0.34); } },
-    { id: 'bolt', name: 'Raios', icon: '⚡',
+    { id: 'bolt', name: 'Raios', icon: 'bolt',
       side(g, L, H) { bolt(g, L * 0.98, H * 0.58, L * 0.05, H * 0.46, H * 0.1); },
       top(g, W, L) { [-1, 1].forEach(s => bolt(g, W / 2 + s * W * 0.18, L * 0.98, W / 2 + s * W * 0.3, L * 0.15, W * 0.06)); } },
-    { id: 'checker', name: 'Quadriculado', icon: '▦',
+    { id: 'checker', name: 'Quadriculado', icon: 'checker',
       side(g, L, H) { const c = H * 0.12; for (let i = 0; i * c < L * 0.36; i++) for (let j = 0; j < 3; j++) if ((i + j) % 2 === 0) g.fillRect(L - (i + 1) * c, H * 0.5 + (j - 1.5) * c, c, c); },
       top(g, W, L) { const c = W * 0.1; for (let i = 0; i * c < W; i++) for (let j = 0; j < 4; j++) if ((i + j) % 2 === 0) g.fillRect(i * c, L * 0.78 + j * c, c, c); } }
   ];

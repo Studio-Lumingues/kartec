@@ -34,7 +34,7 @@
         s.options().forEach(o => {
           const b = el('button', 'gCard'); b.type = 'button'; b.dataset.v = o.value; b.setAttribute('aria-pressed', 'false');
           if (o.thumb) { const im = el('img'); im.alt = ''; b.appendChild(im); ctl.thumbs = (ctl.thumbs || []).concat({ im, id: o.value }); }
-          else b.appendChild(el('span', 'ico', o.icon || '•'));
+          else { const ic = el('span', 'ico'); ic.innerHTML = Icon.svg(o.icon || 'dot'); b.appendChild(ic); }
           b.appendChild(el('strong', null, o.name)); if (o.desc) b.appendChild(el('span', 'desc', o.desc));
           b.addEventListener('click', () => { Custom.set(s.id, o.value); UI.Sfx.tone(660, 990, 0.08, 'square', 0.06); });
           grid.appendChild(b); ctl.items.push(b);

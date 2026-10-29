@@ -55,10 +55,10 @@
   }
 
   const ACCESSORIES = [
-    { id: 'none', name: 'Nenhum', icon: '○' },
+    { id: 'none', name: 'Nenhum', icon: 'none' },
     // óculos de corrida estilo aviador: armação dourada em quadrado arredondado com entalhes, concha de
     // borracha atrás, lente curva espelhada (MeshPhysicalMaterial + envMap), ponte com rebites e tira de couro
-    { id: 'goggles', name: 'Óculos de corrida', icon: '🥽', build() {
+    { id: 'goggles', name: 'Óculos de corrida', icon: 'goggles', build() {
       const g = new THREE.Group();
       const gold = KartMats.std(0xd9a441, 0.2, 0.9, { sat: 0 }), rubber = KartMats.std(0x1c1a1e, 0.85, 0, { sat: 0 }), leather = KartMats.std(0x6b3f22, 0.8, 0, { sat: 0 });
       const lens = new THREE.MeshPhysicalMaterial({ color: 0x5fb8ff, metalness: 0.92, roughness: 0.06, envMap: getMirrorEnv(), envMapIntensity: 1.35, clearcoat: 1, clearcoatRoughness: 0.04 });
@@ -88,7 +88,7 @@
     // antena com estrela no topo central do capacete. Dois segmentos articulados (base -> meio -> ponta):
     // o pai de cada segmento é a junta anterior, então o balanço da base arrasta o resto (efeito chicote).
     // A física fica em PilotRig.antennaStep(); a estrela NÃO gira mais: acompanha só a haste.
-    { id: 'antenna', name: 'Antena com estrela', icon: '✦', build(color) {
+    { id: 'antenna', name: 'Antena com estrela', icon: 'antenna', build(color) {
       const g = new THREE.Group(), rodM = KartMats.std(0x30323a, 0.4, 0.5), tipM = KartMats.std(color, 0.3, 0.4, { emissive: new THREE.Color(color).multiplyScalar(0.25) });
       const base = new THREE.Group(); base.position.set(0, 0.935, 0.05); g.add(base);                      // pivô: topo central do capacete
       const socket = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), rodM); base.add(socket);
@@ -281,13 +281,13 @@
         const parse = buf => { try { new THREE.GLTFLoader().parse(buf, '', ok, fail); } catch (e) { fail(e); } };
         const viaScript = () => {
           if (window.PILOT_GLB_B64) return parse(b64ToBuffer(window.PILOT_GLB_B64));
-          const s = document.createElement('script'); s.src = 'assets/pilot.glb.js?v=202610270007'; s.async = true;
+          const s = document.createElement('script'); s.src = 'assets/pilot.glb.js?v=202610290007'; s.async = true;
           s.onload = () => window.PILOT_GLB_B64 ? parse(b64ToBuffer(window.PILOT_GLB_B64)) : fail('base64 vazio');
           s.onerror = () => fail('assets/pilot.glb.js não encontrado'); document.head.appendChild(s);
           let fake = 0; const tick = setInterval(() => { if (this.status !== 'loading') return clearInterval(tick); fake = Math.min(0.9, fake + 0.08); this.progress = fake; onProgress && onProgress(fake); }, 120);
         };
         if (location.protocol === 'file:') viaScript();
-        else new THREE.GLTFLoader().load('assets/pilot.glb?v=202610270007', ok, x => { if (x.total) { this.progress = x.loaded / x.total * 0.95; onProgress && onProgress(this.progress); } }, viaScript);
+        else new THREE.GLTFLoader().load('assets/pilot.glb?v=202610290007', ok, x => { if (x.total) { this.progress = x.loaded / x.total * 0.95; onProgress && onProgress(this.progress); } }, viaScript);
       });
       return this._p;
     },

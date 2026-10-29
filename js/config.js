@@ -16,14 +16,14 @@ window.CFG = {
     hard:   { label: 'Difícil', skill: 0.995, rubberMax: 1.10 }
   },
   // tipografia arredondada usada no jogo todo (DOM e canvas); Google Fonts com alternativas locais
-  FONT_DISPLAY: '"Fredoka", "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif',
+  FONT_DISPLAY: '"Titan One", "Fredoka", "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif',   // gordinha e cartunesca (embutida no style.css)
   FONT_UI: '"Nunito", "Trebuchet MS", Verdana, sans-serif',
   // desempenho: resolução adaptativa (baixa sozinha se o quadro passar de ~20 ms)
   PERF: { DPR_MAX: 1.5, DPR_MIN: 0.7, SHADOW_MAP: 1024, SHADOW_BOX: 45 },
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)
-  ONLINE_SERVER: 'wss://kartec.onrender.com/ws',
+  ONLINE_SERVER: '',
   COINS_ON: false,              // sistema de moedas mantido no código, desligado por enquanto
   // preenchimento de cenário (scenery.js): densidade relativa e alcance do horizonte
   FILL: { DENSITY: 1, LITE_DENSITY: 0.45, CHUNK: 300, CULL_EVERY: 0.25 },

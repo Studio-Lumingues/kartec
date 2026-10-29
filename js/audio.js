@@ -19,13 +19,15 @@
   //   src: gravação base | r0/r1: velocidade de reprodução em marcha lenta / giro máximo | gears: 0 = sem marchas
   //   hp/lp: corta graves/agudos | pf/pg: realce (Hz/dB) | sub: camada uma oitava abaixo (corpo) | drive: saturação
   const ENGINES = {
-    gt:      { name: 'Kartec GT (2 tempos, zumbido agudo)', src: 'engine-kart', r0: 2.4, r1: 5.4, gears: 0, hp: 150, lp: 8500, pf: 2300, pg: 6, sub: 0.35, drive: 1.6, vol: 0.95 },
-    classic: { name: 'Clássico (monocilíndrico rouco)',    src: 'engine-kart', r0: 1.8, r1: 4.2, gears: 0, hp: 110, lp: 4800, pf: 1250, pg: 5, sub: 0.5, drive: 2.6, vol: 1.0 },
-    muscle:  { name: 'Muscle (V8 com marchas)',           src: 'engine-car',  r0: 1.0, r1: 2.3, gears: 3, hp: 50,  lp: 6500, pf: 240,  pg: 5, sub: 0.25, drive: 1.8, vol: 1.05 },
-    cyber:   { name: 'Cyber (rotação altíssima)',         src: 'engine-kart', r0: 2.9, r1: 6.4, gears: 0, hp: 260, lp: 11000, pf: 3400, pg: 5, sub: 0.2, drive: 1.1, vol: 0.85, layer: { src: 'engine-moto', k: 0.55, g: 0.3 } },
-    offroad: { name: 'Off-Road (4x4 encorpado)',          src: 'engine-kart', r0: 1.4, r1: 3.2, gears: 0, hp: 60,  lp: 5600, pf: 520,  pg: 6, sub: 0.6, drive: 2.2, vol: 1.05 },
-    moto:    { name: 'Motoca (moto de verdade)',          src: 'engine-moto', r0: 0.8, r1: 2.05, gears: 5, hp: 90, lp: 10000, pf: 2500, pg: 3, sub: 0.15, drive: 1.2, vol: 1.0 }
+    gt:      { name: 'Kartec GT (kart de corrida, giro alto)',  src: 'kart-engine', r0: 0.72, r1: 1.42, gears: 0, hp: 120, lp: 12000, pf: 2600, pg: 3,  sub: 0.12, drive: 1.0, vol: 1.0 },
+    classic: { name: 'Clássico (kart antigo, mais rouco)',      src: 'kart-engine', r0: 0.62, r1: 1.22, gears: 0, hp: 90,  lp: 6200,  pf: 1300, pg: 4,  sub: 0.22, drive: 1.9, vol: 1.0 },
+    muscle:  { name: 'Muscle (kart envenenado, encorpado)',     src: 'kart-engine', r0: 0.55, r1: 1.12, gears: 3, hp: 55,  lp: 7500,  pf: 300,  pg: 5,  sub: 0.4,  drive: 1.6, vol: 1.05, layer: { src: 'engine-car', k: 1.7, g: 0.22 } },
+    cyber:   { name: 'Cyber (kart esportivo, agudo)',           src: 'kart-engine', r0: 0.85, r1: 1.62, gears: 0, hp: 200, lp: 14000, pf: 3600, pg: 4,  sub: 0.08, drive: 0.8, vol: 0.92 },
+    offroad: { name: 'Off-Road (kart 4x4, grave)',              src: 'kart-engine', r0: 0.52, r1: 1.05, gears: 0, hp: 50,  lp: 5600,  pf: 480,  pg: 6,  sub: 0.45, drive: 1.7, vol: 1.05 },
+    moto:    { name: 'Motoca (moto de verdade, com marchas)',   src: 'engine-moto', r0: 0.8,  r1: 2.05, gears: 5, hp: 90,  lp: 10000, pf: 2500, pg: 3,  sub: 0.15, drive: 1.2, vol: 1.0 }
   };
+  // contagem: início de cada trecho (s) no som da largada -> 3, 2, 1 e VAI tocam junto com as luzes
+  const COUNT_CUTS = [0.43, 1.43, 2.345, 3.36];
   const VOL = { master: 80, engine: 70, sfx: 80, ui: 60, amb: 50 };
   const curveCache = {};
   const driveCurve = k => curveCache[k] || (curveCache[k] = (() => { const n = 1024, c = new Float32Array(n); for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = Math.tanh(k * x) / Math.tanh(k); } return c; })());
@@ -58,7 +60,7 @@
       const fmt = ogg ? 'ogg' : 'mp3'; this.fmt = fmt;
       const go = () => this.decodeAll();
       if (window.KARTEC_AUDIO) { go(); return; }
-      const s = document.createElement('script'); s.src = 'assets/audio_' + fmt + '.js?v=202610270007'; s.async = true; s.onload = go;
+      const s = document.createElement('script'); s.src = 'assets/audio_' + fmt + '.js?v=202610290007'; s.async = true; s.onload = go;
       s.onerror = () => { console.warn('[som] não foi possível carregar assets/audio_' + fmt + '.js'); }; document.head.appendChild(s);
     },
     async decodeAll() {
@@ -162,7 +164,14 @@
     spark(level) { this.play('ui-glass_002', { vol: 0.3, rate: level > 1 ? 1.3 : 1.0 }); },
     lap() { this.play('ui-confirmation_001', { vol: 0.55 }); },
     finalLap() { this.play('ui-confirmation_004', { vol: 0.6 }); this.play('cheer', { vol: 0.25 }); },
-    count(go) { if (go) { this.play('ui-confirmation_004', { vol: 0.65 }); this.play('applause', { vol: 0.18 }); } else this.play('ui-bong_001', { vol: 0.6 }); },
+    // um trecho do som de largada por luz (o online fica sincronizado porque cada luz dispara o seu trecho)
+    count(go, step) {
+      const b = this.buf['race-start'];
+      if (b && this.ctx && this.on) { const i = go ? 3 : Math.max(0, Math.min(2, step | 0)), from = COUNT_CUTS[i], to = go ? b.duration : COUNT_CUTS[i + 1] - 0.03;
+        try { const s = this.ctx.createBufferSource(), g = this.ctx.createGain(); s.buffer = b; g.gain.value = 0.75; s.connect(g); g.connect(this.bus.sfx); s.start(this.ctx.currentTime, from, Math.max(0.05, to - from)); } catch (e) { }
+        if (go) this.play('applause', { vol: 0.15, delay: 0.3 }); return; }
+      if (go) { this.play('ui-confirmation_004', { vol: 0.65 }); this.play('applause', { vol: 0.18 }); } else this.play('ui-bong_001', { vol: 0.6 });
+    },
     wrong() { this.play('ui-error_004', { vol: 0.45 }); },
     fanfare() { this.play('cheer', { vol: 0.55 }); this.play('applause', { vol: 0.45, delay: 0.4 }); },
     tone(f0, f1, d, type, vol) {

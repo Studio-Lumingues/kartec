@@ -8,9 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610270007">
+<link rel="stylesheet" href="style.css?v=202610290007">
 </head>
 <body data-screen="boot">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <linearGradient id="gNumGold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6a8"/><stop offset=".42" stop-color="#ffd23f"/><stop offset=".78" stop-color="#ff9a1a"/><stop offset="1" stop-color="#ff5a2a"/></linearGradient>
+  <linearGradient id="gNumSilver" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#b9f4ff"/><stop offset="1" stop-color="#3dd6ff"/></linearGradient>
+  <linearGradient id="gNumGo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2ffd8"/><stop offset=".5" stop-color="#4cff6a"/><stop offset="1" stop-color="#12b84a"/></linearGradient>
+</defs></svg>
 
 <!-- ======================= Logo (SVG): placa "SUPER" vermelha + "KARTEC" dourado com contorno duplo ======================= -->
 <template id="logoTpl">
@@ -19,21 +24,21 @@
       <linearGradient id="lgGold" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="250"><stop offset="0" stop-color="#FFF4A8"/><stop offset=".38" stop-color="#FFD02E"/><stop offset=".78" stop-color="#FF9A00"/><stop offset="1" stop-color="#FF6A00"/></linearGradient>
       <linearGradient id="lgShine" gradientUnits="userSpaceOnUse" x1="0" y1="120" x2="0" y2="180"><stop offset="0" stop-color="#fff" stop-opacity=".8"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
       <linearGradient id="lgRed" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF8FA3"/><stop offset="1" stop-color="#E0305A"/></linearGradient>
-      <clipPath id="lgClip"><text x="350" y="246" font-size="150" text-anchor="middle" letter-spacing="2" class="lgText">KARTEC</text></clipPath>
+      <clipPath id="lgClip"><text x="350" y="246" font-size="138" text-anchor="middle" letter-spacing="2" class="lgText" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text></clipPath>
     </defs>
     <g transform="translate(26 0) skewX(-10)">
       <g class="lgLines" stroke="#fff" stroke-linecap="round" stroke-width="12"><line x1="0" y1="150" x2="70" y2="150"/><line x1="-18" y1="190" x2="44" y2="190"/><line x1="6" y1="230" x2="56" y2="230"/></g>
       <g class="lgPlate" transform="translate(350 72)">
         <rect x="-140" y="-40" width="280" height="80" rx="18" fill="#2A1D4A" transform="translate(0 8)"/>
         <rect x="-140" y="-40" width="280" height="80" rx="18" fill="url(#lgRed)" stroke="#2A1D4A" stroke-width="9"/>
-        <g class="lgText" font-size="62" text-anchor="middle" letter-spacing="10"><text y="22" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="10" stroke-linejoin="round" transform="translate(0 4)">SUPER</text><text y="22" fill="#fff">SUPER</text></g>
+        <g class="lgText" font-size="62" text-anchor="middle" letter-spacing="10"><text y="22" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="10" stroke-linejoin="round" transform="translate(0 4)" textLength="196" lengthAdjust="spacingAndGlyphs">SUPER</text><text y="22" fill="#fff" textLength="196" lengthAdjust="spacingAndGlyphs">SUPER</text></g>
       </g>
-      <g class="lgText lgMain" font-size="150" text-anchor="middle" letter-spacing="2">
-        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round" transform="translate(0 11)">KARTEC</text>
-        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round">KARTEC</text>
-        <text x="350" y="246" fill="#fff" stroke="#fff" stroke-width="13" stroke-linejoin="round">KARTEC</text>
-        <text x="350" y="246" fill="url(#lgGold)">KARTEC</text>
-        <text x="350" y="246" fill="url(#lgShine)">KARTEC</text>
+      <g class="lgText lgMain" font-size="138" text-anchor="middle" letter-spacing="2">
+        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round" transform="translate(0 11)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="#2A1D4A" stroke="#2A1D4A" stroke-width="32" stroke-linejoin="round" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="#fff" stroke="#fff" stroke-width="13" stroke-linejoin="round" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="url(#lgGold)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
+        <text x="350" y="246" fill="url(#lgShine)" textLength="590" lengthAdjust="spacingAndGlyphs">KARTEC</text>
       </g>
       <g clip-path="url(#lgClip)"><rect class="lgSweep" x="-120" y="100" width="70" height="170" fill="#fff" opacity=".55" transform="skewX(-20)"/></g>
     </g>
@@ -49,13 +54,15 @@
   </div>
   <div class="hudTR">
     <div id="clock" class="pill small"></div>
-    <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações" title="Configurações">⚙️</button>
-    <button id="menuBtn" class="pill btn" type="button">Menu</button>
+    <div class="hudBtns">
+      <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações" title="Configurações"><span class="ic" data-ic="gear"></span></button>
+      <button id="menuBtn" class="pill btn" type="button">Menu</button>
+    </div>
   </div>
   <canvas id="mini" width="264" height="264" aria-label="Minimapa"></canvas>
   <canvas id="speedo" width="300" height="190" aria-label="Velocímetro"></canvas>
-  <div id="pos" aria-live="polite"><b>1</b><i>º</i></div>
-  <div id="help"><kbd>W</kbd><kbd>↑</kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
+  <div id="pos" aria-live="polite"><b></b><i></i></div>
+  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
 </div>
 <div id="signal" hidden><div id="cdnum" hidden></div></div>
 <div id="toast" role="status"></div>
@@ -64,8 +71,8 @@
 
 <!-- controles de toque -->
 <div id="touch">
-  <div class="pad"><button data-k="left" aria-label="Esquerda">◀</button><button data-k="right" aria-label="Direita">▶</button></div>
-  <div class="pad"><button data-k="wheelie" class="d wh" aria-label="Grau">Grau</button><button data-k="drift" class="d" aria-label="Drift">Drift</button><button data-k="down" aria-label="Ré">▼</button><button data-k="up" class="go" aria-label="Acelerar">▲</button></div>
+  <div class="pad"><button data-k="left" aria-label="Esquerda"><span class="ic" data-ic="left"></span></button><button data-k="right" aria-label="Direita"><span class="ic" data-ic="right"></span></button></div>
+  <div class="pad"><button data-k="wheelie" class="d wh" aria-label="Grau">Grau</button><button data-k="drift" class="d" aria-label="Drift">Drift</button><button data-k="down" aria-label="Ré"><span class="ic" data-ic="down"></span></button><button data-k="up" class="go" aria-label="Acelerar"><span class="ic" data-ic="up"></span></button></div>
 </div>
 
 <!-- ======================= Carregamento ======================= -->
@@ -92,17 +99,18 @@
 <section id="menu" aria-label="Menu principal">
   <nav class="mainNav">
     <button id="btnPlay" class="cta big" type="button">Jogar <kbd>Enter</kbd></button>
-    <button id="btnOnline" class="navBtn" type="button"><span class="ico">🌐</span><span><strong>Online</strong><small>Corra com os amigos</small></span></button>
-    <button id="btnGarage" class="navBtn" type="button"><span class="ico">🔧</span><span><strong>Garagem</strong><small id="menuKart"></small></span></button>
-    <button id="btnSettings" class="navBtn" type="button"><span class="ico">⚙️</span><span><strong>Configurações</strong><small>Som e gráficos</small></span></button>
-    <button id="btnHow" class="navBtn" type="button"><span class="ico">🎮</span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
+    <button id="btnOnline" class="navBtn" type="button"><span class="ico" data-ic="online"></span><span><strong>Online</strong><small>Corra com os amigos</small></span></button>
+    <button id="btnGarage" class="navBtn" type="button"><span class="ico" data-ic="wrench"></span><span><strong>Garagem</strong><small id="menuKart"></small></span></button>
+    <button id="btnSettings" class="navBtn" type="button"><span class="ico" data-ic="gear"></span><span><strong>Configurações</strong><small>Som e gráficos</small></span></button>
+    <button id="btnNotes" class="navBtn" type="button"><span class="ico" data-ic="notes"></span><span><strong>Patch notes</strong><small>O que mudou no jogo</small></span><span id="notesBadge" class="newBadge" hidden>Novo</span></button>
+    <button id="btnHow" class="navBtn" type="button"><span class="ico" data-ic="gamepad"></span><span><strong>Como jogar</strong><small>Controles e truques</small></span></button>
   </nav>
 </section>
 
 <!-- ======================= Modal: preparar corrida ======================= -->
 <div id="setup" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="setupTitle">
   <div class="sheet">
-    <header><h2 id="setupTitle">Preparar corrida</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
+    <header><h2 id="setupTitle">Preparar corrida</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div class="block">
       <h3>Modo</h3>
       <div class="seg" id="modeSeg" role="radiogroup" aria-label="Modo de jogo">
@@ -138,7 +146,7 @@
 <!-- ======================= Modal: jogar online ======================= -->
 <div id="onlineModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="onlineTitle">
   <div class="sheet">
-    <header><h2 id="onlineTitle">Jogar online</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
+    <header><h2 id="onlineTitle">Jogar online</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div class="block onTop">
       <label class="field"><span>Seu nome</span><input id="onName" maxlength="16" autocomplete="nickname" spellcheck="false"></label>
       <p id="onStatus" class="netStatus" role="status"></p>
@@ -195,10 +203,10 @@
 <!-- ======================= Modal: configurações ======================= -->
 <div id="settingsModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="setTitle">
   <div class="sheet">
-    <header><h2 id="setTitle">Configurações</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
+    <header><h2 id="setTitle">Configurações</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
-      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true">🔊 Som</button>
-      <button type="button" data-v="gfx" role="tab" aria-selected="false">🖥️ Gráficos</button>
+      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true"><span class="ic" data-ic="sound"></span> Som</button>
+      <button type="button" data-v="gfx" role="tab" aria-selected="false"><span class="ic" data-ic="monitor"></span> Gráficos</button>
     </div>
     <div id="setVol" class="block setPane"></div>
     <div id="setGfx" class="block setPane" hidden></div>
@@ -206,12 +214,21 @@
   </div>
 </div>
 
+<!-- ======================= Modal: patch notes ======================= -->
+<div id="notesModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="notesTitle">
+  <div class="sheet">
+    <header><div><h2 id="notesTitle">Patch notes</h2><p id="notesLive" class="notesLive"></p></div><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
+    <div id="notesList" class="notesList"></div>
+    <div class="actions"><button class="cta" type="button" data-close>Bora correr</button></div>
+  </div>
+</div>
+
 <!-- ======================= Modal: como jogar ======================= -->
 <div id="howModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="howTitle">
   <div class="sheet narrow">
-    <header><h2 id="howTitle">Como jogar</h2><button class="close" type="button" data-close aria-label="Fechar">✕</button></header>
+    <header><h2 id="howTitle">Como jogar</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div id="how">
-      <p><b>Acelerar</b> W ou ↑ · <b>Ré</b> S ou ↓ · <b>Virar</b> A/D ou ←/→</p>
+      <p><b>Acelerar</b> W ou <span class="ic" data-ic="up"></span> · <b>Ré</b> S ou <span class="ic" data-ic="down"></span> · <b>Virar</b> A/D ou <span class="ic" data-ic="left"></span><span class="ic" data-ic="right"></span></p>
       <p><b>Drift</b>: segure Espaço numa curva. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo. A faísca só esquenta em <b>curva de verdade</b>: drift em reta fica com faísca branca e não dá turbo, e logo depois de um mini-turbo a próxima carga demora mais.</p>
       <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
       <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
@@ -272,31 +289,34 @@
 <script src="js/vendor/GLTFLoader.js"></script>
 <script src="js/vendor/SkeletonUtils.js"></script>
 <!-- ordem importa: cada arquivo usa o que foi definido nos anteriores -->
-<script src="js/config.js?v=202610270007"></script>
-<script src="js/audio.js?v=202610270007"></script>
-<script src="js/textures.js?v=202610270007"></script>
-<script src="js/toon.js?v=202610270007"></script>
-<script src="js/kart.js?v=202610270007"></script>
-<script src="js/models/materials.js?v=202610270007"></script>
-<script src="js/models/livery.js?v=202610270007"></script>
-<script src="js/models/pilot.js?v=202610270007"></script>
-<script src="js/models/karts.js?v=202610270007"></script>
-<script src="js/custom.js?v=202610270007"></script>
-<script src="js/ai.js?v=202610270007"></script>
-<script src="js/tracks.js?v=202610270007"></script>
-<script src="js/props.js?v=202610270007"></script>
-<script src="js/scenery.js?v=202610270007"></script>
-<script src="js/city.js?v=202610270007"></script>
-<script src="js/beach.js?v=202610270007"></script>
-<script src="js/net.js?v=202610270007"></script>
-<script src="js/online.js?v=202610270007"></script>
-<script src="js/ui.js?v=202610270007"></script>
-<script src="js/settings.js?v=202610270007"></script>
-<script src="js/showroom.js?v=202610270007"></script>
-<script src="js/garage.js?v=202610270007"></script>
-<script src="js/intro.js?v=202610270007"></script>
-<script src="js/podium.js?v=202610270007"></script>
-<script src="js/main.js?v=202610270007"></script>
-<script src="js/cursor.js?v=202610270007"></script>
+<script src="js/config.js?v=202610290007"></script>
+<script src="js/icons.js?v=202610290007"></script>
+<script src="js/audio.js?v=202610290007"></script>
+<script src="js/textures.js?v=202610290007"></script>
+<script src="js/toon.js?v=202610290007"></script>
+<script src="js/kart.js?v=202610290007"></script>
+<script src="js/models/materials.js?v=202610290007"></script>
+<script src="js/models/livery.js?v=202610290007"></script>
+<script src="js/models/pilot.js?v=202610290007"></script>
+<script src="js/models/karts.js?v=202610290007"></script>
+<script src="js/custom.js?v=202610290007"></script>
+<script src="js/ai.js?v=202610290007"></script>
+<script src="js/tracks.js?v=202610290007"></script>
+<script src="js/props.js?v=202610290007"></script>
+<script src="js/scenery.js?v=202610290007"></script>
+<script src="js/city.js?v=202610290007"></script>
+<script src="js/beach.js?v=202610290007"></script>
+<script src="js/net.js?v=202610290007"></script>
+<script src="js/online.js?v=202610290007"></script>
+<script src="js/logo.js?v=202610290007"></script>
+<script src="js/ui.js?v=202610290007"></script>
+<script src="js/settings.js?v=202610290007"></script>
+<script src="js/patchnotes.js?v=202610290007"></script>
+<script src="js/showroom.js?v=202610290007"></script>
+<script src="js/garage.js?v=202610290007"></script>
+<script src="js/intro.js?v=202610290007"></script>
+<script src="js/podium.js?v=202610290007"></script>
+<script src="js/main.js?v=202610290007"></script>
+<script src="js/cursor.js?v=202610290007"></script>
 </body>
 </html>

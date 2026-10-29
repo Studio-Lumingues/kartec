@@ -285,7 +285,7 @@
       const c = this.cd; if (this.online && this.online.startAt) c.t = 3.6 + (Net.serverNow() - this.online.startAt) / 1000; else c.t += dt;
       const marks = [[0.9, '3', 0], [1.8, '2', 0], [2.7, '1', 1], [3.6, 'VAI!', 2]];
       while (c.step < marks.length && c.t >= marks[c.step][0]) {
-        const [, txt, lamp] = marks[c.step]; UI.countNum(txt, lamp === 2); UI.Fairy.setLamp(lamp, this.track); UI.Sfx.count(lamp === 2);
+        const [, txt, lamp] = marks[c.step]; UI.countNum(txt, lamp === 2); UI.Fairy.setLamp(lamp, this.track); UI.Sfx.count(lamp === 2, c.step);
         if (c.step === 1 && Input.keys.up) c.early = true;              // acelerou cedo demais: perde a largada turbo
         if (c.step === 3) {
           this.state = 'race';
@@ -507,6 +507,8 @@
       const f = sc => sc && sc.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) o.visible = !on; }); f(this.scene); if (on) console.info('[desempenho] modo leve ativado: contornos desligados'); },
     render() {
       if (this.state === 'boot') return;
+      // logo na tela (e enquanto ela voa para o canto): o 3D fica congelado no último quadro -> a GPU fica só para a animação
+      if ((this.state === 'intro' && Intro.phase === 'logo') || (window.Logo && Logo.exiting)) return;
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
@@ -532,6 +534,7 @@
   addEventListener('wheel', e => { if (!Game.scene) return; Game.cam.zoom = Math.max(0.6, Math.min(1.8, Game.cam.zoom * (e.deltaY > 0 ? 1.08 : 0.93))); }, { passive: true });
   // Ctrl+W fecha a aba no navegador e não pode ser bloqueado: durante a corrida o navegador pede confirmação antes
   addEventListener('beforeunload', e => { if (Game.state === 'race' || Game.state === 'countdown' || Game.state === 'finish' || Game.online) { e.preventDefault(); e.returnValue = ''; } });
+  addEventListener('resize', () => { if (window.Logo) Logo.resize(); if (Game.state === 'menu') UI.layoutMenu(); });
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); Podium.resize(); Showroom.resize(); Intro.resize(); });
 
   // ---------------- inicialização (espera as fontes para os textos em canvas saírem certos) ----------------
@@ -564,17 +567,21 @@
     });
     Online.init();
     Settings.init();
+    PatchNotes.init();
     Podium.build(); Podium.precompile(renderer); Env.initFlare();
+    if (window.Logo) Logo.build();
     UI.screen('boot'); requestAnimationFrame(loop);
     // carrega o piloto 3D (com barra de progresso); só então monta a vitrine e começa a abertura
     Pilot.load(p => UI.bootProgress(p)).then(ok => {
       UI.bootProgress(1, ok ? 'Pronto!' : 'Piloto 3D indisponível — usando o reserva');
       Showroom.build(renderer); Garage.build(); UI.menuKart(Custom.spec);
+      try { renderer.compile(Showroom.scene, Showroom.cam); } catch (e) { }   // vitrine do menu pré-compilada: nada a compilar quando a logo sai
       Custom.onChange((id, v, spec) => { Showroom.apply(id, spec); UI.menuKart(spec); });
       setTimeout(() => Game.toIntro(), ok ? 150 : 900);
     });
   }
-  if (document.fonts && document.fonts.ready) { document.fonts.ready.then(boot); setTimeout(boot, 2500); } else boot();
+  // espera a fonte dos números/títulos (Titan One) para os textos desenhados em canvas já saírem com ela
+  if (document.fonts && document.fonts.load) { Promise.all([document.fonts.load('400 64px "Titan One"'), document.fonts.ready]).then(boot, boot); setTimeout(boot, 2500); } else boot();
 
   // ---------------- laço principal ----------------
   // resolução adaptativa: mede o tempo médio de quadro e ajusta o pixelRatio entre DPR_MIN e DPR_MAX
