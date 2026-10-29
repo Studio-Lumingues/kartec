@@ -33,6 +33,14 @@
       'Ícones próprios no lugar dos emojis',
       'Fonte nova, mais gordinha, nos títulos e números',
       'Caveira dos adesivos redesenhada'] },
+    { at: '2026-10-28T20:00:00-03:00', title: 'Velocímetro 3D, turbo em 3 níveis e HUD viva', items: [
+      'Velocímetro 3D novo no canto, marcando até 203 km/h; com a barra de drift cheia, as cores dele giram',
+      'Barra de turbo 3D ao lado do piloto: enche em 3 seções durante o drift',
+      'Turbo do drift em 3 níveis: cada seção cheia dá mais velocidade e dura mais (a 3ª chega a 203 km/h)',
+      'A câmera se aproxima do kart a cada seção de turbo',
+      'HUD com inclinação 3D: as placas balançam nas curvas, reagem ao turbo e flutuam nos saltos',
+      'Mais leve: cenário agrupado em blocos e o que está fora da câmera não é desenhado',
+      'Resolução se ajusta sozinha quando o jogo pesa e volta ao normal quando alivia'] },
     { at: '2026-10-27T00:07:00Z', title: 'Menu de configurações', items: [
       'Volume geral, dos motores, dos efeitos, da interface e do ambiente',
       'Gráficos: qualidade automática, baixa, média ou alta, e ajustes um a um',
