@@ -295,6 +295,7 @@
       setVisible(v) { hidden = !v; },
       setUnit(u) { unit = u; drawnKey = ''; },
       setMax(m) { maxSpeed = m; },
+      setCamera(c) { if (c !== opts.camera) { opts.camera = c; camPrevYaw = null; } },
       dispose() {
         window.removeEventListener('resize', onResize);
         scene.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach(m => m.dispose()); });
@@ -303,5 +304,95 @@
     };
   }
 
-  window.Speedo3D = { create };
+  // =====================================================================================
+  // LIGAÇÃO AUTOMÁTICA
+  // Se ninguém chamar Speedo3D.create() à mão, o velocímetro se liga sozinho:
+  //   * embrulha THREE.WebGLRenderer para desenhar logo depois de cada render da cena do jogo;
+  //   * lê a velocidade que o código antigo escreve no canvas #speedo (fillText), que continua
+  //     existindo escondido; se não achar número lá, estima pela velocidade da câmera;
+  //   * curva pela rotação da câmera, turbo pelo aumento do FOV da câmera.
+  // Chamando Speedo3D.create() no main.js, o modo automático se desliga e vale o que você mandar.
+  // =====================================================================================
+  let manual = false;
+  const autoState = new WeakMap();
+
+  // --- velocidade escrita no velocímetro 2D antigo
+  const read = { cur: [], last: [], t: 0 };
+  (function hookOldSpeedo() {
+    const c = document.getElementById('speedo');
+    if (!c || !c.getContext) return;
+    const g = c.getContext('2d'); if (!g) return;
+    const grab = (txt) => {
+      const m = /^\s*(-?\d{1,3})(?!\d)/.exec(String(txt));
+      if (!m) return;
+      const fs = /(\d+(?:\.\d+)?)px/.exec(g.font || ''), size = fs ? +fs[1] : 10;
+      read.cur.push({ n: +m[1], size }); read.t = performance.now();
+    };
+    const fill = g.fillText, stroke = g.strokeText, clear = g.clearRect;
+    g.fillText = function (txt) { grab(txt); return fill.apply(this, arguments); };
+    g.strokeText = function (txt) { grab(txt); return stroke.apply(this, arguments); };
+    g.clearRect = function () { if (read.cur.length) { read.last = read.cur; read.cur = []; } return clear.apply(this, arguments); };
+  })();
+  function readOld() {
+    if (performance.now() - read.t > 600) return null;
+    const list = read.cur.length ? read.cur : read.last;
+    if (!list.length) return null;
+    let best = list[0];
+    for (const e of list) if (e.size > best.size) best = e;
+    let max = 0;
+    for (const e of list) if (e !== best && e.size < best.size && e.n > max) max = e.n;
+    return { speed: best.n, max: max >= 40 ? max : 0 };
+  }
+
+  function autoFrame(r, scene, camera) {
+    if (manual || !camera || !camera.isPerspectiveCamera) return;
+    if (r.getRenderTarget && r.getRenderTarget()) return;           // render em textura (minimapa etc.)
+    const cvs = r.domElement;
+    if (!cvs.isConnected || cvs.clientWidth < innerWidth * 0.5) return;
+    let st = autoState.get(r);
+    if (!st) {
+      if (document.body.dataset.screen !== 'race') return;
+      st = { inst: create(r, { el: '#speedo3d', unit: 'km/h', max: 160, camera }, true), t: performance.now(), pos: new T.Vector3(), has: false, vCam: 0, fov0: camera.fov, speed: 0 };
+      autoState.set(r, st);
+    }
+    if (scene === st.inst.scene) return;
+    const now = performance.now(), dt = (now - st.t) / 1000;
+    if (dt > 0.004) {                                                // atualiza uma vez por quadro
+      st.t = now;
+      st.inst.setCamera(camera);
+      const p = new T.Vector3(); camera.getWorldPosition(p);
+      if (st.has && dt < 0.25) st.vCam = damp(st.vCam, p.distanceTo(st.pos) / dt * 3.6, 8, dt);
+      st.pos.copy(p); st.has = true;
+      if (document.body.dataset.screen !== 'race') st.fov0 = camera.fov;
+      st.fov0 = Math.min(st.fov0, camera.fov);
+      const old = readOld();
+      if (old && old.max) st.inst.setMax(old.max);
+      const speed = old ? old.speed : (st.vCam < 400 ? st.vCam : st.speed);
+      st.speed = speed;
+      st.inst.update(dt, { speed, boost: camera.fov > st.fov0 + 2.5 });
+    }
+    st.inst.render();
+  }
+
+  if (typeof T.WebGLRenderer === 'function' && !T.WebGLRenderer.__speedo3d) {
+    const Orig = T.WebGLRenderer;
+    const Wrapped = function (params) {
+      const r = new Orig(params);
+      const base = r.render;
+      let inside = false;
+      r.render = function (scene, camera) {
+        const out = base.apply(this, arguments);
+        if (!inside) { inside = true; try { autoFrame(r, scene, camera); } catch (e) { console.warn('Speedo3D:', e); } inside = false; }
+        return out;
+      };
+      return r;
+    };
+    Wrapped.prototype = Orig.prototype;
+    Wrapped.__speedo3d = true;
+    try { T.WebGLRenderer = Wrapped; } catch (e) { }
+  }
+
+  window.Speedo3D = {
+    create(renderer, opts) { manual = true; return create(renderer, opts); }
+  };
 })();
