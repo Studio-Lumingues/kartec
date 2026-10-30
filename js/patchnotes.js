@@ -11,7 +11,12 @@
 // =====================================================================================
 (function () {
   const NOTES = [
-    { at: 'auto', title: 'Olhar para trás e fim da travada ao anoitecer', items: [
+    { at: '2026-10-29T21:15:00-03:00', title: 'Tela principal nova e garagem 3D', items: [
+      'A tela principal foi toda refeita',
+      'Botões novos no menu, que reagem quando você passa o mouse',
+      'Logo nova do Kartec',
+      'Garagem 3D no menu: ao entrar na Garagem, o portão se abre e a câmera entra para mostrar o seu veículo'] },
+    { at: '2026-10-29T20:30:00-03:00', title: 'Olhar para trás e fim da travada ao anoitecer', items: [
       'Segure C para olhar para trás e ver quem vem chegando',
       'Acabou o congelamento na virada do dia para a noite',
       'Os gráficos da pista são preparados no carregamento: sem engasgos no meio da corrida',

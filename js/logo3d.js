@@ -5,7 +5,8 @@
 // tamanho e transparência), inclusive quando ela entra na abertura e desliza para o canto do menu.
 // No menu, o jogador pode arrastar a logo para os lados para girá-la (só na horizontal).
 // * O modelo vem sem cores: elas são pintadas por shader pela altura de cada camada (letras douradas em
-//   degradê, contorno branco, contorno roxo-escuro), igual às cores da logo 2D, com um brilho que passa.
+//   degradê, contorno branco, contorno cinza-escuro), igual às cores da logo 2D.
+// * Acabamento: plástico envernizado (clearcoat), com aspereza diferente em cada camada.
 // * Página aberta direto do disco (file://): usa a cópia embutida assets/karttec_logo.glb.js.
 // * Se o 3D não carregar, o KARTEC do SVG volta a aparecer.
 // =====================================================================================
@@ -14,8 +15,9 @@
     MODEL: ['assets/karttec_logo.min.glb', 'assets/karttec_logo.glb', 'assets/kartec_logo.glb'],
     EMBED: 'assets/karttec_logo.glb.js',
     BOX: { cx: 0.5, cy: 0.5, h: 0.8 },     // centro (x, y) e altura do 3D, em frações da caixa da logo (viewBox 680 x 300)
-    LAYERS: [0.193, 0.165],                // alturas (z do modelo) que separam letras / contorno branco / contorno roxo
-    SWAY: 0.16, SWEEP_EVERY: 4.5,
+    LAYERS: [0.193, 0.165],                // alturas (z do modelo) que separam letras / contorno branco / contorno cinza
+    SWAY: 0.16,
+    GLOSS: 0.75,                           // verniz (0 a 1)
     MENU_TOP: 28, MENU_GAP: 22, SUPERSAMPLE: 2,   // menu: margem do topo e espaço até os botões (px); qualidade (2 = 2x os pixels)
     DRAG: 0.012, BACK_AFTER: 2.5         // giro por pixel arrastado; segundos parado até voltar sozinha de frente (0 = não volta)
   }, (window.CFG && window.CFG.LOGO3D) || {});
@@ -70,14 +72,15 @@
     const U = {
       uZ: { value: new THREE.Vector2(C.LAYERS[0], C.LAYERS[1]) }, uY: { value: new THREE.Vector2(bb.max.y - 0.04, bb.min.y + 0.06) },
       uG0: { value: lin('#FFA79A') }, uG1: { value: lin('#FF4D5E') }, uG2: { value: lin('#E8213A') }, uG3: { value: lin('#C4102B') },   // vermelho (era dourado/laranja)
-      uWhite: { value: lin('#FFFFFF') }, uInk: { value: lin('#2A1D4A') }, uSweep: { value: -9 }, uSelf: { value: 0.22 }
+      uWhite: { value: lin('#FFFFFF') }, uInk: { value: lin('#2B2B2E') }, uSelf: { value: 0.22 }
     };
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.38, metalness: 0.0 });
+    const mat = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.38, metalness: 0.0,
+      clearcoat: C.GLOSS, clearcoatRoughness: 0.14 });
     mat.onBeforeCompile = sh => {
       Object.assign(sh.uniforms, U);
       sh.vertexShader = 'varying vec3 vLP;\nvarying vec3 vLN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvLP = position; vLN = normal;');
       sh.fragmentShader = ['varying vec3 vLP;', 'varying vec3 vLN;', 'uniform vec2 uZ;', 'uniform vec2 uY;', 'uniform vec3 uG0;', 'uniform vec3 uG1;', 'uniform vec3 uG2;', 'uniform vec3 uG3;',
-        'uniform vec3 uWhite;', 'uniform vec3 uInk;', 'uniform float uSweep;', 'uniform float uSelf;', ''].join('\n') +
+        'uniform vec3 uWhite;', 'uniform vec3 uInk;', 'uniform float uSelf;', ''].join('\n') +
         sh.fragmentShader.replace('#include <map_fragment>', [
           '#include <map_fragment>',
           'vec3 ln = normalize(vLN); vec3 col; float face = smoothstep(0.55, 0.8, abs(ln.z)); float az = abs(vLP.z);',   // frente e verso iguais
@@ -85,18 +88,20 @@
           'float t = clamp((uY.x - vLP.y) / (uY.x - uY.y), 0.0, 1.0);',
           'vec3 gold = t < 0.38 ? mix(uG0, uG1, t / 0.38) : t < 0.78 ? mix(uG1, uG2, (t - 0.38) / 0.4) : mix(uG2, uG3, (t - 0.78) / 0.22);',
           'gold = mix(uG3 * 0.8, gold, face);',                                     // lateral das letras: vermelho mais escuro
-          'float sw = exp(-pow((vLP.x + vLP.y * 0.45 - uSweep) / 0.07, 2.0));',     // brilho que atravessa as letras
-          'gold = mix(gold, uWhite, sw * 0.7 * face);',
-          'vec3 white = mix(uWhite * 0.82, uWhite, face);',
-          'col = mix(uInk, white, smoothstep(uZ.y - 0.004, uZ.y + 0.004, az));',
-          'col = mix(col, gold, smoothstep(uZ.x - 0.004, uZ.x + 0.004, az));',
+          'vec3 white = mix(uWhite * 0.8, uWhite * 0.97, face);',                    // branco levemente abaixo de 1: o verniz não "estoura"
+          'vec3 ink = uInk * mix(0.75, 1.25, clamp((vLP.y - uY.y) / (uY.x - uY.y), 0.0, 1.0));',   // cinza com leve degradê (mais claro em cima)
+          'ink = mix(ink * 0.7, ink, face);',
+          'float wW = smoothstep(uZ.y - 0.004, uZ.y + 0.004, az), wG = smoothstep(uZ.x - 0.004, uZ.x + 0.004, az);',
+          'col = mix(mix(ink, white, wW), gold, wG);',
           'diffuseColor.rgb = col;'].join('\n'))
+        // aspereza por camada: letras mais lisas, contorno cinza mais fosco
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n\troughnessFactor = mix(mix(0.55, 0.36, wW), 0.26, wG);')
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * uSelf;');
     };
     mat.customProgramCacheKey = () => 'kartec-logo3d';
 
     const scene = new THREE.Scene();
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x8f84d8, 0.6));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x8a8a8e, 0.6));
     const key = new THREE.DirectionalLight(0xffffff, 0.85); key.position.set(-2, 3, 5); scene.add(key);
     const rim = new THREE.DirectionalLight(0xbfd8ff, 0.35); rim.position.set(3, -1, 2); scene.add(rim);
     const pivot = new THREE.Group(); scene.add(pivot);
@@ -114,7 +119,7 @@
 
     const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
     const box = { x: 0, y: 0, w: 0, ok: false, still: 0 };
-    let bufW = 0, bufH = 0, last = performance.now(), wasPhase = false, intro = -1, sweepT = 1.2, sweepX = -9;
+    let bufW = 0, bufH = 0, last = performance.now(), wasPhase = false, intro = -1;
 
     // elemento da logo 2D que está aparecendo (o SVG ou a versão rasterizada do logo.js)
     const target = brand => {
@@ -189,9 +194,6 @@
       const calm = drag.on ? 0 : Math.min(1, Math.max(0, drag.idle - 0.5));   // balanço automático só quando ninguém mexe
       if (!reduce) { ry += Math.sin(t * 0.7) * C.SWAY * calm; rx = Math.sin(t * 0.9 + 1) * C.SWAY * 0.35 * calm; }
       pivot.rotation.set(rx, ry, 0); pivot.scale.setScalar(s);
-      // brilho que passa pelas letras de tempos em tempos
-      sweepT -= dt; if (sweepT <= 0) { sweepT = C.SWEEP_EVERY; sweepX = bb.min.x - 0.5; }
-      if (sweepX < bb.max.x + 0.6) sweepX += dt * 2.6; U.uSweep.value = sweepX;
       renderer.render(scene, cam);
     }
     requestAnimationFrame(frame);

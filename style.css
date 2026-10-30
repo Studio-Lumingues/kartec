@@ -752,3 +752,39 @@ body { -webkit-touch-callout: none; }
 @media (prefers-reduced-motion: reduce) {
   #menu .mainNav, #menu .mainNav > button, #menu .mainNav > button > *, #menu .mainNav > .cta::before { transition: none; }
 }
+
+/* =====================================================================================
+   MENU PRINCIPAL — interação ao passar o mouse (ou focar pelo teclado)
+   * o botão sobe um pouco e a sombra cresce; ao clicar ele "afunda"
+   * uma aba colorida desliza para dentro pela borda direita (uma cor por opção)
+   * o texto anda um pouquinho para a direita (o ícone fica parado)
+   * usa "translate"/"rotate" (propriedades próprias), sem mexer no transform nem no tamanho:
+     o layout não se desloca e a logo 3D, que segue a posição do menu, não pula
+   ===================================================================================== */
+#menu .mainNav > button { --accent: #E8213A; translate: 0 0; transition: padding var(--t) var(--ease), box-shadow var(--t) var(--ease), translate var(--t) var(--ease); }
+#menu #btnOnline   { --accent: #2F9BFF; }
+#menu #btnGarage   { --accent: #FFC21A; }
+#menu #btnSettings { --accent: #3CC46A; }
+#menu #btnNotes    { --accent: #FF8A1F; }
+#menu #btnHow      { --accent: #19C2C2; }
+
+/* aba colorida na borda direita */
+#menu .mainNav > button::after {
+  content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 12px; pointer-events: none;
+  background: var(--accent); border-left: 3px solid var(--ink); border-radius: 0 calc(var(--btn-r) - 4px) calc(var(--btn-r) - 4px) 0;
+  transform: scaleX(0); transform-origin: right center; transition: transform var(--t) var(--ease);
+}
+
+#menu .mainNav > button:hover, #menu .mainNav > button:focus-visible { translate: 0 -3px; box-shadow: 0 9px 0 var(--ink); }
+#menu .mainNav > button:hover::after, #menu .mainNav > button:focus-visible::after { transform: scaleX(1); }
+#menu .mainNav > button:hover > span:not(.ico):not(.newBadge),
+#menu .mainNav > button:focus-visible > span:not(.ico):not(.newBadge) { transform: translateX(6px); }
+#menu .mainNav > .cta:hover > kbd, #menu .mainNav > .cta:focus-visible > kbd { transform: translateX(-14px) scale(1.06); }   /* sai da frente da aba */
+#menu .mainNav > button:active { translate: 0 3px; box-shadow: 0 2px 0 var(--ink); transition-duration: .06s; }
+
+@media (prefers-reduced-motion: reduce) {
+  #menu .mainNav > button:hover, #menu .mainNav > button:focus-visible, #menu .mainNav > button:active { translate: none; }
+  #menu .mainNav > button:hover > span:not(.ico):not(.newBadge), #menu .mainNav > button:focus-visible > span:not(.ico):not(.newBadge),
+  #menu .mainNav > .cta:hover > kbd, #menu .mainNav > .cta:focus-visible > kbd { transform: none; }
+  #menu .mainNav > button::after { transition: none; }
+}
