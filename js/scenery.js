@@ -70,7 +70,8 @@
     build(tr, def, root, opts) {
       opts = opts || {};
       const F = CFG.FILL, dens = opts.density || F.DENSITY, CH = F.CHUNK, W = tr.W, far = (def.fogFar || 820) - 40;
-      let seed = 1234 + def.id.length * 77;   // mesma semente de antes: o cenário do Circuito Clássico continua idêntico const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      // mesma semente de antes: o cenário do Circuito Clássico continua idêntico
+      let seed = 1234 + def.id.length * 77; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
       const dist = trackIndex(tr, 60), blocked = circleIndex(tr.blockers.concat(tr.obstacles.map(o => ({ x: o.x, z: o.z, r: o.r + 2 }))), 80);
       const S0 = tr.S[tr.startIdx];
       let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; tr.S.forEach(p => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });

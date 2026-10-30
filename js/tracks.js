@@ -9,7 +9,6 @@
   let N = 500;                    // nós por volta: vem de def.N (config); definido em layout() e build()
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
-  const sm = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
 
   // ---------------- traçado ----------------
   const layoutCache = {};
