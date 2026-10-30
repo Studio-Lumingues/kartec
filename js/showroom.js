@@ -28,10 +28,12 @@
     // câmera da Garagem (coordenadas do modelo: metros, origem no centro do piso, porta em +z)
     // câmera DE FRENTE: chega reta pelo meio do portão e para na frente do veículo, quase na altura dele
     // (x = 0.05 é o centro do veículo no modelo, então câmera e veículo ficam alinhados)
+    // Posição final = na linha do portão (o segundo print aprovado): a garagem inteira emoldurada pelos pilares de
+    // tijolo e o veículo no centro. Mais perto que isso o kart enche a tela (o kart é bem maior que a moto).
     CAM_APPROACH: [0.05, 1.0, 4.6],    // na frente do portão, enquanto ele abre
-    CAM_DOOR: [0.05, 0.85, 2.3],       // passando pela porta, ainda alinhada com o veículo
-    CAM_INSIDE: [0.05, 0.6, 1.3],      // dentro, de frente para o veículo (um pouco acima do capô)
-    CAM_FOV: 50,                       // lente menos aberta: de frente, a grande angular deformava o veículo
+    CAM_DOOR: [0.05, 0.92, 3.4],       // avançando pelo meio, alinhada com o veículo
+    CAM_INSIDE: [0.05, 0.85, 2.3],     // posição final: de frente, na entrada da garagem (3º número: menor = mais perto)
+    CAM_FOV: 46,                       // abertura da lente na posição final
     LOOK_SHIFT: 0,                      // desvio lateral do olhar (0 = veículo centralizado: não há mais painel lateral)
     LOOK_DROP: 0.08,                    // olha um pouco abaixo do centro do veículo: ele sobe levemente na tela (a doca de cores fica embaixo)
     LOOK_DROP_NARROW: 0.18,             // o mesmo no celular (tela em pé: a doca ocupa mais altura)
