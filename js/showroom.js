@@ -26,12 +26,15 @@
     FADE_SPEED: 10, CHECK_EVERY: 5,
     DOOR_TIME: 1.3,     // segundos para o portão abrir/fechar
     // câmera da Garagem (coordenadas do modelo: metros, origem no centro do piso, porta em +z)
-    CAM_APPROACH: [0.25, 1.45, 4.6],   // na frente do portão, enquanto ele abre
-    CAM_DOOR: [-0.5, 1.75, 2.0],       // passando pela porta
-    CAM_INSIDE: [-1.38, 2.12, 1.36],   // dentro, no alto do canto da frente: o veículo em 3/4, visto de cima
-    CAM_FOV: 58,                       // lente mais aberta lá dentro (a garagem é pequena)
+    // câmera DE FRENTE: chega reta pelo meio do portão e para na frente do veículo, quase na altura dele
+    // (x = 0.05 é o centro do veículo no modelo, então câmera e veículo ficam alinhados)
+    CAM_APPROACH: [0.05, 1.0, 4.6],    // na frente do portão, enquanto ele abre
+    CAM_DOOR: [0.05, 0.85, 2.3],       // passando pela porta, ainda alinhada com o veículo
+    CAM_INSIDE: [0.05, 0.6, 1.3],      // dentro, de frente para o veículo (um pouco acima do capô)
+    CAM_FOV: 50,                       // lente menos aberta: de frente, a grande angular deformava o veículo
     LOOK_SHIFT: 0,                      // desvio lateral do olhar (0 = veículo centralizado: não há mais painel lateral)
-    LOOK_DROP: 0.22,                    // olha um pouco abaixo do veículo: ele sobe na tela e libera espaço para a doca de cores
+    LOOK_DROP: 0.08,                    // olha um pouco abaixo do centro do veículo: ele sobe levemente na tela (a doca de cores fica embaixo)
+    LOOK_DROP_NARROW: 0.18,             // o mesmo no celular (tela em pé: a doca ocupa mais altura)
     SWAP_TIME: 0.75,                    // duração da troca de veículo no carrossel (s)
     SWAP_DIST: 1.35,                    // quanto o veículo desliza para fora/para dentro (no tamanho do modelo da garagem)
     ENTER_TIME: 2.6, EXIT_TIME: 1.5
@@ -173,7 +176,7 @@
       const kart = this.gw([0.05, 0.42, -0.1]), A = this.gw(GAR.CAM_APPROACH), Dp = this.gw(GAR.CAM_DOOR), F = this.gw(GAR.CAM_INSIDE);
       // olhar final: veículo centralizado e um pouco acima do meio da tela (a doca de cores fica embaixo)
       const right = new THREE.Vector3().subVectors(kart, F).cross(c.up).normalize();
-      const LF = kart.clone().addScaledVector(right, wide ? GAR.LOOK_SHIFT * G.root.scale.x : 0).add(new THREE.Vector3(0, -(wide ? GAR.LOOK_DROP : 0.35) * G.root.scale.x, 0));
+      const LF = kart.clone().addScaledVector(right, wide ? GAR.LOOK_SHIFT * G.root.scale.x : 0).add(new THREE.Vector3(0, -(wide ? GAR.LOOK_DROP : GAR.LOOK_DROP_NARROW) * G.root.scale.x, 0));
       const doorLook = this.gw([0, 1.0, 0]);
       M.t += dt;
       const P = new THREE.Vector3(), L = new THREE.Vector3();
