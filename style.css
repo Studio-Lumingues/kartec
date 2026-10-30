@@ -788,3 +788,10 @@ body { -webkit-touch-callout: none; }
   #menu .mainNav > .cta:hover > kbd, #menu .mainNav > .cta:focus-visible > kbd { transform: none; }
   #menu .mainNav > button::after { transition: none; }
 }
+
+/* ---------- Copa Kartec desativada: botão visível, acinzentado, com selo "Em breve" ---------- */
+.seg button.soon, .seg button:disabled { position: relative; background: #e4e4ec; color: #8a8ca0; border-color: #9a9cb0; box-shadow: 0 4px 0 #9a9cb0; filter: grayscale(1); cursor: not-allowed; pointer-events: none; animation: none; transform: none; }
+.seg button.soon span { color: #9a9cb0; }
+.seg button.soon strong { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.soonBadge { font: 800 11px var(--ui); font-style: normal; letter-spacing: .6px; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--ink); color: var(--white); filter: none; }
+.field select option:disabled { color: #9a9cb0; }

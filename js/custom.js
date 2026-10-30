@@ -48,7 +48,10 @@
     load() {
       let saved = null; try { saved = JSON.parse(localStorage.getItem(KEY()) || 'null'); } catch (e) { }
       this.spec = Object.assign({}, CFG.DEFAULT_SPEC, saved || {});
-      if (!KartModels.list().some(m => m.id === this.spec.model)) this.spec.model = CFG.DEFAULT_SPEC.model;
+      // kart salvo que não existe mais (Clássico, Muscle, Cyber, Off-Road foram removidos): volta para o padrão
+      // ou, se nem o padrão existir, para o primeiro modelo da lista (Kartec GT). Já grava a correção.
+      const valid = id => KartModels.list().some(m => m.id === id);
+      if (!valid(this.spec.model)) { this.spec.model = valid(CFG.DEFAULT_SPEC.model) ? CFG.DEFAULT_SPEC.model : KartModels.list()[0].id; this.save(); }
       if (!Pilot.accessories.some(x => x.id === this.spec.accessory)) this.spec.accessory = 'none';   // ex.: a bandeira do capacete foi removida
       return this.spec;
     },
@@ -64,9 +67,10 @@
     onChange(fn) { this.listeners.push(fn); },
     // aplica um atributo num modelo já montado; devolve false se o modelo precisa ser reconstruído
     applyTo(model, id) { const s = this.slot(id); if (!s || s.rebuild || !s.apply) return false; s.apply(model, this.spec[id], this.spec); return true; },
-    // visual do rival: outro modelo, cor contrastante e piloto combinando
+    // visual do rival: modelo sorteado entre os disponíveis (kart ou moto), cor contrastante e piloto combinando.
+    // Com só 2 modelos, excluir o do jogador deixaria TODOS os rivais iguais; então o sorteio usa a lista toda.
     rivalFor(spec, colorHex) {
-      const models = KartModels.list().map(m => m.id).filter(id => id !== spec.model);
+      const models = KartModels.list().map(m => m.id);
       const pats = Livery.patterns.map(p => p.id).filter(id => id !== 'none');
       const pick = a => a[Math.floor(Math.random() * a.length)];
       const decalColor = pick(CFG.DECAL_COLORS.filter(c => c.toLowerCase() !== colorHex.toLowerCase()));

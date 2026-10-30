@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610300400">
+<link rel="stylesheet" href="style.css?v=202610301200">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -73,7 +73,7 @@
   <div id="pos" aria-live="polite"><b></b><i></i></div>
   <!-- placa do piloto que está logo à frente: posição + nome, presa ao kart por uma linha (main.js: rivalTag) -->
   <div id="rivalTag" hidden aria-hidden="true"><div class="rt"><b class="rp"></b><span class="rn"></span></div></div>
-  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd> drift (enche o turbo) · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
+  <div id="help"><kbd>W</kbd><kbd><span class="ic" data-ic="up"></span></kbd> acelera · <kbd>Espaço</kbd>+<kbd>A</kbd>/<kbd>D</kbd> drift (enche o turbo) · <kbd>Ctrl</kbd> grau (moto) · <kbd>R</kbd> reinicia · <kbd>Esc</kbd> menu · <kbd>M</kbd> som · <kbd>N</kbd> horário</div>
 </div>
 <div id="signal" hidden><div id="cdnum" hidden></div></div>
 <div id="toast" role="status"></div>
@@ -125,12 +125,13 @@
     <div class="block">
       <h3>Modo</h3>
       <div class="seg" id="modeSeg" role="radiogroup" aria-label="Modo de jogo">
-        <button type="button" data-v="cup" class="on" role="radio" aria-checked="true"><strong>Copa Kartec</strong><span>3 pistas, vence o menor tempo somado</span></button>
-        <button type="button" data-v="single" role="radio" aria-checked="false"><strong>Corrida única</strong><span>Escolha uma pista</span></button>
+        <button type="button" data-v="single" class="on" role="radio" aria-checked="true"><strong>Corrida única</strong><span>Escolha uma pista</span></button>
+        <!-- Copa Kartec: temporariamente desativada (visível, acinzentada, com selo "Em breve") -->
+        <button type="button" data-v="cup" class="soon" role="radio" aria-checked="false" aria-disabled="true" disabled tabindex="-1"><strong>Copa Kartec <em class="soonBadge">Em breve</em></strong><span>3 pistas, vence o menor tempo somado</span></button>
       </div>
     </div>
     <div class="block">
-      <h3 id="trackTitle">Pistas da Copa</h3>
+      <h3 id="trackTitle">Pista</h3>
       <div id="trackList"></div>
     </div>
     <div class="row2">
@@ -180,7 +181,7 @@
       <div class="createGrid">
         <label class="field"><span>Nome da sala</span><input id="onRoomName" maxlength="24" autocomplete="off"></label>
         <label class="field"><span>Senha <small>(opcional)</small></span><input id="onRoomPass" type="password" maxlength="32" autocomplete="new-password" placeholder="Em branco = sala pública"></label>
-        <label class="field"><span>Modo</span><select id="onMode"><option value="single">Corrida única</option><option value="cup">Copa Kartec (3 pistas)</option></select></label>
+        <label class="field"><span>Modo</span><select id="onMode"><option value="single" selected>Corrida única</option><option value="cup" disabled>Copa Kartec — Em breve</option></select></label>
         <label class="field"><span>Jogadores</span><select id="onMax"></select></label>
         <label class="field" id="onTrackField"><span>Pista</span><select id="onTrack"></select></label>
         <label class="field"><span>Voltas</span><select id="onLaps"></select></label>
@@ -200,7 +201,7 @@
     </header>
     <ul id="lobbyPlayers" class="lobbyPlayers"></ul>
     <div class="lobbySettings">
-      <label class="field"><span>Modo</span><select id="lobbyMode"><option value="single">Corrida única</option><option value="cup">Copa Kartec (3 pistas)</option></select></label>
+      <label class="field"><span>Modo</span><select id="lobbyMode"><option value="single" selected>Corrida única</option><option value="cup" disabled>Copa Kartec — Em breve</option></select></label>
       <label class="field" id="lobbyTrackField"><span>Pista</span><select id="lobbyTrack"></select></label>
       <label class="field"><span>Voltas</span><select id="lobbyLaps"></select></label>
     </div>
@@ -260,7 +261,7 @@
     <header><h2 id="howTitle">Como jogar</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div id="how">
       <p><b>Acelerar</b> W ou <span class="ic" data-ic="up"></span> · <b>Ré</b> S ou <span class="ic" data-ic="down"></span> · <b>Virar</b> A/D ou <span class="ic" data-ic="left"></span><span class="ic" data-ic="right"></span></p>
-      <p><b>Drift</b>: segure Espaço numa curva. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo. A faísca só esquenta em <b>curva de verdade</b>: drift em reta fica com faísca branca e não dá turbo, e logo depois de um mini-turbo a próxima carga demora mais.</p>
+      <p><b>Drift</b>: segure <b>Espaço</b> (ou <b>Shift</b>) <b>enquanto vira</b> com A/D ou <span class="ic" data-ic="left"></span><span class="ic" data-ic="right"></span>. Sem virar, o drift não liga. Para dentro fecha o arco, para fora abre. Solte com faísca azul ou laranja para ganhar o mini-turbo; logo depois de um mini-turbo a próxima carga demora mais.</p>
       <p><b>Largada turbo</b>: acelere logo depois do “1”. Antes do “2”, perde o impulso.</p>
       <p><b>Vácuo</b>: fique colado atrás do rival por um segundo e ganhe um empurrão.</p>
       <p><b>Grau</b> (só na moto): segure <b>Ctrl</b> (ou <b>E</b>) numa reta. Empinada, a moto fica 6% mais rápida, mas vira menos e não derrapa.</p>
@@ -337,28 +338,26 @@
   check();
 })();
 </script>
-<script src="js/config.js?v=202610300100"></script>
+<script src="js/config.js?v=202610301200"></script>
 <script src="js/icons.js?v=202610300000"></script>
 <script src="js/audio.js?v=202610300000"></script>
-<script src="js/textures.js?v=202610300000"></script>
+<script src="js/textures.js?v=202610301200"></script>
 <script src="js/toon.js?v=202610300000"></script>
-<script src="js/kart.js?v=202610300000"></script>
+<script src="js/kart.js?v=202610301200"></script>
 <script src="js/models/materials.js?v=202610300000"></script>
 <script src="js/models/livery.js?v=202610300000"></script>
 <script src="js/models/pilot.js?v=202610300000"></script>
-<script src="js/models/karts.js?v=202610300000"></script>
-<script src="js/custom.js?v=202610300000"></script>
+<script src="js/models/karts.js?v=202610301200"></script>
+<script src="js/custom.js?v=202610301200"></script>
 <script src="js/ai.js?v=202610300000"></script>
-<script src="js/tracks.js?v=202610300000"></script>
-<script src="js/props.js?v=202610300000"></script>
-<script src="js/scenery.js?v=202610300000"></script>
-<script src="js/city.js?v=202610300000"></script>
-<script src="js/beach.js?v=202610300000"></script>
+<script src="js/tracks.js?v=202610301200"></script>
+<script src="js/props.js?v=202610301200"></script>
+<script src="js/scenery.js?v=202610301200"></script>
 <script src="js/net.js?v=202610300000"></script>
-<script src="js/online.js?v=202610300000"></script>
+<script src="js/online.js?v=202610301200"></script>
 <script src="js/logo.js?v=202610300000"></script>
 <script src="js/logo3d.js?v=202610300400"></script>   <!-- KARTEC da logo em 3D (assets/karttec_logo.glb) -->
-<script src="js/ui.js?v=202610300100"></script>
+<script src="js/ui.js?v=202610301200"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
 <script src="js/settings.js?v=202610300000"></script>
 <script src="js/patchnotes.js?v=202610300000"></script>
@@ -366,7 +365,7 @@
 <script src="js/garage.js?v=202610300000"></script>
 <script src="js/intro.js?v=202610300000"></script>
 <script src="js/podium.js?v=202610300000"></script>
-<script src="js/main.js?v=202610300000"></script>
+<script src="js/main.js?v=202610301200"></script>
 <script src="js/cursor.js?v=202610300000"></script>
 </body>
 </html>

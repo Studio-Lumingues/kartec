@@ -91,11 +91,7 @@
         return jit(b.map(v => Math.min(255, v * sh)), 16);
       });
     },
-    curbGray() { // meio-fio de concreto (cidade)
-      return paint(64, 128, (x, y) => { const u = x / 63, sh = 0.8 + 0.25 * Math.sin(u * Math.PI) - (y % 32 < 2 ? 0.15 : 0); const b = (Math.floor(y / 64) % 2) ? [235, 214, 60] : [210, 210, 214]; return jit(b.map(v => Math.min(255, v * sh)), 14); });
-    },
     paint() { return paint(64, 64, () => { const r = rnd(); return r < 0.07 ? [200, 200, 205] : jit([250, 250, 250], 10); }); },
-    paintYellow() { return paint(64, 64, () => { const r = rnd(); return r < 0.07 ? [200, 170, 40] : jit([250, 205, 40], 10); }); },
     dirt() {
       const w = 128, h = 128, n = fbm(w, h, 4, 3, 404), e = fbm(w, h, 8, 2, 505);
       const c = paint(w, h, (x, y, i) => {
@@ -110,17 +106,9 @@
       }
       return c;
     },
-    sandEdge() { // acostamento de areia com borda irregular (praia)
-      const w = 128, h = 128, n = fbm(w, h, 4, 3, 414), e = fbm(w, h, 8, 2, 515);
-      return paint(w, h, (x, y, i) => { const u = x / (w - 1), edge = u + (e[i] - 0.5) * 0.5; if (edge > 0.9) return [0, 0, 0, 0]; return jit(mixc([214, 182, 118], [240, 214, 152], n[i]), 20); });
-    },
     sand() {
       const S = 128, n = fbm(S, S, 4, 3, 606);
       return paint(S, S, (x, y, i) => { const rip = 0.5 + 0.5 * Math.sin((y + n[i] * 30) * 0.45); return jit(mixc([222, 190, 122], [244, 218, 158], 0.35 * rip + 0.65 * n[i]), 22); });
-    },
-    wetSand() {
-      const S = 128, n = fbm(S, S, 4, 3, 616);
-      return paint(S, S, (x, y, i) => jit(mixc([168, 140, 96], [200, 172, 122], n[i]), 14));
     },
     pebble() {
       const S = 128, c = paint(S, S, () => jit([150, 116, 70], 20)), g = c.getContext('2d');
@@ -155,19 +143,6 @@
       const w = 64, h = 128, n = fbm(w, h, 4, 3, 909);
       return paint(w, h, (x, y, i) => { const f = 0.5 + 0.5 * Math.sin(x * 0.88357 + Math.sin(y * 0.098175 + x * 0.19635) * 2.4 + n[i] * 5); const v = 110 + f * 120 + (rnd() - 0.5) * 16; return [v, v * 0.92, v * 0.8]; });
     },
-    palmBark() { // anéis do coqueiro
-      return paint(64, 64, (x, y) => { const ring = (y % 16) < 4 ? 0.62 : 0.9 + 0.1 * Math.sin(x * 0.3927); return jit([180 * ring, 140 * ring, 92 * ring], 16); });
-    },
-    palmLeaf() { // folha com nervura central e folíolos (canal alfa recorta o formato)
-      const w = 64, h = 128;
-      return paint(w, h, (x, y) => {
-        const u = (x - 31.5) / 31.5, v = y / (h - 1), half = Math.sin(v * Math.PI) * 0.95;
-        const comb = Math.abs(u) > half * (0.55 + 0.45 * Math.abs(Math.sin(y * 0.55))) ? 0 : 1;
-        if (!comb) return [0, 0, 0, 0];
-        const mid = Math.abs(u) < 0.06 ? 0.7 : 1;
-        return jit([70 * mid, 150 * mid, 52 * mid], 20);
-      });
-    },
     brick() {
       const c = cvs(64, 64), g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 64, 64); g.fillStyle = '#c9c9d4';
       for (let r = 0; r < 4; r++) { const y = r * 16, o = (r % 2) * 16; g.fillRect(0, y, 64, 2); g.fillRect(o, y, 2, 16); g.fillRect(o + 32, y, 2, 16); }
@@ -179,53 +154,15 @@
       const c = paint(S, S, (x, y, i) => { const joint = (x % 64 < 2 || y % 64 < 2) ? -38 : 0; const v = 168 + n[i] * 50 + joint; return jit([v, v, v - 4], 12); });
       return c;
     },
-    calcadao() { // calçada de pedra portuguesa em ondas pretas e brancas (estilo orla carioca)
-      const S = 128;
-      return paint(S, S, (x, y) => {
-        const wave = Math.sin((y / 32 + 0.18 * Math.sin(x / S * 6.2832 * 2)) * 6.2832);
-        const stone = ((x * 7 + y * 13) % 5 === 0) || ((x % 4 === 0) && (y % 4 === 0)) ? -26 : 0;
-        const base = wave > 0 ? [36, 36, 40] : [236, 232, 222];
-        return jit(base.map(v => Math.max(0, v + stone)), 22);
-      });
-    },
-    water() {
-      const S = 128, n = fbm(S, S, 4, 3, 1101), m = fbm(S, S, 8, 2, 1202);
-      return paint(S, S, (x, y, i) => {
-        const cau = Math.pow(1 - Math.abs(m[i] - 0.5) * 2, 6);
-        return mixc(mixc([38, 120, 196], [70, 180, 220], n[i]), [235, 250, 255], cau * 0.75);
-      });
-    },
     ripple() {
       const c = cvs(128, 128), g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 128, 128);
       g.strokeStyle = 'rgba(110,185,255,.6)'; g.lineWidth = 3;
       for (let i = 0; i < 16; i++) { const x = rnd() * 128, y = rnd() * 128, r = 6 + rnd() * 10; wrapXY(128, 128, x, y, (px, py) => { g.beginPath(); g.arc(px, py, r, 0.2, Math.PI - 0.4); g.stroke(); }); }
       return c;
     },
-    foam() {
-      const w = 128, h = 32, n = fbm(w, h, 8, 3, 1303);
-      return paint(w, h, (x, y, i) => { const v = y / (h - 1), a = Math.max(0, 1 - Math.abs(v - 0.5) * 2.2) * (0.55 + 0.45 * n[i]); return [255, 255, 255, a * 255]; });
-    },
     wood() {
       const w = 64, h = 64, n = fbm(w, h, 2, 3, 1404);
       return paint(w, h, (x, y, i) => { const plank = (y % 16) < 1 ? 0.55 : 1; const grain = 0.85 + 0.15 * Math.sin(x * 0.4 + n[i] * 9); const v = plank * grain; return jit([170 * v, 118 * v, 70 * v], 12); });
-    },
-    thatch() {
-      const w = 64, h = 64;
-      const c = paint(w, h, () => jit([196, 160, 92], 20)), g = c.getContext('2d');
-      for (let k = 0; k < 400; k++) { const x = rnd() * w, y = rnd() * h; g.strokeStyle = rnd() < 0.5 ? 'rgba(120,90,40,.6)' : 'rgba(240,210,140,.6)'; g.lineWidth = 1; wrapXY(w, h, x, y, (px, py) => { g.beginPath(); g.moveTo(px, py); g.lineTo(px + (rnd() - 0.5) * 3, py + 8); g.stroke(); }); }
-      return c;
-    },
-    roofTile() {
-      return paint(64, 64, (x, y) => { const row = Math.floor(y / 8), off = (row % 2) * 8, arc = Math.sin(((x + off) % 16) / 16 * Math.PI); const v = 0.65 + 0.35 * arc * (1 - (y % 8) / 10); return jit([196 * v, 92 * v, 52 * v], 12); });
-    },
-    tiles() { // azulejos do túnel: brancos com rejunte, faixa azul e faixa amarela na altura dos olhos
-      const S = 128;
-      return paint(S, S, (x, y) => {
-        const grout = (x % 16 < 1) || (y % 16 < 1); if (grout) return jit([120, 122, 130], 8);
-        const row = Math.floor(y / 16), base = row === 3 ? [40, 92, 200] : row === 4 ? [250, 200, 40] : [232, 230, 222];
-        const sh = 0.92 + 0.08 * Math.sin((x % 16) / 16 * Math.PI) * Math.sin((y % 16) / 16 * Math.PI);
-        return jit(base.map(v => v * sh), 10);
-      });
     },
     stripes() { // listras amarelo/preto (rampas)
       return paint(64, 64, (x, y) => (Math.floor((x + y) / 16) % 2) ? jit([30, 30, 34], 10) : jit([250, 200, 30], 10));
@@ -246,7 +183,6 @@
     tower() {
       return paint(64, 256, (x, y) => { const band = Math.floor((y + x * 0.5) / 32) % 2; const sh = 0.78 + 0.3 * Math.sin(x / 63 * Math.PI); return jit((band ? [255, 206, 26] : [38, 74, 214]).map(v => Math.min(255, v * sh)), 10); });
     },
-    lighthouse() { return paint(32, 128, (x, y) => (Math.floor(y / 32) % 2) ? jit([230, 40, 40], 10) : jit([248, 248, 248], 8)); },
     sign() {
       const c = cvs(1024, 128), g = c.getContext('2d');
       const gr = g.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#2a56e8'); gr.addColorStop(1, '#14268a'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 128);
@@ -302,19 +238,13 @@
     curb() { const c = cvs(64, 128), g = c.getContext('2d');
       [[0, '#ff4d6d', '#ff8099', '#d6304f'], [64, '#fff7ee', '#ffffff', '#e2d7cf']].forEach(([y, base, hi, lo]) => { g.fillStyle = base; g.fillRect(0, y, 64, 64); g.fillStyle = lo; g.fillRect(0, y, 10, 64); g.fillRect(54, y, 10, 64); g.fillStyle = hi; g.fillRect(22, y, 12, 64); });
       return c; },
-    curbGray() { const c = cvs(64, 128), g = c.getContext('2d');
-      [[0, '#ffd23f'], [64, '#e4e0f0']].forEach(([y, col]) => { g.fillStyle = col; g.fillRect(0, y, 64, 64); g.fillStyle = 'rgba(255,255,255,.45)'; g.fillRect(22, y, 12, 64); g.fillStyle = 'rgba(42,29,74,.18)'; g.fillRect(0, y, 8, 64); });
-      return c; },
     paint() { return flat(16, 16, '#ffffff')[0]; },
-    paintYellow() { return flat(16, 16, '#ffd23f')[0]; },
     dirt() { const c = wavy(128, 128, [226, 150, 92], [95, 214, 65], 0.86), g = c.getContext('2d');
       for (let k = 0; k < 10; k++) { g.fillStyle = rnd() < 0.5 ? '#c97f4c' : '#f0b47a'; g.beginPath(); g.arc(rnd() * 80, rnd() * 128, 2 + rnd() * 3, 0, 6.2832); g.fill(); }
       return c; },
-    sandEdge() { return wavy(128, 128, [255, 216, 138], [255, 230, 170], 0.9); },
     sand() { const S = 128, [c, g] = flat(S, S, '#ffd98a'); g.strokeStyle = '#ffe9b5'; g.lineWidth = 3; g.lineCap = 'round';
       for (let k = 0; k < 8; k++) { const x = rnd() * S, y = rnd() * S; wrapXY(S, S, x, y, (px, py) => { g.beginPath(); g.moveTo(px - 10, py); g.quadraticCurveTo(px, py - 5, px + 10, py); g.stroke(); }); }
       return c; },
-    wetSand() { return flat(16, 16, '#e8b46b')[0]; },
     pebble() { const S = 128, [c, g] = flat(S, S, '#d99b62'); const cols = ['#f2c48f', '#c7d0ff', '#ffb3c7', '#bfe9a8', '#fff1c9'];
       for (let k = 0; k < 40; k++) { const x = rnd() * S, y = rnd() * S, r = 3 + rnd() * 4, col = cols[k % cols.length]; wrapXY(S, S, x, y, (px, py) => { g.fillStyle = col; g.beginPath(); g.ellipse(px, py, r, r * 0.75, 0, 0, 6.2832); g.fill(); }); }
       return c; },
@@ -328,22 +258,15 @@
     bark() { const [c, g] = flat(32, 64, '#c0844f'); g.strokeStyle = '#9a6538'; g.lineWidth = 3; g.lineCap = 'round';
       [6, 16, 26].forEach(x => { g.beginPath(); g.moveTo(x, -4); g.quadraticCurveTo(x + 4, 32, x, 68); g.stroke(); });
       return c; },
-    palmBark() { const c = cvs(32, 32), g = c.getContext('2d'); g.fillStyle = '#d9a066'; g.fillRect(0, 0, 32, 32); g.fillStyle = '#b07a46'; g.fillRect(0, 0, 32, 7); return c; },
     concrete() { const S = 64, [c, g] = flat(S, S, '#dcd6ee'); g.fillStyle = '#c3bcdc'; g.fillRect(0, 0, S, 2); g.fillRect(0, 0, 2, S); return c; },
-    water() { const S = 128, [c, g] = flat(S, S, '#2bc8f8'); g.strokeStyle = '#ffffff'; g.lineWidth = 4; g.lineCap = 'round';
-      for (let k = 0; k < 9; k++) { const x = rnd() * S, y = rnd() * S; wrapXY(S, S, x, y, (px, py) => { g.beginPath(); g.moveTo(px - 12, py); g.quadraticCurveTo(px - 6, py - 6, px, py); g.quadraticCurveTo(px + 6, py + 6, px + 12, py); g.stroke(); }); }
-      return c; },
     ripple() { const S = 128, [c, g] = flat(S, S, '#ffffff'); g.strokeStyle = '#7fdcff'; g.lineWidth = 5; g.lineCap = 'round';
       for (let k = 0; k < 10; k++) { const x = rnd() * S, y = rnd() * S; wrapXY(S, S, x, y, (px, py) => { g.beginPath(); g.moveTo(px - 10, py); g.quadraticCurveTo(px - 5, py - 5, px, py); g.quadraticCurveTo(px + 5, py + 5, px + 10, py); g.stroke(); }); }
       return c; },
     wood() { const [c, g] = flat(64, 64, '#e2a066'); g.fillStyle = '#b8743f'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y, 64, 3); return c; },
-    thatch() { const [c, g] = flat(64, 64, '#ffcf6b'); g.strokeStyle = '#e8a83e'; g.lineWidth = 3; for (let x = 4; x < 64; x += 10) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x - 3, 64); g.stroke(); } return c; },
-    roofTile() { const [c, g] = flat(64, 64, '#ff7a5c'); g.fillStyle = '#e05a40'; for (let y = 0; y < 64; y += 16) g.fillRect(0, y + 12, 64, 4); return c; },
     stripes() { return paint(64, 64, (x, y) => (Math.floor((x + y) / 16) % 2) ? [42, 29, 74] : [255, 210, 63]); },
     startLine() { return paint(512, 64, (x, y) => { if (y < 4 || y >= 60) return [255, 255, 255]; const ix = Math.floor(x / 16), iy = Math.floor((y - 4) / 28); return ((ix + iy) % 2) ? [42, 29, 74] : [255, 255, 255]; }); },
     checker() { return paint(128, 96, (x, y) => ((Math.floor(x / 16) + Math.floor(y / 16)) % 2) ? [42, 29, 74] : [255, 255, 255]); },
     tower() { return paint(64, 256, (x, y) => (Math.floor((y + x * 0.5) / 32) % 2) ? [255, 210, 63] : [75, 110, 255]); },
-    lighthouse() { return paint(32, 128, (x, y) => (Math.floor(y / 32) % 2) ? [255, 77, 109] : [255, 255, 255]); },
     sign() {
       const c = cvs(1024, 128), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 1024, 0);
       gr.addColorStop(0, '#ff4d9a'); gr.addColorStop(0.5, '#ff7a3d'); gr.addColorStop(1, '#ffc93d'); g.fillStyle = gr; g.fillRect(0, 0, 1024, 128);
@@ -392,45 +315,6 @@
 
   // ---------- fachadas de prédio (cor + mapa de janelas acesas para a noite) ----------
   // paleta de bala para os prédios (visual cartum: cor chapada, janelas arredondadas, sem ruído)
-  const FACADES = [
-    { wall: [255, 214, 120], trim: [255, 138, 92], glass: [110, 200, 255] },   // amarelo-manteiga com laranja
-    { wall: [120, 220, 230], trim: [255, 255, 255], glass: [80, 140, 255] },   // azul-piscina
-    { wall: [255, 150, 170], trim: [255, 236, 240], glass: [120, 170, 255] },  // rosa-melancia
-    { wall: [190, 160, 255], trim: [255, 230, 120], glass: [90, 210, 255] },   // lilás com amarelo
-    { wall: [130, 225, 160], trim: [255, 255, 255], glass: [90, 160, 255] },   // menta
-    { wall: [255, 180, 110], trim: [140, 90, 220], glass: [120, 220, 255] }    // laranja com roxo
-  ];
-  // fachada: 4 colunas x 8 andares (14 m x 28 m no prédio). Janela com profundidade desenhada (sombra no topo e à
-  // esquerda do vão, caixilho claro, peitoril), reflexo no vidro, ar-condicionado em algumas janelas e, em 1/3 das
-  // fachadas, varandas com guarda-corpo. A versão "lit" acende só os vidros (mesmas posições).
-  function facade(k, lit) {
-    const F = FACADES[k % FACADES.length], w = 256, h = 512, cols = 4, rows = 8, cw = w / cols, rh = h / rows;
-    const c = cvs(w, h), g = c.getContext('2d'), rgb = a => 'rgb(' + a + ')';
-    const rr = (x, y, ww, hh, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + ww, y, x + ww, y + hh, r); g.arcTo(x + ww, y + hh, x, y + hh, r); g.arcTo(x, y + hh, x, y, r); g.arcTo(x, y, x + ww, y, r); g.closePath(); g.fill(); };
-    const balcony = k % 3 === 0;
-    if (lit) { g.fillStyle = '#000'; g.fillRect(0, 0, w, h); }
-    else { g.fillStyle = rgb(F.wall); g.fillRect(0, 0, w, h); g.fillStyle = rgb(F.trim); for (let r = 0; r <= rows; r++) g.fillRect(0, r * rh - 4, w, 8);
-      g.fillStyle = 'rgba(0,0,0,.05)'; for (let y = 0; y < h; y += 6) g.fillRect(0, y, w, 1); }                      // textura leve de reboco
-    let s = 4000 + k * 31; const r2 = () => { s = (s * 16807) % 2147483647; return s / 2147483647; };
-    for (let r = 0; r < rows; r++) for (let q = 0; q < cols; q++) {
-      const x = q * cw + 14, y = r * rh + 16, ww = cw - 28, hh = rh - 30, on = r2() < 0.45, ac = r2() < 0.22;
-      if (lit) { if (on) { g.fillStyle = r2() < 0.7 ? '#ffe08a' : '#bfe8ff'; rr(x + 4, y + 4, ww - 8, hh - 8, 6); } continue; }
-      g.fillStyle = '#2a1d4a'; rr(x - 4, y - 4, ww + 8, hh + 8, 9);                                   // contorno
-      g.fillStyle = rgb(F.trim); rr(x - 1, y - 1, ww + 2, hh + 2, 7);                                // caixilho claro
-      g.fillStyle = 'rgba(20,14,40,.55)'; g.fillRect(x + 2, y + 2, ww - 4, 7); g.fillRect(x + 2, y + 2, 6, hh - 4);   // sombra do vão (profundidade)
-      const gr = g.createLinearGradient(x, y, x, y + hh); gr.addColorStop(0, rgb(F.glass)); gr.addColorStop(1, 'rgba(255,255,255,.35)');
-      g.fillStyle = gr; rr(x + 8, y + 9, ww - 12, hh - 13, 5);
-      g.fillStyle = 'rgba(255,255,255,.7)'; g.beginPath(); g.moveTo(x + 12, y + hh - 10); g.lineTo(x + ww * 0.45, y + 12); g.lineTo(x + ww * 0.6, y + 12); g.lineTo(x + 22, y + hh - 10); g.closePath(); g.fill();   // reflexo
-      g.fillStyle = 'rgba(42,29,74,.75)'; g.fillRect(x + ww / 2 - 1.5, y + 9, 3, hh - 13);         // divisória
-      g.fillStyle = '#f4f2ee'; g.fillRect(x - 6, y + hh + 2, ww + 12, 6); g.fillStyle = '#2a1d4a'; g.fillRect(x - 6, y + hh + 8, ww + 12, 2);   // peitoril
-      if (ac) { g.fillStyle = '#2a1d4a'; g.fillRect(x + ww - 22, y + hh + 9, 26, 16); g.fillStyle = '#e8e8ec'; g.fillRect(x + ww - 20, y + hh + 11, 22, 12);
-        g.fillStyle = '#9aa0a8'; for (let i = 0; i < 4; i++) g.fillRect(x + ww - 18, y + hh + 13 + i * 2.5, 18, 1); }   // ar-condicionado
-      if (balcony && r % 2 === 0) { g.fillStyle = rgb(F.trim); g.fillRect(q * cw + 4, y + hh - 18, cw - 8, 5); g.fillStyle = '#2a1d4a';
-        for (let i = 0; i <= 8; i++) g.fillRect(q * cw + 6 + i * (cw - 14) / 8, y + hh - 14, 2, 14); g.fillRect(q * cw + 4, y + hh - 1, cw - 8, 3); }   // varanda
-    }
-    return c;
-  }
-
   // ---------- cache + fábrica de texturas ----------
   const canvases = {};
   window.TX = {
@@ -444,13 +328,6 @@
       if (opts && opts.clamp) { t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; }
       return t;
     },
-    facade(k, lit) {
-      const key = 'facade' + k + (lit ? 'L' : '');
-      if (!canvases[key]) canvases[key] = facade(k, lit);
-      const t = new THREE.CanvasTexture(canvases[key]); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = this.aniso;
-      t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; return t;
-    },
-    FACADE_COUNT: FACADES.length,
     // utilidades expostas para outros módulos (ex.: céu, minimapa)
     cvs, paint, fbm, rnd
   };

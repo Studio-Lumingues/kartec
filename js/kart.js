@@ -156,7 +156,7 @@
   // ---------- entrada do jogador: teclado e botões de toque ----------
   const Input = {
     keys: {},
-    map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift',
+    map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift', ShiftRight: 'drift',
       ControlLeft: 'wheelie', ControlRight: 'wheelie', KeyE: 'wheelie',   // Ctrl (ou E): dar grau com a moto
       KeyC: 'look' },                                                     // C (segurando): olhar para trás
     init() {
@@ -238,7 +238,10 @@
       const wet = this.wet = !this.air && tr.inWater(this.pos), wantD = racing && inp.drift && !this.finished && !((this.wheelT || 0) > 0.3);
       if (this.driftCD > 0) this.driftCD -= dt;
       if (this.mtCool > 0) this.mtCool -= dt;
-      if (!this.drifting && wantD && steer && this.speed > 14 && !wet && !(this.driftCD > 0)) { this.drifting = true; this.driftDir = Math.sign(steer); this.driftSteer = steer; this.driftT = 0; this.driftCharge = 0; this.driftRot = 0; this.hopT = 0.25; this.events('driftStart', this); }
+      // DRIFT SÓ COM ESTERÇO ATIVO: precisa da tecla de drift (Espaço/Shift) E de A/D (ou setas) pressionados no
+      // mesmo instante. Em reta, sem virar, a tecla de drift é ignorada por completo (sem pulinho, sem faísca, sem carga).
+      const steering = Math.abs(steer) > 0.5;
+      if (!this.drifting && wantD && steering && this.speed > 14 && !wet && !(this.driftCD > 0)) { this.drifting = true; this.driftDir = Math.sign(steer); this.driftSteer = steer; this.driftT = 0; this.driftCharge = 0; this.driftRot = 0; this.hopT = 0.25; this.events('driftStart', this); }
       if (this.drifting && (!wantD || this.speed < 10 || wet)) {
         // ANTI-ABUSO: o mini-turbo só sai de curva de verdade. Precisa de CARGA (que só cresce rápido quando a
         // pista curva de fato) E de GIRO real do kart. Depois de um mini-turbo há 2 s em que a carga cresce bem

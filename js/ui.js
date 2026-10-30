@@ -364,20 +364,6 @@
         }
       };
       const ang = i => { const t = track.T[((i % N) + N) % N]; return Math.atan2(-t.z, -t.x); };   // sentido da pista na tela (o mapa é espelhado em x e z)
-      // ilhas (praia): areia suave com borda clara
-      track.minimap.forEach(e => {
-        if (e.type !== 'island') return;
-        g.beginPath(); e.poly.forEach((p, k) => { const [a, b] = mm(p[0], p[1]); k ? g.lineTo(a, b) : g.moveTo(a, b); }); g.closePath();
-        g.fillStyle = 'rgba(255, 226, 150, .78)'; g.fill(); g.lineWidth = 1.6; g.strokeStyle = 'rgba(255, 255, 255, .85)'; g.stroke();
-      });
-      // trilho do trem (cidade): dormentes e trilhos
-      track.minimap.forEach(e => {
-        if (e.type !== 'rail') return;
-        const [a, b] = mm(e.a[0], e.a[1]), [c2, d] = mm(e.b[0], e.b[1]); g.lineCap = 'butt';
-        g.strokeStyle = 'rgba(40, 42, 54, .85)'; g.lineWidth = 6; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke();
-        g.setLineDash([1.6, 2.6]); g.strokeStyle = '#e9ebf3'; g.lineWidth = 4.2; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke(); g.setLineDash([]);
-        g.strokeStyle = '#e9ebf3'; g.lineWidth = .9; g.beginPath(); g.moveTo(a, b); g.lineTo(c2, d); g.stroke();
-      });
       // prédios: bloco azulado com contorno fino
       track.minimap.forEach(e => {
         if (e.type !== 'building') return; const [a, b] = mm(e.x, e.z);
@@ -391,11 +377,6 @@
       pathPts(0, N, 2); g.closePath(); g.lineWidth = 12.5; g.strokeStyle = INK; g.stroke();
       pathPts(0, N, 2); g.closePath(); g.lineWidth = 10; g.strokeStyle = EDGE; g.stroke();
       pathPts(0, N, 2); g.closePath(); g.lineWidth = 8; g.strokeStyle = ROAD; g.stroke();
-      // trecho coberto (túnel): faixa mais escura com listras
-      track.minimap.filter(e => e.type === 'tunnel').forEach(e => {
-        g.lineCap = 'butt'; pathPts(e.from, e.to, 2); g.lineWidth = 12.5; g.strokeStyle = INK; g.stroke();
-        pathPts(e.from, e.to, 2); g.lineWidth = 8; g.strokeStyle = '#8a90b4'; g.stroke();
-      });
       // turbos: bolinha rosa com anel branco
       track.pads.forEach(p => { const [a, b] = mm(p.x, p.z); g.beginPath(); g.arc(a, b, 2.8, 0, 6.2832); g.fillStyle = '#ff4ad8'; g.fill(); g.lineWidth = 1.2; g.strokeStyle = '#fff'; g.stroke(); });
       // linha de largada quadriculada: ocupa a largura toda da pista (faixa branca de 10 px, de borda a borda)
@@ -463,14 +444,12 @@
   // ================================ MENU ================================
   function trackPreview(canvas, def) {
     const L = Tracks.layout(def), g = canvas.getContext('2d'), w = canvas.width, h = canvas.height;
-    const bg = { classic: ['#8fdc6a', '#4fae3a'], city: ['#b9c0dc', '#7c84ac'], beach: ['#58c8ff', '#ffe2a0'] }[def.id];
-    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, bg[0]); gr.addColorStop(1, def.id === 'beach' ? '#1a8ae8' : bg[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    const bg = ['#8fdc6a', '#4fae3a'];
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, bg[0]); gr.addColorStop(1, bg[1]); g.fillStyle = gr; g.fillRect(0, 0, w, h);
     const b = L.bbox, s = Math.min((w - 26) / (b.x1 - b.x0), (h - 26) / (b.z1 - b.z0)), cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2;
     const P = p => [w / 2 - (p.x - cx) * s, h / 2 - (p.z - cz) * s];
     const path = () => { g.beginPath(); L.S.forEach((p, i) => { const [x, y] = P(p); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
     g.lineJoin = 'round';
-    if (def.id === 'beach') { path(); g.lineWidth = 30; g.strokeStyle = bg[1]; g.stroke(); g.fillStyle = bg[1]; g.fill(); }
-    if (def.id === 'city') { g.fillStyle = 'rgba(255,255,255,.35)'; for (let k = 0; k < 46; k++) { const x = (k * 37) % w, y = (k * 53) % h; g.fillRect(x, y, 10, 8); } }
     path(); g.lineWidth = 11; g.strokeStyle = '#2a1d4a'; g.stroke(); path(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
     const [sx, sy] = P(L.S[def.startIdx]); g.fillStyle = '#ff3d47'; g.beginPath(); g.arc(sx, sy, 6, 0, 6.2832); g.fill(); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
   }
@@ -569,7 +548,7 @@
 
   const UI = {
     Sfx, Fairy, Mini, Records, fmt, SpeedLines, HudFx,
-    trackIdx: 0, mode: 'cup', diff: 'normal', laps: CFG.LAPS,
+    trackIdx: 0, mode: 'single', diff: 'normal', laps: CFG.LAPS,   // Copa Kartec desativada ("Em breve"): começa em corrida única
     init(h) {
       this.h = h;
       SpeedLines.init();
@@ -581,6 +560,7 @@
       const tpl = $('logoTpl'); if (tpl && tpl.content) $('brand').appendChild(tpl.content.cloneNode(true));
       // modo e dificuldade (controle segmentado)
       const seg = (id, key, cb) => $(id).querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+        if (b.disabled || b.classList.contains('soon')) return;   // opção "Em breve" (Copa) não pode ser selecionada
         $(id).querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-checked', x === b ? 'true' : 'false'); });
         this[key] = b.dataset.v; cb && cb(b.dataset.v);
       }));
@@ -596,7 +576,7 @@
       CFG.TRACKS.forEach((t, i) => {
         const card = document.createElement('button'); card.type = 'button'; card.className = 'trackCard';
         const cv = document.createElement('canvas'); cv.width = 208; cv.height = 124; trackPreview(cv, t);
-        const num = document.createElement('div'); num.className = 'num'; num.textContent = String(CFG.CUP.order.indexOf(i) + 1);
+        const num = document.createElement('div'); num.className = 'num'; num.textContent = String(((CFG.CUP && CFG.CUP.order) || []).indexOf(i) + 1);
         const nm = document.createElement('strong'); nm.textContent = t.name; const ds = document.createElement('span'); ds.textContent = t.desc; const rec = document.createElement('em');
         card.append(cv, num, nm, ds, rec);
         card.addEventListener('click', () => { if (this.mode !== 'single') return; this.trackIdx = i; this.refreshTracks(); h.onTrack && h.onTrack(i); });

@@ -170,11 +170,11 @@
       this.sunGlow = glow(0xffe6a0, 380, 0.8); this.sunCore = glow(0xffffff, 110, 1); this.moonGlow = glow(0x9db4ff, 260, 0.35);
       // cordilheira distante (anel com silhueta pintada em canvas)
       const mc = TX.cvs(1024, 128), mg = mc.getContext('2d');
-      const tone = def.id === 'beach' ? ['#7fa8c8', '#5f88a8'] : def.id === 'city' ? ['#8a90b8', '#6a6e98'] : ['#8fb4d8', '#5a86b4'];
+      const tone = ['#8fb4d8', '#5a86b4'];
       [[0, 0.55, tone[0], 9], [1, 0.75, tone[1], 13]].forEach(([k, base, col, n]) => { mg.fillStyle = col; mg.beginPath(); mg.moveTo(0, 128);
         for (let x = 0; x <= 1024; x += 8) { const t = x / 1024 * Math.PI * 2; const y = 128 * base - 34 * Math.abs(Math.sin(t * n / 2 + k)) - 14 * Math.sin(t * n * 1.7 + k * 3); mg.lineTo(x, y); } mg.lineTo(1024, 128); mg.closePath(); mg.fill(); });
       const mt = new THREE.CanvasTexture(mc); mt.wrapS = THREE.RepeatWrapping; mt.repeat.x = 2;
-      this.mountains = new THREE.Mesh(new THREE.CylinderGeometry(1150, 1150, def.id === 'beach' ? 90 : 160, 48, 1, true), new THREE.MeshBasicMaterial({ map: mt, transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+      this.mountains = new THREE.Mesh(new THREE.CylinderGeometry(1150, 1150, 160, 48, 1, true), new THREE.MeshBasicMaterial({ map: mt, transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }));
       this.mountains.renderOrder = -1; scene.add(this.mountains);
       // nuvens
       this.cloudM = new THREE.SpriteMaterial({ map: (() => { const c = TX.cvs(128, 64), g = c.getContext('2d'); [[40, 40, 26], [70, 30, 30], [96, 42, 22], [60, 46, 24]].forEach(([x, y, r]) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 64); }); return new THREE.CanvasTexture(c); })(), transparent: true, fog: false, depthWrite: false, opacity: 0.9 });
@@ -211,7 +211,7 @@
       dnMix(DN.tint, e, _c4); this.mountains.material.color.copy(_c4); dnMix(DN.cloud, e, this.cloudM.color);
       const cp = camera.position;
       this.sky.position.copy(cp); this.stars.position.copy(cp); this.stars.material.opacity = this.nightF * 0.95; this.stars.rotation.y = this.dayT * 1.2;
-      this.mountains.position.set(cp.x * 0.9, (this.def.id === 'beach' ? 25 : 60), cp.z * 0.9);
+      this.mountains.position.set(cp.x * 0.9, 60, cp.z * 0.9);
       const sv = sm((e + 0.12) / 0.2); this.sunGlow.material.opacity = 0.8 * sv; this.sunCore.material.opacity = sv; dnMix(DN.sun, e, this.sunGlow.material.color);
       this.sunGlow.position.copy(cp).addScaledVector(this.SUNDIR, 1300); this.sunCore.position.copy(this.sunGlow.position);
       this.moon.position.copy(cp).addScaledVector(this.SUNDIR, -1250); this.moonGlow.position.copy(this.moon.position);
@@ -270,6 +270,8 @@
 
     // monta o mundo da pista (descarta o anterior)
     load(trackIdx, opts) {
+      // índice de pista inexistente (ex.: sala online criada por uma versão antiga, com Cidade/Praia): usa a 1ª pista
+      if (!CFG.TRACKS[trackIdx]) { console.warn('[pista] índice ' + trackIdx + ' não existe mais; usando a pista 0'); trackIdx = 0; this.curTrack = 0; }
       this.dispose();
       const def = CFG.TRACKS[trackIdx], scene = this.scene = new THREE.Scene();
       Env.build(scene, def);
@@ -391,6 +393,7 @@
     },
     newGame() {
       this.mode = UI.mode; this.diff = UI.diff; this.trackIdx = UI.trackIdx; CFG.LAPS = UI.laps;
+      if (this.mode === 'cup' && CFG.CUP_ENABLED !== true) this.mode = 'single';   // Copa Kartec: "Em breve" (desativada)
       this.spec = Object.assign({}, Custom.spec); this.botSpec = null;
       UI.transition(() => {
         if (this.mode === 'cup') { this.cup = { round: 0, results: [] }; this.startRace(CFG.CUP.order[0]); }
@@ -809,10 +812,12 @@
         return;
       }
       if (!live) { B.charge = 0; B.zT = 1; B.holding = false; return; }
-      const holding = !!inP.drift || P.drifting === true;     // segurar a tecla de drift já conta (não precisa estar curvando)
+      // a barra só enche com drift DE VERDADE (tecla de drift + esterço, ver Kart.update). Antes bastava segurar a
+      // tecla: em linha reta a barra enchia e soltava turbo sem curva nenhuma -> era o bug do "drift em reta".
+      const holding = P.drifting === true;
       B.holding = holding && Math.abs(P.speed) > CFG.PHYS.MAX * 0.15;
       if (holding) {
-        // enche sozinha enquanto a tecla está segurada: só precisa estar no chão e com velocidade
+        // enche enquanto o kart está derrapando: precisa estar no chão e com velocidade
         if (!P.air && Math.abs(P.speed) > CFG.PHYS.MAX * 0.3) {
           const before = Math.floor(B.charge);
           B.charge = Math.min(3, B.charge + dt / BOOST.SECTION);

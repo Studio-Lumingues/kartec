@@ -24,11 +24,11 @@
         inside[i] = Math.sign((b.x - a.x) * n.x + (b.z - a.z) * n.z) || 1;
         curv[i] = Math.abs(Math.atan2(Math.sin(Math.atan2(b.x, b.z) - Math.atan2(a.x, a.z)), Math.cos(Math.atan2(b.x, b.z) - Math.atan2(a.x, a.z)))) / 8;
       }
-      // trechos proibidos: largada, pontes, túnel, rampas e plataformas
+      // trechos proibidos: largada, pontes, rampas e plataformas
       const busy = new Uint8Array(N), mark = (c, r) => { for (let d = -r; d <= r; d++) busy[((c + d) % N + N) % N] = 1; };
-      mark(def.startIdx, 30); (def.bridges || []).forEach(b => mark(b, 22)); if (def.tunnel) for (let i = def.tunnel[0] - 8; i <= def.tunnel[1] + 8; i++) mark(i, 0);
+      mark(def.startIdx, 30); (def.bridges || []).forEach(b => mark(b, 22));
       (def.pads || []).forEach(p => mark(p[0], 4)); (def.ramps || []).forEach(p => mark(p[0], 8));
-      const off = def.id === 'city' ? W + 2.2 : W + 4.5, ground = (p, i) => (tr.groundAt ? tr.groundAt(p, i, 0).h : tr.roadBase);
+      const off = W + 4.5, ground = (p, i) => (tr.groundAt ? tr.groundAt(p, i, 0).h : tr.roadBase);
       const tires = [], cones = [], balloons = [];
       let cool = 0;
       for (let i = 0; i < N; i++) {
@@ -40,10 +40,10 @@
         for (let k = 1; k <= 3; k++) { const j = (i - 6 - k * 3 + N) % N; if (busy[j]) continue; const p = tr.side(j, out * (W + 1.6), 0); p.y = ground(p, j); cones.push(p); }
         cool = 26;
       }
-      // balizadores (postinhos brancos com faixa refletiva) a cada ~13 m nas pistas sem calçada: referência visual
+      // balizadores (postinhos brancos com faixa refletiva) a cada ~13 m: referência visual
       // perto da câmera que "passa voando" -> dá muito mais sensação de velocidade, a custo de 1 chamada de desenho
       const posts = [];
-      if (def.id !== 'city') for (let i = 0; i < N; i += Math.max(2, Math.round(13 / (tr.length / N)))) [-1, 1].forEach(sd => {
+      for (let i = 0; i < N; i += Math.max(2, Math.round(13 / (tr.length / N)))) [-1, 1].forEach(sd => {
         if (busy[i] || curv[i] >= 0.012) return; const p = tr.side(i, sd * (W + 6), 0); p.y = ground(p, i); posts.push(p); tr.obstacles.push({ x: p.x, z: p.z, r: 0.3 }); });   // só nas retas, além do acostamento
       for (let k = -3; k <= 3; k++) [-1, 1].forEach(sd => { const j = (def.startIdx + k * 4 + N) % N, p = tr.side(j, sd * (W + 3.2), 0); p.y = ground(p, j); balloons.push(p); });
 

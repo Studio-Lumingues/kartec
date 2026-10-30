@@ -176,7 +176,7 @@
       if (!name) return this.error('Dê um nome para a sala.');
       if (pass && pass.length < 3) return this.error('A senha precisa ter pelo menos 3 caracteres (ou deixe em branco para sala pública).');
       if (!(await this.ensure())) return; Net.send({ t: 'name', name: this.name() }); Net.send({ t: 'spec', spec: Custom.spec });
-      Net.send({ t: 'create', name, password: pass, mode: $('onMode').value, max: +$('onMax').value, track: +$('onTrack').value, laps: +$('onLaps').value });
+      Net.send({ t: 'create', name, password: pass, mode: CFG.CUP_ENABLED === true ? $('onMode').value : 'single', max: +$('onMax').value, track: +$('onTrack').value, laps: +$('onLaps').value });
     },
     // ---------- sala de espera ----------
     enterLobby(room, resumed) {

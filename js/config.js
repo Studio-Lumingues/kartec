@@ -8,8 +8,10 @@ window.CFG = {
   LAPS: 3,                       // valor atual (o modal de configuração muda antes de cada corrida)
   LAPS_OPTIONS: [1, 2, 3, 4, 5],
   STORAGE: 'super-kartec',       // prefixo das chaves salvas no navegador (recordes, garagem)
-  // Copa: as 3 pistas em sequência; vence quem somar o MENOR tempo total
-  CUP: { name: 'Copa Kartec', order: [0, 1, 2] },
+  // Copa: pistas em sequência; vence quem somar o MENOR tempo total.
+  // CUP_ENABLED = false: Copa desativada ("Em breve") no menu e no online. Para reativar: true + mais pistas em order.
+  CUP_ENABLED: false,
+  CUP: { name: 'Copa Kartec', order: [0] },
   DIFFICULTY: {
     easy:   { label: 'Fácil',   skill: 0.90,  rubberMax: 1.03 },
     normal: { label: 'Normal',  skill: 0.965, rubberMax: 1.07 },
@@ -120,6 +122,7 @@ window.CFG = {
   SKIN_TONES: ['#f6cfae', '#f2b48a', '#d99a6c', '#b87a4e', '#8a5634', '#5e3a22'],
 
   // ---------- pistas ----------
+  // Cidade Brasileira e Praia foram removidas: só o Circuito Clássico (índice 0, igual ao das salas online).
   // Curvas extras (2026): chicanas em "S" nas retas longas; cada S é curva/contracurva/curva com o mesmo
   // rumo de entrada e saída, então o circuito continua fechando exatamente.
   // segs: traçado em "tartaruga": ['S', comprimento] = reta, ['L'|'R', raio, graus] = curva (esq./dir.).
@@ -138,29 +141,6 @@ window.CFG = {
       ramps: [],
       wall: [143, 262],
       sky: { fog: 0xdbe9f8 }, fogFar: 1500   // névoa mais longe: as montanhas do horizonte aparecem em camadas
-    },
-    {
-      id: 'city', name: 'Cidade Brasileira',
-      desc: 'Avenidas em quarteirões, túnel longo sob a linha do trem, calçadão de ondas, prédios coloridos e bandeirinhas. Começa no fim da tarde.',
-      W: 19, N: 1000, startIdx: 50, time: 0.72,
-      tunnel: [550, 723],     // túnel longo: a reta inteira (~520 m) e a curva seguinte; o trem passa por cima, no meio dele
-      segs: [['S',250],['L',70,45],['R',70,90],['L',70,45],['S',7.0],['R',60,40],['L',60,80],['R',60,40],['S',26.7],['L',102.0,90],['S',15],['R',55,40],['L',55,80],['R',55,40],['S',13.6],['L',102.0,90],['S',20],['L',60,42],['R',60,84],['L',60,42],['S',10.6],['R',102.0,90],['S',10],['R',50,40],['L',50,80],['R',50,40],['S',10.2],['L',102.0,90],['S',515.8],['L',102.0,90],['S',20],['L',60,42],['R',60,84],['L',60,42],['S',10.6],['L',102.0,90],['S',70.7],['R',102.0,90],['S',8],['R',45,38],['L',45,76],['R',45,38],['S',8.7],['L',102.0,90]],
-      bridges: [],
-      pads: [[131,0],[329,6],[472,-6],[622,0],[786,5],[895,6]],
-      ramps: [],
-      wall: null,
-      sky: { fog: 0xe8c9b0 }, fogFar: 1100
-    },
-    {
-      id: 'beach', name: 'Praia',
-      desc: 'Orla à beira-mar com coqueiros, quiosques, farol e mar em volta da ilha.',
-      W: 19, N: 880, startIdx: 34, time: 0.47,
-      segs: [['S',200],['L',75,45],['R',75,90],['L',75,45],['S',2.9],['R',50,35],['L',50,70],['R',50,35],['S',32.7],['L',191.2,100],['S',20],['L',55,38],['R',55,76],['L',55,38],['S',14.6],['R',148.8,60],['L',170.0,140],['S',20],['R',65,45],['L',65,90],['R',65,45],['S',26.1],['L',65,48],['R',65,96],['L',65,48],['S',76.9],['L',233.8,80],['S',25],['R',60,45],['L',60,90],['R',60,45],['S',58.6],['R',131.8,50],['L',159.5,150],['S',94.9]],
-      bridges: [],
-      pads: [[126,6],[360,0],[443,-6],[532,-6],[709,0],[820,6]],
-      ramps: [],
-      wall: null,
-      sky: { fog: 0xd6ecf8 }, fogFar: 1350
     }
   ]
 };
