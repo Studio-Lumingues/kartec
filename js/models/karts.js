@@ -4,8 +4,8 @@
 // buildKartModel(spec, opts) monta: carroceria do modelo escolhido + pintura (com adesivos) + rodas
 // + volante/guidão animado + piloto sentado. spec = {
 //   model: 'gt' (kart tradicional) | 'moto' (Motoca futurista)   <- únicos modelos disponíveis,
-//   color (corBase), decal (estampa), decalColor (corDecalque), number,
-//   suit, helmet, skin, accessory          <- piloto
+//   color (corBase), decal (estampa), decalColor (corDecalque),
+//   suit, helmet, skin                     <- piloto (sem números na lataria e sem acessórios)
 // }
 // Cada modelo é um objeto { id, name, desc, build(k) } no registro KART_MODELS. O build recebe um
 // "kit" (k) com materiais e peças prontas (rodas, volante, escapamento, farol...) e devolve:
@@ -206,12 +206,15 @@
   // =====================================================================================
   function buildKartModel(spec, opts) {
     opts = opts || {};
-    spec = Object.assign({}, CFG.DEFAULT_SPEC, typeof spec === 'string' ? { color: spec } : spec);
+    // number: 0 e accessory: 'none' são forçados: números na lataria e acessórios do piloto foram removidos
+    // (vale também para specs antigos que chegam pela rede ou ficaram salvos no navegador)
+    spec = Object.assign({}, CFG.DEFAULT_SPEC, typeof spec === 'string' ? { color: spec } : spec, { number: 0, accessory: 'none' });
     const def = byId(spec.model);
     // 1ª passada só para obter as caixas de adesivo do modelo (são constantes por modelo: guardadas em cache)
     if (!def._decalBox) { const tmp = makeKit(spec, Livery.build(spec, { side: [0, 1, 0, 1], top: [0, 1, 0, 1] })); def._decalBox = def.build(tmp).decal; disposeTree(tmp.group); }
     const decal = Livery.build(spec, def._decalBox);
     const k = makeKit(spec, decal), info = def.build(k), { group, pivot, body } = k;
+    { const du = k.M.paint.userData.decalUniforms; if (du) { if (du.uNumSide) du.uNumSide.value.w = 0; if (du.uNumTop) du.uNumTop.value.w = 0; } }   // nunca desenha número
     // sombra-bolha, farol (só o jogador leva luz de verdade), brilhos dos faróis
     const blob = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.16, depthWrite: false }));
     blob.rotation.x = -Math.PI / 2; blob.scale.set(info.shadow[0], info.shadow[1], 1); blob.position.y = 0.03; group.add(blob);
@@ -253,10 +256,10 @@
       rear: info.rear, lean: info.lean, moto: !!info.moto, steerRig: k.steer, mats: k.M, paint: k.M.paint,
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { const c = new THREE.Color(hex); k.M.paint.color.copy(c); k.M.hub.color.copy(c); k.M.paintL.color.copy(c.clone().lerp(new THREE.Color(0xffffff), 0.2)); k.M.paintD.color.copy(c.clone().multiplyScalar(0.72)); spec.color = hex; },
-      setDecalColor(hex) { k.M.paint.userData.decalUniforms.uDecalColor.value.set(hex); k.M.neon.color.set(hex); k.neons.forEach(n => n.material.color && n.material.color.set(hex)); spec.decalColor = hex; if (pilot && spec.accessory !== 'none') pilot.setAccessory(spec.accessory, hex); },
-      setDecal(id, number) { spec.decal = id; spec.number = number | 0; const d = Livery.build(spec, def._decalBox), u = k.M.paint.userData.decalUniforms;
-        u.uDecal.value = d.texture; u.uDecalOn.value = d.on ? 1 : 0; u.uNumSide.value.w = spec.number > 0 ? 1 : 0; u.uNumTop.value.w = spec.number > 0 ? 1 : 0; },
-      setPilot(s) { Object.assign(spec, s); if (pilot) { pilot.setColors(spec); if ('accessory' in s) pilot.setAccessory(spec.accessory, spec.decalColor); } },
+      setDecalColor(hex) { k.M.paint.userData.decalUniforms.uDecalColor.value.set(hex); k.M.neon.color.set(hex); k.neons.forEach(n => n.material.color && n.material.color.set(hex)); spec.decalColor = hex; },
+      setDecal(id) { spec.decal = id; spec.number = 0; const d = Livery.build(spec, def._decalBox), u = k.M.paint.userData.decalUniforms;
+        u.uDecal.value = d.texture; u.uDecalOn.value = d.on ? 1 : 0; u.uNumSide.value.w = 0; u.uNumTop.value.w = 0; },
+      setPilot(s) { Object.assign(spec, s, { accessory: 'none' }); if (pilot) pilot.setColors(spec); },
       // anima volante, rodas dianteiras visuais e piloto. st = { steer, speed(0..1), boost, drift, air }
       animate(dt, st) {
         const sr = k.steer; if (sr) { const a = (st.steer || 0) * sr.k; if (sr.axis === 'z') sr.spin.rotation.z = a; else { sr.spin.rotation.y = a; if (sr.fork) sr.fork.rotation.y = a; } }

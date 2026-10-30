@@ -389,7 +389,7 @@
     },
     // garagem: mesma vitrine 3D, a câmera desliza para o rig da garagem
     toGarage() {
-      this.state = 'garage'; UI.screen('garage'); Showroom.setRig('garage'); Garage.loadThumbs();
+      this.state = 'garage'; UI.screen('garage'); Showroom.setRig('garage'); Garage.enter();
     },
     newGame() {
       this.mode = UI.mode; this.diff = UI.diff; this.trackIdx = UI.trackIdx; CFG.LAPS = UI.laps;

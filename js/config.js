@@ -101,8 +101,9 @@ window.CFG = {
   },
 
   // ---------- personalização: estado inicial (corBase, modeloKart, decalque, corDecalque, piloto) ----------
-  DEFAULT_SPEC: { model: 'gt', color: '#e8302a', decal: 'flames', decalColor: '#ffc928', number: 7,
-                  suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a', accessory: 'none' },
+  // Números na lataria e acessórios do piloto foram removidos do jogo.
+  DEFAULT_SPEC: { model: 'gt', color: '#e8302a', decal: 'flames', decalColor: '#ffc928',
+                  suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
 
   // ---------- cores disponíveis para o kart ----------
   KART_COLORS: [

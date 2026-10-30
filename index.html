@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610301200">
+<link rel="stylesheet" href="style.css?v=202610301600">
 </head>
 <body data-screen="boot">
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
@@ -273,17 +273,23 @@
 </div>
 
 <!-- ======================= Garagem ======================= -->
+<!-- veículo no centro (vitrine 3D), setas do carrossel nas laterais, nome do veículo e doca de cores no pé da tela -->
 <section id="garage" aria-label="Garagem">
   <header class="gTop">
-    <button id="btnGarageBack" class="ghost back" type="button">‹ Menu <kbd>Esc</kbd></button>
-    <div><h2>Garagem</h2><p id="garageSummary"></p></div>
+    <button id="btnGarageBack" class="gBtn gBack" type="button"><span>‹ Menu</span> <kbd>Esc</kbd></button>
+    <h2>Garagem</h2>
+    <button id="btnGarageDone" class="gBtn gDone" type="button">Pronto</button>
   </header>
-  <aside class="gPanel">
-    <div id="garageTabs" class="tabs" role="tablist" aria-label="Categorias"></div>
-    <div id="garageBody"></div>
-    <div class="actions"><button id="btnGarageDone" class="cta" type="button">Pronto</button></div>
-  </aside>
-  <p class="gHint">Arraste o kart para girar</p>
+  <button id="gPrev" class="gArrow prev" type="button" aria-label="Veículo anterior"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4 7 12l8 8"/></svg></button>
+  <button id="gNext" class="gArrow next" type="button" aria-label="Próximo veículo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg></button>
+  <div class="gFoot">
+    <div id="gPlate" class="gPlate" aria-live="polite"><strong id="gName"></strong><span id="gDesc"></span></div>
+    <div id="gDots" class="gDots" aria-label="Veículos"></div>
+    <div class="gDock">
+      <div id="garageTabs" class="gTabs" role="tablist" aria-label="Personalização"></div>
+      <div id="garageBody" class="gBody" role="tabpanel"></div>
+    </div>
+  </div>
 </section>
 
 <!-- cortina das transições entre telas -->
@@ -338,7 +344,7 @@
   check();
 })();
 </script>
-<script src="js/config.js?v=202610301200"></script>
+<script src="js/config.js?v=202610301600"></script>
 <script src="js/icons.js?v=202610300000"></script>
 <script src="js/audio.js?v=202610300000"></script>
 <script src="js/textures.js?v=202610301500"></script>
@@ -347,8 +353,8 @@
 <script src="js/models/materials.js?v=202610300000"></script>
 <script src="js/models/livery.js?v=202610300000"></script>
 <script src="js/models/pilot.js?v=202610300000"></script>
-<script src="js/models/karts.js?v=202610301200"></script>
-<script src="js/custom.js?v=202610301200"></script>
+<script src="js/models/karts.js?v=202610301600"></script>
+<script src="js/custom.js?v=202610301600"></script>
 <script src="js/ai.js?v=202610300000"></script>
 <script src="js/tracks.js?v=202610301300"></script>
 <script src="js/props.js?v=202610301200"></script>
@@ -357,15 +363,15 @@
 <script src="js/online.js?v=202610301200"></script>
 <script src="js/logo.js?v=202610300000"></script>
 <script src="js/logo3d.js?v=202610300400"></script>   <!-- KARTEC da logo em 3D (assets/karttec_logo.glb) -->
-<script src="js/ui.js?v=202610301200"></script>
+<script src="js/ui.js?v=202610301600"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
 <script src="js/settings.js?v=202610300000"></script>
 <script src="js/patchnotes.js?v=202610300000"></script>
-<script src="js/showroom.js?v=202610300500"></script>   <!-- vitrine + garagem 3D (assets/garagem.glb) -->
-<script src="js/garage.js?v=202610300000"></script>
+<script src="js/showroom.js?v=202610301600"></script>   <!-- vitrine + garagem 3D (assets/garagem.glb) -->
+<script src="js/garage.js?v=202610301600"></script>
 <script src="js/intro.js?v=202610300000"></script>
 <script src="js/podium.js?v=202610300000"></script>
-<script src="js/main.js?v=202610301200"></script>
+<script src="js/main.js?v=202610301600"></script>
 <script src="js/cursor.js?v=202610300000"></script>
 </body>
 </html>

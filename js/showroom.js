@@ -1,10 +1,10 @@
 // =====================================================================================
 // showroom.js — vitrine 3D usada pelo menu principal e pela Garagem
 // Plataforma giratória com o kart + piloto do jogador. Cada tela tem um "rig" de câmera e a câmera
-// desliza suavemente entre eles (menu: kart à direita girando; garagem: kart ao centro-esquerda,
-// órbita automática que o jogador pode arrastar). Mudanças de cor/adesivo/piloto são aplicadas no
-// modelo existente (instantâneo); trocar o modelo de kart reconstrói só o kart.
-// Também gera as miniaturas dos modelos para os cartões da Garagem (render-to-texture).
+// desliza suavemente entre eles (menu: kart à direita; garagem: veículo no centro, dentro da garagem 3D).
+// Mudanças de cor/piloto são aplicadas no modelo existente (instantâneo); trocar o modelo pelo carrossel
+// da Garagem faz a TRANSIÇÃO: o veículo atual gira e desliza para fora enquanto o próximo entra pelo
+// outro lado, com um balanço suave da câmera acompanhando o movimento.
 // =====================================================================================
 (function () {
   const sm = x => { x = Math.max(0, Math.min(1, x)); return x * x * (3 - 2 * x); };
@@ -30,7 +30,10 @@
     CAM_DOOR: [-0.5, 1.75, 2.0],       // passando pela porta
     CAM_INSIDE: [-1.38, 2.12, 1.36],   // dentro, no alto do canto da frente: o veículo em 3/4, visto de cima
     CAM_FOV: 58,                       // lente mais aberta lá dentro (a garagem é pequena)
-    LOOK_SHIFT: 0.45,                   // tela larga: desloca o olhar para a direita (veículo à esquerda, painel à direita)
+    LOOK_SHIFT: 0,                      // desvio lateral do olhar (0 = veículo centralizado: não há mais painel lateral)
+    LOOK_DROP: 0.22,                    // olha um pouco abaixo do veículo: ele sobe na tela e libera espaço para a doca de cores
+    SWAP_TIME: 0.75,                    // duração da troca de veículo no carrossel (s)
+    SWAP_DIST: 1.35,                    // quanto o veículo desliza para fora/para dentro (no tamanho do modelo da garagem)
     ENTER_TIME: 2.6, EXIT_TIME: 1.5
   }, (window.CFG && window.CFG.GARAGEM3D) || {});
   const DOOR_TOP = 2.15, DOOR_TRAVEL = 2.055, DOOR_H = 2.07;   // vão do portão no modelo (m)
@@ -168,9 +171,9 @@
     garageCam(dt, c) {
       const G = this.garage, M = this.gcam, wide = innerWidth > 860;
       const kart = this.gw([0.05, 0.42, -0.1]), A = this.gw(GAR.CAM_APPROACH), Dp = this.gw(GAR.CAM_DOOR), F = this.gw(GAR.CAM_INSIDE);
-      // olhar final: veículo um pouco à esquerda em tela larga; em tela estreita, um pouco acima (painel embaixo)
+      // olhar final: veículo centralizado e um pouco acima do meio da tela (a doca de cores fica embaixo)
       const right = new THREE.Vector3().subVectors(kart, F).cross(c.up).normalize();
-      const LF = kart.clone().addScaledVector(right, wide ? GAR.LOOK_SHIFT * G.root.scale.x : 0).add(new THREE.Vector3(0, wide ? 0 : -0.35 * G.root.scale.x, 0));
+      const LF = kart.clone().addScaledVector(right, wide ? GAR.LOOK_SHIFT * G.root.scale.x : 0).add(new THREE.Vector3(0, -(wide ? GAR.LOOK_DROP : 0.35) * G.root.scale.x, 0));
       const doorLook = this.gw([0, 1.0, 0]);
       M.t += dt;
       const P = new THREE.Vector3(), L = new THREE.Vector3();
@@ -234,16 +237,53 @@
         o.visible = f.cur > 0.004;
       });
     },
-    // (re)monta o kart da vitrine
-    setSpec(spec) {
-      if (this.kart) { this.turn.remove(this.kart.group); this.kart.dispose(); }
+    // (re)monta o kart da vitrine. dir (+1 / -1): troca animada do carrossel (o próximo entra pela direita / esquerda)
+    setSpec(spec, dir) {
+      const old = this.kart;
+      this.endSwap();                                                           // troca anterior ainda rodando: termina na hora
       this.kart = buildKartModel(Object.assign({}, spec), {}); this.turn.add(this.kart.group);
       this.kart.group.scale.multiplyScalar(GAR.VEHICLE_SCALE);                  // veículo menor dentro da garagem
       this.kart.group.traverse(o => { if (o.isMesh) o.receiveShadow = false; });
+      this.kart.s0 = this.kart.group.scale.x;
       if (this.garage) this.garage.kb = this.clampKart(localBox(this.kart.group), this.garage.root.scale.x);                 // outro modelo de kart: atualiza a área a manter visível
-      this.pulse(spec.color);
+      const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+      if (old && dir && this.rig === 'garage' && !reduce) {
+        // direção "direita da tela" no espaço do prato giratório (os veículos são filhos dele)
+        this.cam.updateMatrixWorld(); const side = new THREE.Vector3().setFromMatrixColumn(this.cam.matrixWorld, 0); side.y = 0; side.normalize();
+        const local = side.clone().applyQuaternion(this.turn.getWorldQuaternion(new THREE.Quaternion()).invert());
+        this.swap = { old, dir, t: 0, local, world: side, dist: GAR.SWAP_DIST * (this.garage ? this.garage.root.scale.x : 2), fov0: this.cam.fov };
+        old.s0 = old.s0 || old.group.scale.x;
+        this.poseSwap(0);
+      } else {
+        if (old) { this.turn.remove(old.group); old.dispose(); }
+        this.pulse(spec.color);
+      }
     },
-    apply(id, spec) { if (!this.kart) return; if (!Custom.applyTo(this.kart, id)) this.setSpec(spec); else this.pulse(id === 'color' ? spec.color : null); },
+    // troca do carrossel: u = 0..1. Saída (0 a 55%): o veículo atual desliza para o lado contrário, gira e encolhe.
+    // Entrada (30 a 100%): o próximo vem do lado da seta, desgirando, e cresce com um leve passo além do tamanho (quique).
+    poseSwap(u) {
+      const S = this.swap; if (!S) return;
+      const outE = ease(Math.min(1, u / 0.55)), inU = Math.max(0, Math.min(1, (u - 0.3) / 0.7));
+      const back = x => { const c1 = 1.55, c3 = c1 + 1; return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2); };   // easeOutBack
+      const inE = back(inU), slide = 1 - ease(inU);
+      const o = S.old.group, n = this.kart.group;
+      o.position.copy(S.local).multiplyScalar(-S.dir * S.dist * outE);
+      o.rotation.y = -S.dir * 1.1 * outE; o.scale.setScalar(S.old.s0 * Math.max(0.001, 1 - 0.9 * outE)); o.visible = outE < 0.999;
+      n.position.copy(S.local).multiplyScalar(S.dir * S.dist * slide);
+      n.rotation.y = S.dir * 1.1 * slide; n.scale.setScalar(this.kart.s0 * Math.max(0.001, 0.1 + 0.9 * inE)); n.visible = u > 0.3;
+    },
+    endSwap() {
+      const S = this.swap; if (!S) return; this.swap = null;
+      this.turn.remove(S.old.group); S.old.dispose();
+      if (this.kart) { const g = this.kart.group; g.position.set(0, 0, 0); g.rotation.y = 0; g.scale.setScalar(this.kart.s0); g.visible = true; }
+      this.setFov(S.fov0);
+    },
+    isSwapping() { return !!this.swap; },
+    apply(id, spec) {
+      if (!this.kart) return;
+      if (!Custom.applyTo(this.kart, id)) { this.setSpec(spec, id === 'model' ? this.swapDir || 0 : 0); this.swapDir = 0; }
+      else this.pulse(id === 'color' ? spec.color : null);
+    },
     pulse(hex) { if (hex) this.spark.material.color.set(hex); this.spark.material.opacity = 0.85; this.hop = 0.35; },
     setRig(name) {
       const prev = this.rig; this.rig = name; if (name === 'garage') { this.autoSpin = true; }
@@ -283,26 +323,16 @@
       }
       if (this.garage && this.gcam) this.garageCam(dt, c);                  // entrando/dentro/saindo da garagem
       else { const k = Math.min(1, 3 * dt); this.camPos.lerp(P, k); this.camLook.lerp(L, k); c.position.copy(this.camPos); c.lookAt(this.camLook); }
+      // troca do carrossel: a câmera acompanha o movimento (desliza um pouco para o lado da seta e "aperta" a lente)
+      if (this.swap) {
+        const S = this.swap; S.t += Math.min(0.05, dt); const u = Math.min(1, S.t / GAR.SWAP_TIME), w = Math.sin(Math.PI * u);
+        this.poseSwap(u);
+        const sc = this.garage ? this.garage.root.scale.x : 2;
+        c.position.addScaledVector(S.world, S.dir * 0.09 * sc * w); c.lookAt(this.camLook.clone().addScaledVector(S.world, S.dir * 0.16 * sc * w));
+        this.setFov(S.fov0 - 4 * w);
+        if (u >= 1) { this.endSwap(); this.pulse(null); }
+      }
       this.stepGarage(dt);
-    },
-    // ---------- miniaturas dos modelos (desenhadas uma vez, em segundo plano) ----------
-    thumbnails(cb) {
-      if (this._thumbs) return cb(this._thumbs);
-      const R = this.renderer, W = 240, H = 150, rt = new THREE.WebGLRenderTarget(W, H), buf = new Uint8Array(W * H * 4), out = {};
-      const sc = new THREE.Scene(); sc.add(new THREE.HemisphereLight(0xf2f8ff, 0x8aa8d8, 0.9)); const d = new THREE.DirectionalLight(0xffffff, 0.7); d.position.set(8, 14, 10); sc.add(d);
-      const cam = new THREE.PerspectiveCamera(28, W / H, 0.5, 100); cam.position.set(8.5, 5.2, 9.5); cam.lookAt(0, 1.2, 0);
-      const list = KartModels.list().slice(); let i = 0;
-      const next = () => {
-        if (i >= list.length) { rt.dispose(); this._thumbs = out; return cb(out); }
-        const def = list[i++], m = buildKartModel(Object.assign({}, Custom.spec, { model: def.id }), { pilot: false }); sc.add(m.group);
-        R.setRenderTarget(rt); R.setClearColor(0x000000, 0); R.clear(); R.render(sc, cam); R.readRenderTargetPixels(rt, 0, 0, W, H, buf); R.setRenderTarget(null); R.setClearColor(0x000000, 1);
-        sc.remove(m.group); m.dispose();
-        const c = TX.cvs(W, H), g = c.getContext('2d'), img = g.createImageData(W, H);
-        for (let y = 0; y < H; y++) img.data.set(buf.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);   // a leitura vem de cabeça para baixo
-        g.putImageData(img, 0, 0); out[def.id] = c.toDataURL();
-        setTimeout(next, 0);
-      };
-      next();
     },
     resize() { if (this.cam) { this.cam.aspect = innerWidth / innerHeight; this.cam.updateProjectionMatrix(); } }
   };

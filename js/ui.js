@@ -649,7 +649,7 @@
       if (ph === 'film') this.introBlur(0);
     },
     introBlur(k) { const c = document.querySelector('body > canvas'); if (c) c.style.filter = k > 0.001 ? 'blur(' + (k * 14).toFixed(1) + 'px) brightness(' + (1 + k * 0.5).toFixed(2) + ')' : ''; $('introFlash').style.opacity = (k * 0.7).toFixed(2); },
-    menuKart(spec) { const m = KartModels.get(spec.model); $('menuKart').textContent = m.name + ' · nº ' + (spec.number || '—'); },
+    menuKart(spec) { $('menuKart').textContent = KartModels.get(spec.model).name; },
     refreshTracks() {
       const cup = this.mode === 'cup';
       $('trackList').classList.toggle('cup', cup); $('trackTitle').textContent = cup ? 'Pistas da Copa' : 'Escolha a pista';

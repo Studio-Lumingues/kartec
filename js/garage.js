@@ -1,81 +1,131 @@
 // =====================================================================================
-// garage.js — tela da Garagem (personalização)
-// Monta abas e controles a partir de Custom.tabs / Custom.slots (nada é escrito "na mão" aqui):
-//   cards  -> grade de cartões (modelos com miniatura 3D, estampas, acessórios)
-//   color  -> paleta de bolinhas + seletor livre (opcional)
-//   number -> botões − / + com campo numérico
-// Cada mudança vai para Custom.set(); a vitrine 3D escuta e atualiza o kart na hora.
+// garage.js — tela da Garagem
+//
+//  * CARROSSEL: setas grandes nas laterais (e ← → / A D no teclado) trocam o veículo (Kartec GT / Motoca).
+//    A troca é animada na vitrine 3D (Showroom.setSpec com direção): o veículo atual sai girando para um
+//    lado e o próximo entra pelo outro. A placa com o nome desliza junto, no mesmo sentido.
+//  * DOCA: barra baixa no pé da tela com as abas (Custom.tabs) e UMA fileira de cores por vez.
+//    Abas com mais de um atributo (Piloto: macacão, capacete, pele) ganham chips para escolher qual pintar.
+//    Abas marcadas com soon: true (Adesivos) aparecem desativadas com o selo "Em breve".
+// Nada é escrito "na mão": abas e cores vêm de Custom.tabs / Custom.slots. Cada mudança vai para
+// Custom.set(); a vitrine 3D escuta e atualiza o veículo na hora.
 // =====================================================================================
 (function () {
   const $ = id => document.getElementById(id);
   const el = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt !== undefined) e.textContent = txt; return e; };
+  const SWAP_LOCK = 450;   // ms: evita trocar de novo antes do veículo novo aparecer
 
   const Garage = {
-    tab: 'kart', controls: {},
+    tab: 'paint', part: {}, built: false,
+
     build() {
-      const tabs = $('garageTabs'), body = $('garageBody');
+      const tabs = $('garageTabs');
       Custom.tabs.forEach(t => {
-        const b = el('button', 'tab', t.label); b.type = 'button'; b.setAttribute('role', 'tab'); b.dataset.tab = t.id;
-        b.addEventListener('click', () => this.show(t.id)); tabs.appendChild(b);
-        const pane = el('div', 'pane'); pane.dataset.tab = t.id; pane.setAttribute('role', 'tabpanel'); body.appendChild(pane);
+        const b = el('button', 'gTab'); b.type = 'button'; b.dataset.tab = t.id; b.setAttribute('role', 'tab');
+        b.appendChild(el('span', 'gTabLabel', t.label));
+        if (t.soon) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.appendChild(el('em', 'soonBadge', 'Em breve')); b.title = t.label + ': em breve'; }
+        else b.addEventListener('click', () => { this.show(t.id); this.blip(760); });
+        tabs.appendChild(b);
+        this.part[t.id] = (Custom.slots.find(s => s.tab === t.id && s.type === 'color') || {}).id;
       });
-      Custom.slots.forEach(s => this.addControl(s));
-      this.show(this.tab);
-      Custom.onChange((id) => { this.sync(id); this.summary(); });
-      this.summary();
+      // carrossel
+      $('gPrev').addEventListener('click', () => this.go(-1));
+      $('gNext').addEventListener('click', () => this.go(1));
+      addEventListener('keydown', e => {
+        if (!window.Game || window.Game.state !== 'garage' || (window.UI && UI.modal) || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+        if (e.code === 'ArrowLeft' || e.code === 'KeyA') { e.preventDefault(); this.go(-1); this.press('gPrev'); }
+        else if (e.code === 'ArrowRight' || e.code === 'KeyD') { e.preventDefault(); this.go(1); this.press('gNext'); }
+      });
+      // pontinhos do carrossel (um por veículo; clicar leva direto até ele)
+      const dots = $('gDots');
+      KartModels.list().forEach((m, i) => {
+        const d = el('button', 'gDot'); d.type = 'button'; d.setAttribute('aria-label', m.name);
+        d.addEventListener('click', () => { const cur = this.index(); if (i !== cur) this.go(i > cur ? 1 : -1, i); });
+        dots.appendChild(d);
+      });
+      Custom.onChange(id => { if (id === 'model') this.plate(); else this.syncSwatches(); });
+      this.show(this.tab); this.plate(true); this.built = true;
     },
-    addControl(s) {
-      const pane = document.querySelector('#garageBody .pane[data-tab="' + s.tab + '"]'); if (!pane) return;
-      const box = el('section', 'gBlock'), h = el('h3', null, s.label); box.appendChild(h);
-      if (s.hint) h.appendChild(el('small', null, s.hint));
-      const ctl = { slot: s, items: [] };
-      if (s.type === 'cards') {
-        const grid = el('div', 'gCards' + (s.id === 'model' ? ' models' : ''));
-        s.options().forEach(o => {
-          const b = el('button', 'gCard'); b.type = 'button'; b.dataset.v = o.value; b.setAttribute('aria-pressed', 'false');
-          if (o.thumb) { const im = el('img'); im.alt = ''; b.appendChild(im); ctl.thumbs = (ctl.thumbs || []).concat({ im, id: o.value }); }
-          else { const ic = el('span', 'ico'); ic.innerHTML = Icon.svg(o.icon || 'dot'); b.appendChild(ic); }
-          b.appendChild(el('strong', null, o.name)); if (o.desc) b.appendChild(el('span', 'desc', o.desc));
-          b.addEventListener('click', () => { Custom.set(s.id, o.value); UI.Sfx.tone(660, 990, 0.08, 'square', 0.06); });
-          grid.appendChild(b); ctl.items.push(b);
-        });
-        box.appendChild(grid);
-      } else if (s.type === 'color') {
-        const row = el('div', 'gSwatches');
-        s.options().forEach(o => { const b = el('button', 'swatch'); b.type = 'button'; b.style.setProperty('--c', o.hex); b.dataset.v = o.hex; b.title = o.name; b.setAttribute('aria-label', s.label + ' ' + o.name);
-          b.addEventListener('click', () => { Custom.set(s.id, o.hex); UI.Sfx.tone(880, 0, 0.05, 'triangle', 0.06); }); row.appendChild(b); ctl.items.push(b); });
-        box.appendChild(row);
-        if (s.custom) { const lab = el('label', 'custom'), inp = el('input'); inp.type = 'color'; inp.addEventListener('input', e => Custom.set(s.id, e.target.value)); lab.append(inp, document.createTextNode(' Outra cor')); box.appendChild(lab); ctl.input = inp; }
-      } else if (s.type === 'number') {
-        const row = el('div', 'gNumber'), minus = el('button', 'ghost', '−'), plus = el('button', 'ghost', '+'), inp = el('input');
-        minus.type = plus.type = 'button'; minus.setAttribute('aria-label', 'Diminuir'); plus.setAttribute('aria-label', 'Aumentar');
-        inp.type = 'number'; inp.min = s.min; inp.max = s.max; inp.inputMode = 'numeric'; inp.setAttribute('aria-label', s.label);
-        const put = v => Custom.set(s.id, Math.max(s.min, Math.min(s.max, v | 0)));
-        minus.addEventListener('click', () => put(Custom.spec[s.id] - 1)); plus.addEventListener('click', () => put(Custom.spec[s.id] + 1));
-        inp.addEventListener('change', () => put(+inp.value));
-        row.append(minus, inp, plus); box.appendChild(row); ctl.input = inp;
-      }
-      pane.appendChild(box); this.controls[s.id] = ctl; this.sync(s.id);
+
+    // ---------- carrossel ----------
+    index() { return Math.max(0, KartModels.list().findIndex(m => m.id === Custom.spec.model)); },
+    // dir: +1 próximo (entra pela direita), -1 anterior. to: índice de destino (pontinhos)
+    go(dir, to) {
+      const now = performance.now(); if (now - (this._lock || 0) < SWAP_LOCK) return; this._lock = now;
+      const L = KartModels.list(), n = L.length; if (n < 2) return;
+      const i = to !== undefined ? to : (this.index() + dir + n) % n;
+      this.slideDir = dir; Showroom.swapDir = dir;
+      Custom.set('model', L[i].id);
+      try { UI.Sfx.noise(0.22, 2600, 500, 0.07); UI.Sfx.tone(dir > 0 ? 520 : 620, dir > 0 ? 820 : 420, 0.12, 'triangle', 0.05); } catch (e) { }
     },
-    // reflete o valor atual no controle
-    sync(id) {
-      const c = this.controls[id]; if (!c) return; const v = Custom.spec[id];
-      c.items.forEach(b => { const on = String(b.dataset.v).toLowerCase() === String(v).toLowerCase(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); });
-      if (c.input) c.input.value = c.slot.type === 'number' ? (v | 0) : v;
+    press(id) { const b = $(id); if (!b) return; b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit'); },
+    // placa com nome + descrição: sai para o lado contrário da seta e a nova entra pelo lado da seta
+    plate(instant) {
+      const m = KartModels.get(Custom.spec.model), box = $('gPlate'), name = $('gName'), desc = $('gDesc');
+      [...$('gDots').children].forEach((d, i) => { const on = i === this.index(); d.classList.toggle('on', on); d.setAttribute('aria-current', on ? 'true' : 'false'); });
+      $('garage').setAttribute('aria-label', 'Garagem: ' + m.name);
+      if (instant || !this.slideDir) { name.textContent = m.name; desc.textContent = m.desc; return; }
+      const dir = this.slideDir; this.slideDir = 0;
+      box.style.setProperty('--dir', dir);
+      box.classList.remove('in'); box.classList.add('out');
+      clearTimeout(this._pt);
+      this._pt = setTimeout(() => {
+        name.textContent = m.name; desc.textContent = m.desc;
+        box.classList.remove('out'); void box.offsetWidth; box.classList.add('in');
+      }, 200);
     },
-    summary() {
-      const s = Custom.spec, m = KartModels.get(s.model), d = Livery.patterns.find(p => p.id === s.decal);
-      $('garageSummary').textContent = m.name + ' · ' + (d ? d.name : '') + (s.number ? ' · nº ' + s.number : '');
-    },
+
+    // ---------- doca: abas, chips de parte e cores ----------
     show(id) {
       this.tab = id;
-      document.querySelectorAll('#garageTabs .tab').forEach(b => { const on = b.dataset.tab === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
-      document.querySelectorAll('#garageBody .pane').forEach(p => p.hidden = p.dataset.tab !== id);
+      document.querySelectorAll('#garageTabs .gTab').forEach(b => { const on = b.dataset.tab === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+      this.renderBody();
     },
-    // carrega as miniaturas dos modelos na primeira visita
-    loadThumbs() {
-      const c = this.controls.model; if (!c || !c.thumbs || this._thumbs) return; this._thumbs = true;
-      Showroom.thumbnails(map => c.thumbs.forEach(t => { if (map[t.id]) t.im.src = map[t.id]; }));
+    renderBody() {
+      const body = $('garageBody'), slots = Custom.slots.filter(s => s.tab === this.tab && s.type === 'color');
+      body.innerHTML = ''; body.classList.remove('swap'); void body.offsetWidth; body.classList.add('swap');
+      if (!slots.length) return;
+      // chips (só quando a aba tem mais de um atributo de cor)
+      if (slots.length > 1) {
+        const row = el('div', 'gParts'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', 'Parte para pintar');
+        slots.forEach(s => {
+          const c = el('button', 'gPart', s.label); c.type = 'button'; c.setAttribute('role', 'radio'); c.dataset.slot = s.id;
+          c.addEventListener('click', () => { this.part[this.tab] = s.id; this.renderBody(); this.blip(700); });
+          row.appendChild(c);
+        });
+        body.appendChild(row);
+      }
+      const s = slots.find(x => x.id === this.part[this.tab]) || slots[0]; this.part[this.tab] = s.id;
+      const row = el('div', 'gSwatches'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', s.label);
+      s.options().forEach(o => {
+        const b = el('button', 'gSwatch'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.v = o.hex;
+        b.style.setProperty('--c', o.hex); b.title = o.name; b.setAttribute('aria-label', s.label + ' ' + o.name);
+        b.addEventListener('click', () => { Custom.set(s.id, o.hex); this.blip(880); });
+        row.appendChild(b);
+      });
+      if (s.custom) {   // cor livre: bolinha com "+" que abre o seletor do sistema
+        const lab = el('label', 'gSwatch gCustom'), inp = el('input'); inp.type = 'color'; lab.title = 'Outra cor'; lab.setAttribute('aria-label', s.label + ': outra cor');
+        inp.addEventListener('input', e => Custom.set(s.id, e.target.value));
+        lab.appendChild(inp); row.appendChild(lab); this._custom = { inp, lab };
+      } else this._custom = null;
+      body.appendChild(row);
+      this.syncSwatches();
+    },
+    // marca a cor atual (e a parte escolhida)
+    syncSwatches() {
+      const id = this.part[this.tab]; if (!id) return; const v = String(Custom.spec[id] || '').toLowerCase();
+      let match = false;
+      document.querySelectorAll('#garageBody .gSwatch[data-v]').forEach(b => { const on = b.dataset.v.toLowerCase() === v; match = match || on; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      document.querySelectorAll('#garageBody .gPart').forEach(c => { const on = c.dataset.slot === id; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      if (this._custom) { this._custom.inp.value = v || '#ffffff'; this._custom.lab.classList.toggle('on', !match && !!v); this._custom.lab.style.setProperty('--c', !match && v ? v : 'transparent'); }
+    },
+    blip(f) { try { UI.Sfx.tone(f, 0, 0.05, 'triangle', 0.05); } catch (e) { } },
+
+    // chamado ao entrar na tela (main.js > toGarage): reinicia as animações de entrada e atualiza tudo
+    enter() {
+      if (!this.built) return;
+      this.slideDir = 0; this.plate(true); this.syncSwatches();
+      const g = $('garage'); g.classList.remove('enter'); void g.offsetWidth; g.classList.add('enter');
     }
   };
   window.Garage = Garage;
