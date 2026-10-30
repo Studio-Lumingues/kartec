@@ -7,7 +7,7 @@
 //   de novo, de costas, empurrada pela normal). Funciona em malha com esqueleto (piloto).
 // * Toon.vivid(cor): aumenta a saturação (paleta de festa).
 // * Toon.during(fn): enquanto fn roda, todo `new THREE.MeshLambertMaterial/MeshPhongMaterial` vira
-//   material toon (props, árvores, prédios...). Os pisos grandes (grama, asfalto, areia, água...)
+//   material toon (props, árvores, pontes...). Os pisos grandes (grama, asfalto, terra, areia do rio...)
 //   continuam Lambert: são a maior área da tela e o Lambert é o sombreamento mais barato do Three.js.
 //
 // Desempenho: nada de PBR, mapas de ambiente (PMREM) ou normal maps. O toon custa como um Phong
@@ -101,7 +101,7 @@
   }
 
   // ---------- fábrica: Lambert/Phong -> toon (exceto pisos) ----------
-  const GROUND = ['grass', 'asphalt', 'sand', 'wetSand', 'sandEdge', 'dirt', 'curb', 'curbGray', 'paint', 'paintYellow', 'calcadao', 'concrete', 'pebble', 'startLine'];
+  const GROUND = ['grass', 'asphalt', 'sand', 'dirt', 'curb', 'paint', 'concrete', 'pebble', 'startLine'];   // pisos de Cidade/Praia removidos
   let groundSet = null;
   function isGround(p) {
     if (!groundSet) groundSet = new Set(GROUND.map(n => TX.canvas(n)));

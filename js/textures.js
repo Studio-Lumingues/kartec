@@ -319,7 +319,13 @@
   const canvases = {};
   window.TX = {
     aniso: 4,
-    canvas(name) { if (!canvases[name]) canvases[name] = GEN[name](); return canvases[name]; },
+    canvas(name) {
+      if (!canvases[name]) {
+        if (typeof GEN[name] !== 'function') { console.warn('[TX] textura inexistente: "' + name + '" (usando branco)'); const c = cvs(4, 4), g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 4, 4); canvases[name] = c; }
+        else canvases[name] = GEN[name]();
+      }
+      return canvases[name];
+    },
     // devolve uma textura nova (compartilha o canvas) com repetição própria
     get(name, rx, ry, opts) {
       const t = new THREE.CanvasTexture(this.canvas(name));
