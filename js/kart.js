@@ -104,7 +104,7 @@
   window.GEO = { rbox, smoothSeams, mergeByMaterial };
 
   // ---------- partículas (pool por cena) — estilo desenho animado ----------
-  // fumaça = nuvenzinhas redondas com contorno nítido (não esfumaçadas), faíscas = estrelinhas,
+  // fumaça = nuvens fofas realistas (js/smoke.js, estilo Party Animals; a mesma do giro da banana), faíscas = estrelinhas,
   // brilho do turbo = sprites aditivos, marcas de pneu = traços escuros instanciados no chão.
   let glowTexCache = null, softTexCache = null, puffTexCache = null, starTexCache = null;
   const Fx = {
@@ -112,14 +112,35 @@
     softTex() { if (!softTexCache) softTexCache = new THREE.CanvasTexture(TX.canvas('soft')); return softTexCache; },
     puffTex() { if (!puffTexCache) puffTexCache = new THREE.CanvasTexture(TX.canvas('puff')); return puffTexCache; },
     starTex() { if (!starTexCache) starTexCache = new THREE.CanvasTexture(TX.canvas('star')); return starTexCache; },
+    // faísca: risco de luz alongado (núcleo branco fino + brilho em volta), esticado na direção do movimento
+    sparkTex() { if (!this._sparkT) { const c = document.createElement('canvas'); c.width = 32; c.height = 128; const x = c.getContext('2d');
+        const g = x.createRadialGradient(16, 64, 0, 16, 64, 64); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,.85)'); g.addColorStop(0.5, 'rgba(255,255,255,.18)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        x.save(); x.translate(16, 64); x.scale(0.25, 1); x.translate(-16, -64); x.fillStyle = g; x.fillRect(-64, 0, 160, 128); x.restore();
+        this._sparkT = new THREE.CanvasTexture(c); }
+      return this._sparkT; },
+    // labareda: vários "caroços" macios sobrepostos (borda irregular, como chama de verdade)
+    fireTex() { if (!this._fireT) { const N = 128, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d');
+        let sd = 5; const rnd = () => { sd = (sd * 16807) % 2147483647; return sd / 2147483647; };
+        x.globalCompositeOperation = 'lighter';
+        for (let i = 0; i < 14; i++) { const a = rnd() * 6.28, d = rnd() * 22, bx = 64 + Math.cos(a) * d, by = 66 + Math.sin(a) * d * 1.2 - 4, r = 14 + rnd() * 22;
+          const g = x.createRadialGradient(bx, by, 0, bx, by, r); g.addColorStop(0, 'rgba(255,255,255,.8)'); g.addColorStop(0.5, 'rgba(255,255,255,.32)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          x.fillStyle = g; x.fillRect(0, 0, N, N); }
+        x.globalCompositeOperation = 'destination-in'; const e = x.createRadialGradient(64, 64, 30, 64, 64, 63); e.addColorStop(0, 'rgba(0,0,0,1)'); e.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = e; x.fillRect(0, 0, N, N);
+        this._fireT = new THREE.CanvasTexture(c); }
+      return this._fireT; },
     init(scene) {
       const pool = (n, additive, tex) => { const a = []; for (let i = 0; i < n; i++) { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, opacity: 0, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending })); s.visible = false; scene.add(s); a.push({ s, v: new THREE.Vector3(), l: 0, ml: 1, s0: 1, s1: 2, o: 0.5, up: 0, rot: 0 }); } return { a, i: 0 }; };
-      this.smoke = pool(160, false, this.puffTex()); this.glow = pool(140, true, this.softTex());
+      // a fumaça agora é a do js/smoke.js (realista); o pool antigo só existe se o smoke.js não estiver carregado
+      this.smoke = pool(window.Smoke ? 0 : 160, false, this.puffTex()); this.glow = pool(140, true, this.softTex());
+      if (window.Smoke) Smoke.init(scene);
       this.box = []; this.boxI = 0;
-      for (let i = 0; i < 90; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.starTex(), color: 0xffffff, transparent: true, depthWrite: false })); m.visible = false; scene.add(m); this.box.push({ m, v: new THREE.Vector3(), l: 0, ml: 1, s: 0.2 }); }
+      for (let i = 0; i < 160; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex(), color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); m.visible = false; scene.add(m); this.box.push({ m, v: new THREE.Vector3(), l: 0, ml: 1, s: 0.2, c: new THREE.Color() }); }
+      this.fire = []; this.fireI = 0;
+      for (let i = 0; i < 140; i++) { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.fireTex(), color: 0xffffff, transparent: true, depthWrite: false })); /* mistura normal: a cor da chama aparece (somar luz deixava tudo branco) */ m.visible = false; scene.add(m); this.fire.push({ m, v: new THREE.Vector3(), l: 0, ml: 1, s: 1, rot: 0, smoked: false }); }
+      this._sp = new THREE.Vector3(); this._sp2 = new THREE.Vector3(); this._hot = new THREE.Color(1, 1, 1); this._fc = new THREE.Color();
       // marcas de pneu: 700 traços reaproveitados em anel (os mais antigos somem primeiro)
       const SK = 700, sg = new THREE.PlaneGeometry(0.504, 1).rotateX(-Math.PI / 2);
-      this.skids = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0x3a2d5c, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      this.skids = new THREE.InstancedMesh(sg, new THREE.MeshBasicMaterial({ color: 0x2a2a2e, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
         stencilWrite: true, stencilFunc: THREE.NotEqualStencilFunc, stencilRef: 1, stencilZPass: THREE.ReplaceStencilOp }), SK);   // stencil: cada pixel é pintado uma vez só -> o traço fica contínuo, sem faixas escuras nas emendas
       const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < SK; i++) this.skids.setMatrixAt(i, z);
       this.skids.frustumCulled = false; this.skids.renderOrder = -1;   // marcas desenhadas ANTES da fumaça (ordem 0): a fumaça passa por cima do borrachão
@@ -128,11 +149,21 @@
     rate: 1,   // partículas: 1 = normal, < 1 = menos (configurações)
     puff(kind, x, y, z, vx, vy, vz, col, s0, s1, life, op, up) {
       if (this.rate < 1 && Math.random() > this.rate) return;
+      if (kind === 'smoke' && window.Smoke) {   // fumaça realista: mesmos parâmetros de antes (posição, velocidade, cor, tamanho inicial/final, duração, opacidade, subida)
+        Smoke.puff({ x, y, z, vx, vy, vz, tint: col, size: s0, grow: s1 / Math.max(0.05, s0), life, opacity: Math.min(1, op * 1.6), up: up || 0 }); return;
+      }
       const pool = this[kind], p = pool.a[pool.i++ % pool.a.length];
       p.s.position.set(x, y, z); p.v.set(vx, vy, vz); p.s.material.color.setHex(col); p.s0 = s0; p.s1 = s1; p.l = p.ml = life; p.o = kind === 'smoke' ? Math.min(1, op * 1.6) : op; p.up = up || 0; p.s.visible = true;
       p.s.material.rotation = Math.random() * 6.28; p.rot = (Math.random() - 0.5) * 2;
     },
-    spark(x, y, z, vx, vy, vz, c, sz, l) { const p = this.box[this.boxI++ % this.box.length]; p.m.position.set(x, y, z); p.v.set(vx, vy, vz); p.m.material.color.set(c); p.s = sz * 2.2; p.l = p.ml = l; p.m.visible = true; p.m.material.rotation = Math.random() * 6.28; },
+    spark(x, y, z, vx, vy, vz, c, sz, l) { if (this.rate < 1 && Math.random() > this.rate) return; const p = this.box[this.boxI++ % this.box.length]; p.m.position.set(x, y, z); p.v.set(vx, vy, vz); p.c.set(c); p.s = sz; p.l = p.ml = l * (0.8 + Math.random() * 0.5); p.m.visible = true; },
+    // labareda do turbo: nasce branco-amarelada, vira laranja -> vermelho, sobe tremulando e termina em fumaça escura
+    flame(x, y, z, vx, vy, vz, size, life) {
+      if (this.rate < 1 && Math.random() > this.rate) return; if (!this.fire) return;
+      const p = this.fire[this.fireI++ % this.fire.length]; p.m.position.set(x, y, z); p.v.set(vx, vy, vz); p.s = size; p.l = p.ml = life * (0.8 + Math.random() * 0.4);
+      p.rot = (Math.random() - 0.5) * 6; p.m.material.rotation = Math.random() * 6.28; p.smoked = false; p.m.visible = true;
+      if (Math.random() < 0.5) this.puff('glow', x, y, z, vx * 0.6, vy * 0.5, vz * 0.6, 0xffc060, size * 0.55, size * 0.25, 0.14, 0.55);   // núcleo quente (luz somada, bem curtinho)
+    },
     // um traço de marca de pneu de (x0,z0) até (x1,z1), na altura y
     skid(x0, z0, x1, z1, y) {
       if (!this.skids) return; const dx = x1 - x0, dz = z1 - z0, L = Math.hypot(dx, dz); if (L < 0.05 || L > 4) return;
@@ -140,6 +171,7 @@
       this.skids.setMatrixAt(this.skidI++ % this.skids.count, d.matrix); this.skids.instanceMatrix.needsUpdate = true;
     },
     step(dt) {
+      if (window.Smoke) Smoke.update(dt);
       ['smoke', 'glow'].forEach(k => this[k].a.forEach(p => {
         if (p.l <= 0) return; p.l -= dt; if (p.l <= 0) { p.s.visible = false; return; }
         const t = 1 - p.l / p.ml; p.v.multiplyScalar(Math.max(0, 1 - 2.2 * dt)); p.v.y += p.up * dt; p.s.position.addScaledVector(p.v, dt);
@@ -148,7 +180,29 @@
         p.s.scale.setScalar(Math.max(0.01, g)); p.s.material.rotation += p.rot * dt;
         p.s.material.opacity = k === 'smoke' ? p.o * (t > 0.75 ? (1 - t) / 0.25 : 1) : p.o * (1 - t) * (t < 0.12 ? t / 0.12 : 1);
       }));
-      this.box.forEach(p => { if (p.l <= 0) return; p.l -= dt; if (p.l <= 0) { p.m.visible = false; return; } p.v.y -= 14 * dt; p.m.position.addScaledVector(p.v, dt); p.m.scale.setScalar(p.s * p.l / p.ml + 0.02); p.m.material.rotation += dt * 6; });
+      const cam = this.cam;
+      this.box.forEach(p => { if (p.l <= 0) return; p.l -= dt; if (p.l <= 0) { p.m.visible = false; return; }
+        p.v.multiplyScalar(Math.max(0, 1 - 1.4 * dt)); p.v.y -= 16 * dt; p.m.position.addScaledVector(p.v, dt);
+        const t = 1 - p.l / p.ml, w = p.s * 1.25 * (1 - t * 0.6);
+        // cor: branco-quente no começo, esfria para a cor da faísca; brilho some no fim (com uma piscadinha)
+        p.m.material.color.copy(this._hot).lerp(p.c, Math.min(1, t * 2.2)); p.m.material.opacity = Math.pow(1 - t, 1.2) * (0.85 + Math.random() * 0.15);
+        // estica na direção do movimento na tela (risco de luz)
+        let len = w * 2.2;
+        if (cam) { const a = this._sp.copy(p.m.position).project(cam), b = this._sp2.copy(p.m.position).addScaledVector(p.v, 0.03).project(cam);
+          const dx = (b.x - a.x) * cam.aspect, dy = b.y - a.y, sl = Math.hypot(dx, dy);
+          p.m.material.rotation = Math.atan2(dy, dx) - Math.PI / 2; len = w * 2.2 + Math.min(4, sl * 60) * w * 2.5; }
+        p.m.scale.set(w * 0.55, len, 1); });
+      if (this.fire) this.fire.forEach(p => { if (p.l <= 0) return; p.l -= dt; if (p.l <= 0) { p.m.visible = false; return; }
+        const t = 1 - p.l / p.ml, f = this._fc;
+        // rampa de cor do fogo: branco-amarelo -> amarelo -> laranja -> vermelho escuro
+        const ramp = [[0, 1, 0.95, 0.6], [0.12, 1, 0.74, 0.12], [0.32, 1, 0.4, 0.03], [0.58, 0.9, 0.14, 0.02], [0.82, 0.28, 0.1, 0.08], [1, 0.16, 0.14, 0.14]];
+        let k = 1; while (k < ramp.length - 1 && t > ramp[k][0]) k++; const A = ramp[k - 1], B = ramp[k], u = Math.min(1, (t - A[0]) / (B[0] - A[0]));
+        f.setRGB(A[1] + (B[1] - A[1]) * u, A[2] + (B[2] - A[2]) * u, A[3] + (B[3] - A[3]) * u);
+        p.m.material.color.copy(f); p.m.material.opacity = Math.min(1, 1.5 * (t < 0.08 ? t / 0.08 : 1) * Math.pow(1 - t, 0.9) * (0.82 + Math.random() * 0.18));   // tremula
+        p.v.multiplyScalar(Math.max(0, 1 - 3 * dt)); p.v.y += 4.5 * dt; p.v.x += (Math.random() - 0.5) * 6 * dt; p.v.z += (Math.random() - 0.5) * 6 * dt;   // sobe com turbulência
+        p.m.position.addScaledVector(p.v, dt); p.m.material.rotation += p.rot * dt; p.m.scale.setScalar(p.s * (0.4 + t * 0.9));
+        // a chama vira fumaça escura no fim
+        if (!p.smoked && t > 0.6) { p.smoked = true; if (window.Smoke && Math.random() < 0.55) Smoke.puff({ x: p.m.position.x, y: p.m.position.y + 0.2, z: p.m.position.z, vx: p.v.x * 0.5, vy: 1 + Math.random(), vz: p.v.z * 0.5, size: p.s * 0.8, grow: 2.6, life: 0.9, tint: 0x4a4644, opacity: 0.55, up: 1.2 }); } });
     }
   };
   window.Fx = Fx;
@@ -157,7 +211,7 @@
   const Input = {
     keys: {},
     map: { KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', Space: 'drift', ShiftLeft: 'drift', ShiftRight: 'drift',
-      ControlLeft: 'wheelie', ControlRight: 'wheelie', KeyE: 'wheelie',   // Ctrl (ou E): dar grau com a moto
+      ControlLeft: 'wheelie', ControlRight: 'wheelie',   // Ctrl: dar grau com a moto (a tecla E agora usa o item: items.js)
       KeyC: 'look' },                                                     // C (segurando): olhar para trás
     init() {
       addEventListener('keydown', e => { const k = this.map[e.code]; if (k) { this.keys[k] = true; if (window.Game && Game.scene && !/INPUT|TEXTAREA/.test(e.target.tagName)) e.preventDefault(); } });
@@ -398,7 +452,7 @@
           if (last[i]) Fx.skid(last[i].x, last[i].z, w.x, w.z, this.pos.y); last[i] = { x: w.x, z: w.z }; });
       } else this.skidLast = null;
       if (mode && this.smokeCD <= 0) {
-        this.smokeCD = mode === 'drift' ? 0.07 : mode === 'dust' ? 0.11 : 0.14;   // fumaça ~60% menor (antes 0,025 / 0,045 / 0,06 s)
+        this.smokeCD = mode === 'drift' ? 0.035 : mode === 'dust' ? 0.06 : 0.07;   // mais fumaça (antes 0,07 / 0,11 / 0,14 s)
         const dustCol = this.track.dustColor || 0xc9a878;
         (this.m.moto ? [0] : [-1, 1]).forEach(s => {
           if (mode === 'drift' && s && s !== -this.driftDir && Math.random() < 0.5) return;
@@ -410,7 +464,7 @@
       if (this.boostT > 0 && !this.off && this.trailCD <= 0) {
         this.trailCD = 0.016;
         (this.m.moto ? this.m.flames.slice(0, 1) : this.m.flames).forEach(f => { f.getWorldPosition(_w); if (this.m.moto && this.m.flames[1]) { this.m.flames[1].getWorldPosition(_w2); _w.add(_w2).multiplyScalar(0.5); }
-          Fx.puff('glow', _w.x, _w.y, _w.z, -Math.sin(this.mvAng) * 6, (Math.random() - 0.5) * 2, -Math.cos(this.mvAng) * 6, Math.random() < 0.7 ? 0xff7a1a : 0xffd23a, 1.4, 0.3, 0.4, 0.9);
+          Fx.flame(_w.x + (Math.random() - 0.5) * 0.2, _w.y + (Math.random() - 0.5) * 0.15, _w.z + (Math.random() - 0.5) * 0.2, -Math.sin(this.mvAng) * (5 + Math.random() * 3), 0.6 + Math.random(), -Math.cos(this.mvAng) * (5 + Math.random() * 3), 0.95 + Math.random() * 0.4, 0.45);
           if (Math.random() < 0.5) Fx.puff('glow', _w.x, _w.y, _w.z, -Math.sin(this.mvAng) * 12, (Math.random() - 0.5) * 3, -Math.cos(this.mvAng) * 12, 0x7ad8ff, 0.45, 0.1, 0.5, 1);
         });
       }

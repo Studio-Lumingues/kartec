@@ -4,15 +4,15 @@
 /* =====================================================================================
    style.css — identidade visual do Super Kartec (direção cartum / "festa entre amigos")
    Paleta de bala: azul-piscina, rosa-melancia, amarelo-sol, menta e roxo, sempre com contorno de
-   tinta roxo-escuro (#2a1d4a) e sombra "dura" embaixo — tudo parece adesivo ou brinquedo de plástico.
+   tinta roxo-escuro (#0c0c0e) e sombra "dura" embaixo — tudo parece adesivo ou brinquedo de plástico.
    Tipografia arredondada: Fredoka (títulos e números garrafais) + Nunito (textos).
    Botões respondem ao toque com efeito gelatina (.jelly). A entrada da logo continua sendo o grande momento.
    ===================================================================================== */
 :root {
   --sky: #3db8ff;
   --sky-deep: #6a4cff;
-  --ink: #2a1d4a;
-  --ink-2: #5d4f86;
+  --ink: #0c0c0e;   /* antes roxo escuro (#2a1d4a): bordas, contornos, sombras e barras agora pretos */
+  --ink-2: #4a4a50;
   --white: #ffffff;
   --mist: #f1ecff;
   --red: #ff4d6d;
@@ -29,7 +29,7 @@
   --r-md: 20px;
   --line: 4px solid var(--ink);
   --pop: 0 6px 0 var(--ink);
-  --shadow: 0 7px 0 var(--ink), 0 16px 30px rgba(42, 29, 74, .28);
+  --shadow: 0 7px 0 var(--ink), 0 16px 30px rgba(0, 0, 0, .28);
   --outline: 0 3px 0 var(--ink), 0 -2px 0 var(--ink), 2px 0 0 var(--ink), -2px 0 0 var(--ink), 2px 3px 0 var(--ink), -2px 3px 0 var(--ink);
 }
 /* HUD da corrida e avisos: o roxo-escuro (tinta) vira cinza só aqui; menus e telas continuam com a paleta original */
@@ -46,7 +46,7 @@ body > canvas:first-child { position: fixed; inset: 0; display: block; }
 button { font-family: var(--ui); cursor: pointer; color: inherit; }
 button:focus-visible, input:focus-visible { outline: 4px solid var(--select); outline-offset: 3px; }
 [hidden] { display: none !important; }
-kbd { display: inline-block; min-width: 1.6em; padding: .05em .45em; margin: 0 .1em; border-radius: 7px; background: rgba(20, 24, 63, .12); border-bottom: 2px solid rgba(20, 24, 63, .25); font: 800 .78em var(--ui); text-align: center; vertical-align: .08em; }
+kbd { display: inline-block; min-width: 1.6em; padding: .05em .45em; margin: 0 .1em; border-radius: 7px; background: rgba(0, 0, 0, .12); border-bottom: 2px solid rgba(0, 0, 0, .25); font: 800 .78em var(--ui); text-align: center; vertical-align: .08em; }
 
 /* ---------- visibilidade por tela ---------- */
 #hud, #touch, #signal { display: none; }
@@ -134,7 +134,7 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
 #touch { position: fixed; left: 0; right: 0; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); justify-content: space-between; padding: 0 14px; z-index: 6; pointer-events: none; }
 #touch .pad { display: flex; gap: 12px; pointer-events: auto; }
 #touch button { width: 74px; height: 74px; border-radius: 50%; border: var(--line); background: var(--white); color: var(--ink); font: 700 26px var(--display); box-shadow: var(--pop); touch-action: none; }
-#touch button:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(20, 24, 63, .25); }
+#touch button:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, .25); }
 #touch button.go { background: var(--red); color: var(--white); }
 #touch button.d { background: var(--gold); }
 #touch button.d { font-size: 15px; background: var(--gold); }
@@ -179,7 +179,7 @@ body.logoPhase #introFlash { animation: flash .7s ease-out forwards; }
 @keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
 .skip { position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); bottom: calc(9vh + 16px); padding: 8px 16px; border: 3px solid var(--ink); border-radius: 999px; background: var(--white); color: var(--ink); font: 600 17px var(--display); box-shadow: 0 4px 0 var(--ink); }
 body.logoPhase .skip { bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
-#pressStart { position: absolute; left: 0; right: 0; bottom: 16vh; margin: 0; text-align: center; color: var(--white); font: 900 clamp(16px, 2.4vw, 22px) var(--ui); text-shadow: 0 2px 0 rgba(20, 24, 63, .5); opacity: 0; }
+#pressStart { position: absolute; left: 0; right: 0; bottom: 16vh; margin: 0; text-align: center; color: var(--white); font: 900 clamp(16px, 2.4vw, 22px) var(--ui); text-shadow: 0 2px 0 rgba(0, 0, 0, .5); opacity: 0; }
 body.logoPhase #pressStart { animation: blink 1.4s ease-in-out 1.1s infinite; }
 #pressStart kbd { background: rgba(255, 255, 255, .25); color: var(--white); border-bottom-color: rgba(0, 0, 0, .25); }
 @keyframes blink { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
@@ -215,7 +215,7 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 .navBtn small { display: block; font-size: 13px; font-weight: 800; color: var(--ink-2); }
 
 /* ---------- modais (escala + fade) ---------- */
-.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(20, 24, 63, .45); animation: fadeIn .22s ease both; }
+.modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .45); animation: fadeIn .22s ease both; }
 .modal .sheet { width: min(640px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; background: var(--white); border-radius: var(--r-lg); padding: 20px 22px 22px; border: var(--line); box-shadow: var(--shadow); animation: scaleUp .32s cubic-bezier(.2, 1.35, .4, 1) both; scrollbar-width: thin; }
 .modal .sheet.narrow { width: min(520px, 100%); }
 .modal.closing { animation: fadeOut .2s ease both; } .modal.closing .sheet { animation: scaleDown .2s ease both; }
@@ -279,7 +279,7 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 
 /* ---------- cartões de resultado (rodada da Copa e pódio) ---------- */
 #roundUI, #podiumUI { position: fixed; z-index: 10; display: flex; justify-content: center; pointer-events: none; padding: 0 14px calc(18px + env(safe-area-inset-bottom, 0px)); }
-#roundUI { inset: 0; align-items: center; background: radial-gradient(ellipse at center, rgba(20, 24, 63, .15), rgba(20, 24, 63, .55)); }
+#roundUI { inset: 0; align-items: center; background: radial-gradient(ellipse at center, rgba(0, 0, 0, .15), rgba(0, 0, 0, .55)); }
 #podiumUI { inset: auto 0 0 0; }
 .card { pointer-events: auto; width: min(580px, 100%); background: var(--white); border-radius: var(--r-lg); padding: 20px 22px 22px; border: var(--line); box-shadow: var(--shadow); animation: rise .55s cubic-bezier(.2, 1.4, .4, 1) .3s both; }
 @keyframes rise { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -290,7 +290,7 @@ body[data-screen="garage"] #brand, body[data-screen="race"] #brand, body[data-sc
 .row { display: grid; grid-template-columns: 44px 16px 1fr auto auto; align-items: center; gap: 10px; padding: 8px 14px; border-radius: 16px; border: 3px solid var(--ink); background: var(--mist); font-weight: 800; font-size: 16px; }
 .row.head { background: none; border: 0; padding: 0 14px; font-size: 12px; font-weight: 900; color: var(--ink-2); }
 .row b { font: 700 26px var(--display); color: var(--ink); }
-.row i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 2px var(--white), 0 0 0 3px rgba(20, 24, 63, .3); }
+.row i { width: 16px; height: 16px; border-radius: 50%; box-shadow: 0 0 0 2px var(--white), 0 0 0 3px rgba(0, 0, 0, .3); }
 .row em { font-style: normal; font-variant-numeric: tabular-nums; color: var(--ink-2); min-width: 92px; text-align: right; }
 .row em.total { color: var(--ink); font-weight: 900; }
 .row.me { background: #fff4c7; box-shadow: 0 4px 0 var(--ink); }
@@ -388,7 +388,7 @@ details.adv summary { cursor: pointer; }
 .lobbyPlayers li { display: grid; grid-template-columns: 16px 1fr auto auto auto; align-items: center; gap: 10px; padding: 7px 12px; border: 3px solid var(--ink); border-radius: 14px; background: var(--mist); font-weight: 800; }
 .lobbyPlayers li.me { background: #fff3c4; }
 .lobbyPlayers li.free { border-style: dashed; opacity: .55; }
-.lobbyPlayers li i { width: 16px; height: 16px; border-radius: 50%; background: #ccd; box-shadow: 0 0 0 2px var(--white), 0 0 0 3px rgba(20, 24, 63, .3); }
+.lobbyPlayers li i { width: 16px; height: 16px; border-radius: 50%; background: #ccd; box-shadow: 0 0 0 2px var(--white), 0 0 0 3px rgba(0, 0, 0, .3); }
 .lobbyPlayers .pn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .lobbyPlayers .pn small { color: var(--ink-2); }
 .lobbyPlayers .tag { font-size: 12px; font-weight: 900; color: var(--ink-2); } .lobbyPlayers .tag.ok { color: #1a8a3a; } .lobbyPlayers .tag.host { color: #b07800; }
 .lobbyPlayers .ping { font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
@@ -419,7 +419,7 @@ body.cursorIdle, body.cursorIdle * { cursor: none !important; }
 /* clique: anel + faíscas na ponta do cursor (camada do compositor, não depende do quadro do jogo) */
 .cBurst { position: fixed; z-index: 10000; width: 0; height: 0; pointer-events: none; }
 .cBurst i { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--c, #ff4d9a); box-shadow: 0 0 0 2px #fff; animation: cRing .42s cubic-bezier(.2, .8, .3, 1) forwards; }
-.cBurst b { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px; background: var(--c, #ffd23f); box-shadow: 0 0 0 1.5px #2a1d4a; transform: rotate(var(--a)) translateY(-6px);
+.cBurst b { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px; background: var(--c, #ffd23f); box-shadow: 0 0 0 1.5px #0c0c0e; transform: rotate(var(--a)) translateY(-6px);
   animation: cSpark .5s cubic-bezier(.15, .7, .3, 1) forwards; }
 @keyframes cRing { from { transform: scale(.25); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
 @keyframes cSpark { from { transform: rotate(var(--a)) translateY(-6px) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateY(-24px) scale(.3); opacity: 0; } }
@@ -534,7 +534,7 @@ body[data-screen="menu"] #brand { width: min(500px, 44vw); top: calc(22px + env(
 
 /* placa do piloto logo à frente: [posição] nome, em paralelogramo com contorno de tinta e ponteiro apontando para o kart */
 #rivalTag { position: fixed; left: 0; top: 0; z-index: 3; pointer-events: none; transform-origin: 50% 100%; will-change: transform, opacity; font-family: var(--display);
-  filter: drop-shadow(2.5px 0 0 var(--ink)) drop-shadow(-2.5px 0 0 var(--ink)) drop-shadow(0 2.5px 0 var(--ink)) drop-shadow(0 -2.5px 0 var(--ink)) drop-shadow(0 5px 0 rgba(42, 29, 74, .55)); }
+  filter: drop-shadow(2.5px 0 0 var(--ink)) drop-shadow(-2.5px 0 0 var(--ink)) drop-shadow(0 2.5px 0 var(--ink)) drop-shadow(0 -2.5px 0 var(--ink)) drop-shadow(0 5px 0 rgba(0, 0, 0, .55)); }
 #rivalTag[hidden] { display: none; }
 #rivalTag .rt { position: relative; display: flex; align-items: stretch; height: 36px; background: linear-gradient(180deg, #3b3d46 0%, #23242a 55%, #17181c 100%); clip-path: polygon(12px 0, 100% 0, calc(100% - 12px) 100%, 0 100%); }
 #rivalTag .rt::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 45%; background: linear-gradient(180deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, 0)); pointer-events: none; }
@@ -614,7 +614,7 @@ html, body { overscroll-behavior: none; }
 .pauseNav { display: grid; gap: 12px; margin-top: 12px; }
 .pauseNav .cta.big { font-size: 32px; padding: 12px 26px 14px; }
 .pauseNav .navBtn:nth-child(2) { background: #fff3c4; } .pauseNav .navBtn:nth-child(3) { background: #dff8ff; }
-#pauseModal { background: rgba(20, 24, 63, .55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+#pauseModal { background: rgba(0, 0, 0, .55); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
 
 /* ---------- configurações › Partida: sair/reiniciar com dois toques ---------- */
 #setTabs.three { grid-template-columns: 1fr 1fr 1fr; }
@@ -630,7 +630,7 @@ html, body { overscroll-behavior: none; }
 /* ---------- online: busca pelo nome e senha só quando a sala tem ---------- */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .field.search { margin: 8px 0 0; }
-.field.search input { width: 100%; padding-left: 40px; background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10.5' cy='10.5' r='6.5' fill='none' stroke='%232a1d4a' stroke-width='2.6'/><path d='M15.5 15.5l5 5' stroke='%232a1d4a' stroke-width='2.8' stroke-linecap='round'/></svg>") 12px 50% / 20px no-repeat; }
+.field.search input { width: 100%; padding-left: 40px; background: var(--white) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><circle cx='10.5' cy='10.5' r='6.5' fill='none' stroke='%230c0c0e' stroke-width='2.6'/><path d='M15.5 15.5l5 5' stroke='%230c0c0e' stroke-width='2.8' stroke-linecap='round'/></svg>") 12px 50% / 20px no-repeat; }
 #onPassRow { grid-template-columns: 1fr auto; }
 @media (max-width: 560px) { #onPassRow { grid-template-columns: 1fr; } #onPassRow .cta { grid-column: auto; } }
 .roomItem:not(.locked) .lock .icn { opacity: .9; }
@@ -642,7 +642,7 @@ html, body { overscroll-behavior: none; }
 .pauseAct.armed { animation: armedPulse .5s ease-in-out infinite alternate; }
 .ghost.pauseAct.armed { background: #ffd9df; }
 .pauseHint { margin: -4px 0 0; text-align: center; font: 800 13px var(--ui); color: var(--ink-2); }
-.pauseSec { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; border-top: 3px dashed rgba(42, 29, 74, .18); }
+.pauseSec { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding-top: 12px; border-top: 3px dashed rgba(0, 0, 0, .18); }
 .pauseSec .ghost { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-size: 16px; padding: 9px 12px; }
 .pauseSec .ic .icn { width: 20px; height: 20px; }
 @media (max-width: 420px) { .pauseSec { grid-template-columns: 1fr; } }

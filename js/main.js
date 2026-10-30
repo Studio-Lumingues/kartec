@@ -17,6 +17,75 @@
   TX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
+
+  // ---------------- contornos dos personagens/karts: roxo escuro -> preto ----------------
+  // Os contornos (toon) são malhas "de costas" com cor escura. Procura nas cenas ativas, de tempos em tempos, materiais de
+  // contorno roxo-escuros e troca para preto (cada material só é verificado uma vez; céu/cenário claros não são tocados).
+  const INK = new THREE.Color(0x0c0c0e), _hsl = {};
+  function inkFix(root) {
+    if (!root) return;
+    root.traverse(o => {
+      const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+      ms.forEach(m => {
+        if (!m || m.__ink) return; m.__ink = true;
+        const cands = [m.color, m.uniforms && m.uniforms.color && m.uniforms.color.value, m.uniforms && m.uniforms.uColor && m.uniforms.uColor.value,
+          m.uniforms && m.uniforms.outlineColor && m.uniforms.outlineColor.value, m.uniforms && m.uniforms.uOutline && m.uniforms.uOutline.value];
+        cands.forEach(c => { if (!c || !c.isColor) return; c.getHSL(_hsl);
+          const purple = _hsl.h > 0.6 && _hsl.h < 0.9 && _hsl.s > 0.12 && _hsl.l < 0.3;   // roxo/azul-arroxeado bem escuro (cor de contorno)
+          if (purple) c.copy(INK); });
+      });
+    });
+  }
+  let _inkT = 0;
+  function inkFixTick(dt) {
+    if ((_inkT -= dt) > 0) return; _inkT = 1;
+    try { inkFix(Game.scene); if (window.Showroom) inkFix(Showroom.scene); if (window.Intro) inkFix(Intro.scene); if (window.Podium) inkFix(Podium.scene); } catch (e) { }
+  }
+
+  // ---------------- tela preta para voltar ao menu principal ----------------
+  // escurece (fade in), troca a cena por baixo, espera alguns quadros (o menu monta e desenha tudo) e clareia (fade out)
+  function blackFade(fn) {
+    let v = document.getElementById('blackFade');
+    if (!v) { v = document.createElement('div'); v.id = 'blackFade'; document.body.appendChild(v); }
+    if (v.classList.contains('on')) { try { fn(); } catch (e) { console.error(e); } return; }
+    void v.offsetWidth; v.classList.add('on');
+    setTimeout(() => {
+      try { fn(); } catch (e) { console.error(e); }
+      let n = 0; const wait = () => { if (++n < 15) requestAnimationFrame(wait); else setTimeout(() => v.classList.remove('on'), 200); };
+      requestAnimationFrame(wait);
+    }, 450);
+  }
+
+  // ---------------- barras de cinema da largada ----------------
+  // Duas faixas pretas presas à câmera (no 3D, não no HTML) para a fadinha poder ficar POR CIMA delas:
+  // as barras são desenhadas sobre a cena (sem teste de profundidade) e a fadinha é desenhada depois (renderOrder maior).
+  // Entram deslizando no começo da contagem (o HUD some) e saem no "já" (o HUD volta).
+  const Cine = {
+    on: false, k: 0, bars: null, H: 0.12,   // H = altura de cada barra (fração da tela)
+    build(cam) {
+      if (this.bars) return;
+      const m = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 1, depthTest: false, depthWrite: false, fog: false });   // transparente: desenhada DEPOIS da fumaça/efeitos (ficam por baixo das barras)
+      this.bars = [1, -1].map(sg => { const b = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), m); b.renderOrder = 900; b.frustumCulled = false; b.visible = false; b.userData.sg = sg; b.userData.noOutline = true; cam.add(b); return b; });
+    },
+    show() { this.on = true; document.body.classList.add('cine'); },
+    hide(now) { this.on = false; document.body.classList.remove('cine'); if (now) { this.k = 0; if (this.bars) this.apply(camera); } },
+    step(dt, cam) {
+      if (!this.bars) return;
+      const tgt = this.on ? 1 : 0; if (this.k === tgt && !this.on && !this.bars[0].visible) return;
+      this.k += (tgt - this.k) * (1 - Math.exp(-(this.on ? 5 : 6) * dt)); if (Math.abs(tgt - this.k) < 0.002) this.k = tgt;
+      this.apply(cam);
+      // fadinha sempre por cima das barras
+      const F = UI.Fairy && UI.Fairy.rig;
+      if (F && UI.Fairy.fig && !F.userData.cineRO) { F.userData.cineRO = true;   // uma vez, quando o modelo da fadinha já chegou
+        F.traverse(o => { o.renderOrder = 1000 + (o.renderOrder || 0);
+          (o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []).forEach(mt => { if (!mt.transparent) { mt.transparent = true; mt.needsUpdate = true; } }); }); }
+    },
+    apply(cam) {
+      const d = Math.max(cam.near * 1.2, 0.6), hh = Math.tan(cam.fov * Math.PI / 360) * d, hw = hh * cam.aspect, bh = 2 * hh * this.H;
+      const e = this.k * this.k * (3 - 2 * this.k);   // suave
+      this.bars.forEach(b => { b.visible = this.k > 0.001; b.scale.set(hw * 2.2, bh, 1); b.position.set(0, b.userData.sg * (hh - bh / 2 + (1 - e) * bh * 1.05), -d); });
+    }
+  };
   // velocímetro 3D (js/speedo3d.js): objeto 3D preso no canto inferior direito, desenhado por cima da corrida
   let speedo3d = null;
   try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 203, camera }); else console.warn('[velocímetro 3D] js/speedo3d.js não carregou'); }
@@ -285,7 +354,8 @@
       const dens = window.Settings ? Settings.sceneryDensity() * (this.lite && Settings.autoPerf() ? 0.6 : 1) : (this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY);
       this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: dens }));
       Fx.init(scene);
-      scene.add(camera); UI.Fairy.build(camera);
+      if (window.Items) Items.build(scene, this.track, def, { enabled: !(opts && opts.online) });   // caixas de item (só offline)
+      scene.add(camera); Fx.cam = camera; UI.Fairy.build(camera); Cine.build(camera); Cine.hide(true);
       if (opts && opts.online) {
         // ONLINE: os rivais são os outros jogadores (karts de rede: só animam o estado recebido; sem IA)
         const grid = opts.online, me = grid.find(g => g.id === Net.id) || grid[0], others = grid.filter(g => g !== me);
@@ -337,9 +407,10 @@
     dispose() {
       if (!this.scene) return;
       this.scene.remove(camera);
+      if (window.Items) Items.dispose();                              // tira caixas/itens da cena antes de limpar geometrias
       (this.karts || []).forEach(k => k && !k._handedOff && k.m.pilot && k.m.pilot.dispose());
       if (this.fill) { this.fill.dispose(); this.fill = null; }
-      const keep = new Set([Fx.glowTex(), Fx.softTex(), Fx.puffTex(), Fx.starTex(), Toon.gradient()]);
+      const keep = new Set([Fx.glowTex(), Fx.softTex(), Fx.puffTex(), Fx.starTex(), Toon.gradient()].concat(window.Smoke ? Smoke.textures() : []));   // texturas da fumaça são reaproveitadas entre corridas
       if (this.player) this.player.m.group.traverse(o => { if (o.material && o.material.map) keep.add(o.material.map); if (o.material && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); });
       (this.rivals || []).forEach(b => b.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); }));
       [Pilot.tpl && Pilot.tpl.map, Pilot.tpl && Pilot.tpl.normalMap, KartMats.tread(false), KartMats.tread(true)].forEach(t => t && keep.add(t));
@@ -369,7 +440,7 @@
       else if (ev === 'bump') S.bump(); else if (ev === 'land') S.land(); else if (ev === 'driftStart') S.drift(); else if (ev === 'coin') S.coin();
       else if (ev === 'lap' && this.state === 'race') {
         const l = this.player.lap;
-        if (l === CFG.LAPS) { UI.toast('Última volta!', 1800); S.finalLap(); } else if (l > 1 && l <= CFG.LAPS) { UI.toast('Volta ' + l, 1200); S.lap(); }
+        if (l === CFG.LAPS) { S.finalLap(); } else if (l > 1 && l <= CFG.LAPS) { S.lap(); }   // sem mensagens na tela (só o som)
       }
     },
 
@@ -382,10 +453,10 @@
     // menu principal. fromIntro: a logo desliza da abertura para o canto; da corrida: cortina
     toMenu(fromIntro) {
       const go = () => {
-        this.state = 'menu'; UI.screen('menu'); UI.Fairy.hide(); UI.countNum(''); Env.hideFlare(); Podium.stop(); this.dispose(); this.cup = null;
+        this.state = 'menu'; UI.screen('menu'); UI.Fairy.hide(); Cine.hide(true); UI.countNum(''); Env.hideFlare(); Podium.stop(); this.dispose(); this.cup = null;
         $('signal').hidden = true; Showroom.setRig('menu'); UI.menuKart(Custom.spec); if (Intro.karts) Intro.dispose();
       };
-      if (fromIntro === true || this.state === 'garage' || this.state === 'menu') go(); else UI.transition(go);
+      if (fromIntro === true || this.state === 'garage' || this.state === 'menu') go(); else blackFade(go);   // saindo da corrida/pódio: tela preta (fade in/out)
     },
     // garagem: mesma vitrine 3D, a câmera desliza para o rig da garagem
     toGarage() {
@@ -404,7 +475,7 @@
       this.curTrack = trackIdx; this.load(trackIdx);
       UI.screen('race'); this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
       this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
-      $('signal').hidden = false; UI.countNum(''); UI.Fairy.show();
+      $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); Cine.show();
       UI.cupInfo('');   // sem "Copa Kartec · x/3" no HUD
       PL.request();   // sem o nome da pista na tela: a largada fica livre para a Fatecxie
       $('help').classList.remove('fade'); clearTimeout(this._hf); this._hf = setTimeout(() => $('help').classList.add('fade'), 9000);
@@ -422,9 +493,9 @@
         if (c.step === 1 && Input.keys.up) c.early = true;              // acelerou já no amarelo: perde a largada turbo
         if (go) {
           this.state = 'race';
-          if (Input.keys.up && !c.early) { this.player.boostT = 1.0; this.player.speed = CFG.PHYS.MAX * 0.8; UI.Sfx.boost(); UI.toast('Largada turbo!', 1000); }
+          if (Input.keys.up && !c.early) { this.player.boostT = 1.0; this.player.speed = CFG.PHYS.MAX * 0.8; UI.Sfx.boost(); }
           if (!this.online) this.rivals.forEach((b, i) => { const good = Math.random() < 0.45; b.boostT = good ? 0.5 : 0; b.speed = CFG.PHYS.MAX * (good ? 0.45 : 0.18 + Math.random() * 0.14); });   // só parte do pelotão acerta a largada turbo
-          setTimeout(() => UI.Fairy.leave(), 450);
+          setTimeout(() => UI.Fairy.leave(), 450); Cine.hide();   // "já": barras saem e o HUD volta
         }
         c.step++;
       }
@@ -451,7 +522,7 @@
       const rows = all.map((r, i) => ({ name: r.name, color: r.color, spec: r.spec, player: r.player, a: fmt(r.t), b: fmt(tot[i]), tot: tot[i], note: r.est ? 'tempo estimado nesta pista' : '' })).sort((a, b) => a.tot - b.tot);
       const last = this.cup.round === CFG.CUP.order.length - 1, me = rows.findIndex(r => r.player);
       const lead = me === 0 ? 'Você lidera a Copa por ' + (rows[1].tot - rows[0].tot).toFixed(2) + ' s.' : rows[0].name + ' lidera a Copa; você está em ' + (me + 1) + 'º, a ' + (rows[me].tot - rows[0].tot).toFixed(2) + ' s.';
-      this.state = 'round'; UI.screen('round'); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true;
+      this.state = 'round'; UI.screen('round'); UI.Fairy.hide(); Cine.hide(true); Env.hideFlare(); $('signal').hidden = true;
       UI.round({ round: this.cup.round + 1, total: CFG.CUP.order.length, trackName: def.name, rows, last, note: (rec ? 'Novo recorde nesta pista! ' : '') + lead });
       this.cupTotals = tot; this.cupAll = all;
     },
@@ -477,7 +548,7 @@
     },
     toPodium(rows, cup, rec) {
       this.paused = false;
-      this.state = 'podium'; UI.screen('podium'); UI.podium(Object.assign({ rows, cup: !!cup }, cup && typeof cup === 'object' ? cup : {})); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true;
+      this.state = 'podium'; UI.screen('podium'); UI.podium(Object.assign({ rows, cup: !!cup }, cup && typeof cup === 'object' ? cup : {})); UI.Fairy.hide(); Cine.hide(true); Env.hideFlare(); $('signal').hidden = true;
       // os karts da corrida vão inteiros para o pódio (mesmos modelos e shaders já compilados: sem travada)
       Podium.start(rows.map(r => ({ name: r.name, color: r.color, spec: r.spec, player: r.player, model: r.kart ? this.handOff(r.kart) : null })));
       this.dispose();
@@ -513,10 +584,11 @@
         for (let a = 0; a < K.length; a++) for (let b = a + 1; b < K.length; b++) Kart.collidePair(K[a], K[b]);
       }
       safe('turbo', () => this.boostStep(dt, inP, racing));
+      if (window.Items) safe('itens', () => Items.update(dt, K, this.state === 'race'));
       if (tr.collectCoins) K.forEach(k => tr.collectCoins(k));
       if (this.state === 'race') { (ON ? [P] : K).forEach(k => this.slipstream(dt, k)); this.wrongWay(dt, P); }
       (ON ? [P] : K).forEach(k => { if (racing && !k.finished && k.lap > CFG.LAPS) { k.finished = true; k.finishTime = this.race.time;
-        if (k === P) { const first = this.racePos(P) === 1; UI.toast(first ? 'Vitória!' : 'Chegada! ' + this.racePos(P) + 'º lugar', 2200); UI.Sfx.fanfare(); this.state = 'finish'; this.race.endT = 0;
+        if (k === P) { const first = this.racePos(P) === 1; void first; UI.Sfx.fanfare(); this.state = 'finish'; this.race.endT = 0;
           if (ON) { Net.send({ t: 'finish', raceId: ON.raceId, time: this.race.time }); setTimeout(() => { if (this.state === 'finish' && this.online) UI.toast('Aguardando os outros pilotos…', 4000); }, 2400); } } } });
       if (this.state === 'finish' && !ON) { this.race.endT += dt; if ((this.rivals.every(b => b.finished) && this.race.endT > 2.5) || this.race.endT > 6) this.endRace(); }
       if (!this.scene || this.state === 'round' || this.state === 'podium') return;   // a corrida acabou neste quadro
@@ -525,7 +597,7 @@
       Env.step(dt, P.pos, tr, this.karts);
       if (this.fill) this.fill.update(dt, camera.position, Env.fogFar);
       this.kartLod(dt);
-      UI.Fairy.step(dt, camera);
+      UI.Fairy.step(dt, camera); Cine.step(dt, camera);
       UI.hud(P, this.rivals, this.race);
       UI.Sfx.step(P, true, this.rivals);
       this.updateCamera(dt);
@@ -565,7 +637,7 @@
         Podium.stop(); this.curTrack = prep.track; this.load(prep.track, { online: prep.grid });
         UI.screen('race'); this.state = 'waiting'; this.cd = { t: 0, step: 0, early: false };
         this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
-        $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); UI.cupInfo(this.onlineTag());
+        $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); Cine.show(); UI.cupInfo(this.onlineTag());
         if (!prep.cup) UI.toast('Aguardando todos carregarem…', 2500); PL.request();
         Net.send({ t: 'loaded', raceId: prep.raceId });
       });
@@ -591,10 +663,10 @@
         if (m.me) { try { this.restoreKart(P, m.me); } catch (e) { console.error('[resume]', e); } }
         if (Net.serverNow() < m.startAt) {                                   // ainda na contagem: ela continua sincronizada
           this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
-          $('signal').hidden = false; UI.countNum(''); UI.Fairy.show();
+          $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); Cine.show();
         } else {                                                             // já largou: direto para a corrida
           this.state = 'race'; this.cd = { t: 99, step: 4, early: true };
-          $('signal').hidden = true; UI.countNum(''); this.race.time = Math.max(0, Net.raceTime());
+          $('signal').hidden = true; UI.countNum(''); Cine.hide(true); this.race.time = Math.max(0, Net.raceTime());
         }
         if (mine) { P.finished = true; P.finishTime = mine[1]; this.state = 'finish'; this.race.endT = 0; UI.toast('Aguardando os outros pilotos…', 4000); }
         else UI.toast('De volta à corrida!', 1600);
@@ -642,7 +714,7 @@
           a: s.racePos ? s.racePos + 'º · +' + s.racePts : (s.raceTime == null ? 'não terminou' : '—'), b: s.pts + ' pts' }));
         const me = S.findIndex(s => s.id === Net.id), lead = me === 0 ? 'Você lidera a Copa!' : me > 0 ? 'Você está em ' + (me + 1) + 'º, a ' + (S[0].pts - S[me].pts) + ' pts do líder.' : '';
         UI.transition(() => {
-          this.state = 'round'; UI.screen('round'); UI.Fairy.hide(); Env.hideFlare(); $('signal').hidden = true; UI.countNum('');
+          this.state = 'round'; UI.screen('round'); UI.Fairy.hide(); Cine.hide(true); Env.hideFlare(); $('signal').hidden = true; UI.countNum('');
           UI.round({ online: true, round: cup.round, total: cup.total, trackName: CFG.TRACKS[cup.track].name, rows, head: ['Nesta corrida', 'Pontos'], last: false });
           UI.roundCountdown(Math.max(1000, (cup.next || 9000) - 600), lead);
         });
@@ -677,11 +749,11 @@
       if (!behind) { s.t = Math.max(0, s.t - dt * 2); return; }
       s.t += dt;
       if (isPlayer && Math.random() < 0.5) Fx.puff('glow', a.pos.x + (Math.random() - 0.5) * 3, a.pos.y + 1 + Math.random() * 2, a.pos.z + (Math.random() - 0.5) * 3, -sa * 18, 0, -ca * 18, 0xffffff, 0.35, 0.05, 0.25, 0.7);
-      if (s.t > 1.1) { a.boostT = Math.max(a.boostT, 0.8); s.t = 0; s.cool = 3; if (isPlayer) { UI.toast('Vácuo!', 900); UI.Sfx.boost(); } }
+      if (s.t > 1.1) { a.boostT = Math.max(a.boostT, 0.8); s.t = 0; s.cool = 3; if (isPlayer) { UI.Sfx.boost(); } }
     },
     wrongWay(dt, k) {
       const t = this.track.T[k.idx], dot = Math.sin(k.ang) * t.x + Math.cos(k.ang) * t.z;
-      if (dot < -0.3 && Math.abs(k.speed) > 5) { this.wrongT += dt; if (this.wrongT > 1.2) { UI.toast('Contramão!', 1000); UI.Sfx.wrong(); this.wrongT = -1.5; } } else this.wrongT = Math.min(0, this.wrongT + dt);
+      if (dot < -0.3 && Math.abs(k.speed) > 5) { this.wrongT += dt; if (this.wrongT > 1.2) { UI.Sfx.wrong(); this.wrongT = -1.5; } } else this.wrongT = Math.min(0, this.wrongT + dt);
     },
     orbitCam() {
       const P = this.player, c = this.cam, d = 17;
@@ -709,7 +781,7 @@
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
       // tremidinha fina acima de 75% da velocidade (sensação de velocidade, sem enjoar)
       if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
-      const fov = (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2 / (CFG.SPEED_MULT || 1));   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
+      const fov = this.speedFov(P);   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
       camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // FOV original
       // zoom do turbo: entra com "soco" (mola rápida) e volta suave (mola amortecida); 10% = câmera 10% mais perto
       const B = this.boost;
@@ -723,7 +795,10 @@
         } }
       this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
     },
-    // visão traseira: mesma altura e distância da câmera normal, só que na frente do kart olhando para trás
+    // FOV da velocidade (o mesmo na câmera normal e na visão traseira)
+    speedFov(P) { return (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2 / (CFG.SPEED_MULT || 1)); },
+    // visão traseira: mesma altura, distância, FOV de velocidade, tremidinha e névoa do turbo da câmera normal,
+    // só que na frente do kart olhando para trás (não perde a sensação de velocidade)
     lookBackCam(dt) {
       const P = this.player, c = this.cam; c.lookBack = true;
       const a = P.ang, spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55) * c.zoom;
@@ -731,8 +806,10 @@
       const ceil = tr.ceilingAt ? tr.ceilingAt({ x: tx, z: tz }, P.idx) : Infinity;
       camera.position.set(tx, Math.min(Math.max(P.pos.y + h, 1.5), ceil), tz);
       camera.lookAt(P.pos.x - Math.sin(a) * 4, P.pos.y + 2, P.pos.z - Math.cos(a) * 4);
-      camera.fov += (60 - camera.fov) * Math.min(1, 8 * dt); camera.updateProjectionMatrix();
-      this.scene.fog.far = Env.fogFar;
+      if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
+      if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
+      camera.fov += (this.speedFov(P) - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // mesmo FOV de velocidade da câmera normal
+      this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
     },
     // modo leve: esconde os contornos (metade dos triângulos dos karts e pilotos) na cena atual e nas próximas
     lite: false,
@@ -835,7 +912,6 @@
       B.zv += 0.9 + 0.5 * n;                // "soco" do zoom, mais forte a cada seção (também na 2ª, que já está com zoom)
       this.cam.shake = Math.min(0.6, this.cam.shake + 0.08 * n);
       try { if (UI.Sfx.coin) UI.Sfx.coin(); } catch (e) { }
-      if (n >= 3) UI.toast('Turbo máximo!', 900);
     },
     fireBoost(n) {
       const B = this.boost, P = this.player;
@@ -877,6 +953,7 @@
     drawSpeedo() {
       const P = this.player, st = this.state;
       if (!speedo3d || !P || !(st === 'race' || st === 'countdown' || st === 'waiting' || st === 'finish')) return;
+      if (Cine.on || Cine.k > 0.5) return;   // largada com barras de cinema: HUD escondido
       const inp = this.inP || {}, old = Speedo3D.readOld && Speedo3D.readOld();
       const fill = Math.abs(P.speed) * kmhK() / BOOST.TOP_KMH;                 // o arco vai de 0 a 203 km/h (turbo completo)
       const kmh = old ? old.speed : Math.abs(P.speed) * kmhK();
@@ -902,7 +979,7 @@
   function nameTag(name, color) {
     const c = TX.cvs(256, 64), g = c.getContext('2d');
     g.font = '800 30px ' + CFG.FONT_UI; const w = Math.min(244, g.measureText(name).width + 40);
-    g.fillStyle = 'rgba(42,29,74,.82)'; g.beginPath(); g.moveTo(128 - w / 2 + 16, 8); g.arcTo(128 + w / 2, 8, 128 + w / 2, 56, 16); g.arcTo(128 + w / 2, 56, 128 - w / 2, 56, 16); g.arcTo(128 - w / 2, 56, 128 - w / 2, 8, 16); g.arcTo(128 - w / 2, 8, 128 + w / 2, 8, 16); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(0, 0, 0,.82)'; g.beginPath(); g.moveTo(128 - w / 2 + 16, 8); g.arcTo(128 + w / 2, 8, 128 + w / 2, 56, 16); g.arcTo(128 + w / 2, 56, 128 - w / 2, 56, 16); g.arcTo(128 - w / 2, 56, 128 - w / 2, 8, 16); g.arcTo(128 - w / 2, 8, 128 + w / 2, 8, 16); g.closePath(); g.fill();
     g.fillStyle = color; g.beginPath(); g.arc(128 - w / 2 + 18, 32, 7, 0, 7); g.fill();
     g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(name, 128 + 8, 33);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
@@ -988,6 +1065,34 @@
   addEventListener('resize', () => { if (window.Logo) Logo.resize(); if (Game.state === 'menu') UI.layoutMenu(); });
   addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); Podium.resize(); Showroom.resize(); Intro.resize(); });
 
+  // ---------------- logo do Studio Lumingues (no lugar do "Preparando a largada") ----------------
+  // 2 s de tela preta, a logo entra em fade in; depois de 3 s na tela ela some em fade out (0,8 s). Se o jogo ainda estiver
+  // carregando, a logo espera o carregamento acabar. Em seguida a abertura começa por baixo de um véu preto que sai suave.
+  const SPLASH = { HOLD: 3000, FADE: 800, VEIL: 700 };
+  function splashDone(next) {
+    const img = document.querySelector('#boot .studioLogo');
+    let gone = false; const go = () => { if (gone) return; gone = true; next(); };
+    if (!img) { go(); return; }
+    const run = () => {
+      const t0 = window.__splashT0 || performance.now();
+      const wait = Math.max(0, t0 + SPLASH.HOLD - performance.now());
+      setTimeout(() => {
+        img.classList.add('out');                                    // fade out da logo
+        setTimeout(() => {
+          const veil = document.createElement('div'); veil.id = 'splashVeil'; document.body.appendChild(veil);
+          go();                                                      // a abertura começa por baixo do véu preto
+          requestAnimationFrame(() => requestAnimationFrame(() => veil.classList.add('off')));
+          setTimeout(() => veil.remove(), SPLASH.VEIL + 100);
+        }, SPLASH.FADE);
+      }, wait);
+    };
+    if (window.__splashT0 || (img.complete && img.naturalWidth)) { run(); return; }
+    // ainda carregando: espera a imagem, mas nunca trava (sem logo em 3,5 s -> segue para a abertura)
+    let done = false; const ok = () => { if (done) return; done = true; run(); };
+    img.addEventListener('load', ok, { once: true });
+    setTimeout(() => { if (!done) { done = true; if (img.naturalWidth) run(); else go(); } }, 3500);
+  }
+
   // ---------------- inicialização (espera as fontes para os textos em canvas saírem certos) ----------------
   let started = false;
   function boot() {
@@ -1037,7 +1142,8 @@
       try { renderer.compile(Showroom.scene, Showroom.cam); } catch (e) { }   // vitrine do menu pré-compilada: nada a compilar quando a logo sai
       Custom.onChange((id, v, spec) => { Showroom.apply(id, spec); UI.menuKart(spec); });
       // voltando para uma sala/corrida online (F5 ou aba reaberta em até 15 s): pula a abertura
-      setTimeout(() => { if (!(window.Online && Online.bootDone())) Game.toIntro(); }, ok ? 150 : 900);
+      // logo do estúdio: fica 3 s na tela (contando de quando apareceu), some em fade out e só então a abertura começa
+      splashDone(() => { if (!(window.Online && Online.bootDone())) Game.toIntro(); });
     });
   }
   // espera a fonte dos números/títulos (Titan One) para os textos desenhados em canvas já saírem com ela
@@ -1055,6 +1161,7 @@
   window.addEventListener('blur', resetPerf);
   const safe = (name, fn) => { try { fn(); } catch (e) { if (errs++ < 20) console.error('[' + name + ']', e); } };
   function loop(now) {
+    try { inkFixTick(1 / 60); } catch (e) { }
     requestAnimationFrame(loop);
     const raw = Math.max(0, (now - last) / 1000) || 0, dt = Math.min(0.05, raw); last = now;
     // quadros muito longos (aba escondida, travada de carregamento) não entram na média; os demais valem no máximo 50 ms

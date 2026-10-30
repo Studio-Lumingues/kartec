@@ -40,7 +40,8 @@
   };
   let _fc = null;
   const fc = () => _fc || (_fc = (() => { const u = CFG.FAIRY || {};
-    return Object.assign({}, FAIRY_DEF, u, { BODY: Object.assign({}, FAIRY_DEF.BODY, u.BODY), WINGS: Object.assign({}, FAIRY_DEF.WINGS, u.WINGS),
+    return Object.assign({}, FAIRY_DEF, u, { BODY: Object.assign({}, FAIRY_DEF.BODY, u.BODY), WINGS: Object.assign({}, FAIRY_DEF.WINGS, u.WINGS),
+
       SIGNAL: Object.assign({}, FAIRY_DEF.SIGNAL, u.SIGNAL), SWING: Object.assign({}, FAIRY_DEF.SWING, u.SWING) }); })());
   const lowEnd = () => /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent) || (navigator.hardwareConcurrency || 8) <= 4;
 
@@ -368,7 +369,7 @@
       track.minimap.forEach(e => {
         if (e.type !== 'building') return; const [a, b] = mm(e.x, e.z);
         g.save(); g.translate(a, b); g.rotate(e.rot); g.fillStyle = 'rgba(132, 142, 196, .62)'; g.fillRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s);
-        g.lineWidth = .9; g.strokeStyle = 'rgba(70, 78, 130, .75)'; g.strokeRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s); g.restore();
+        g.lineWidth = .9; g.strokeStyle = 'rgba(20, 20, 24, .75)'; g.strokeRect(-e.w * s / 2, -e.d * s / 2, e.w * s, e.d * s); g.restore();
       });
       g.lineJoin = g.lineCap = 'round';
       // sombra suave embaixo da pista
@@ -418,27 +419,27 @@
     g.clearRect(0, 0, Wc, Hc); g.lineCap = 'round';
     // placa
     g.beginPath(); g.arc(cx, cy, R + 26, Math.PI, 0); g.lineTo(cx + R + 26, cy + 14); g.lineTo(cx - R - 26, cy + 14); g.closePath();
-    g.fillStyle = '#2a1d4a'; g.save(); g.translate(0, 6); g.fill(); g.restore(); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#2a1d4a'; g.stroke();
+    g.fillStyle = '#0c0c0e'; g.save(); g.translate(0, 6); g.fill(); g.restore(); g.fillStyle = '#ffffff'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#0c0c0e'; g.stroke();
     // trilho e arco aceso
     g.beginPath(); g.arc(cx, cy, R, a0, a1); g.lineWidth = 18; g.strokeStyle = '#e3e8fb'; g.stroke();
     if (frac > 0.005) { const gr = g.createLinearGradient(cx - R, 0, cx + R, 0);
       if (boost) { gr.addColorStop(0, '#3dd6ff'); gr.addColorStop(1, '#8b5cf6'); } else { gr.addColorStop(0, '#2ee6a8'); gr.addColorStop(0.55, '#ffd23f'); gr.addColorStop(1, '#ff4d6d'); }
       g.beginPath(); g.arc(cx, cy, R, a0, a0 + (a1 - a0) * frac); g.lineWidth = 18; g.strokeStyle = gr; g.stroke(); }
     // marcações
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '900 12px ' + CFG.FONT_UI; g.fillStyle = '#5d4f86';
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '900 12px ' + CFG.FONT_UI; g.fillStyle = '#4a4a50';
     for (let v = 0; v <= maxK; v += 20) { const a = a0 + (a1 - a0) * v / maxK, cs = Math.cos(a), sn = Math.sin(a);
-      g.beginPath(); g.moveTo(cx + cs * (R - 16), cy + sn * (R - 16)); g.lineTo(cx + cs * (R - (v % 40 ? 21 : 25)), cy + sn * (R - (v % 40 ? 21 : 25))); g.lineWidth = 3; g.strokeStyle = '#2a1d4a'; g.stroke();
+      g.beginPath(); g.moveTo(cx + cs * (R - 16), cy + sn * (R - 16)); g.lineTo(cx + cs * (R - (v % 40 ? 21 : 25)), cy + sn * (R - (v % 40 ? 21 : 25))); g.lineWidth = 3; g.strokeStyle = '#0c0c0e'; g.stroke();
       if (v % 40 === 0) g.fillText(String(v), cx + cs * (R + 18), cy + sn * (R + 18)); }      // números fora do arco
     if (k.drifting) { const ch = Math.min(1, k.driftT / 2); g.beginPath(); g.arc(cx, cy, R - 31, a0, a0 + (a1 - a0) * ch); g.lineWidth = 6; g.strokeStyle = k.driftT > 2 ? '#ff8a00' : k.driftT > 1 ? '#1a74ff' : '#ffc928'; g.stroke(); }
     // ponteiro
     const an = a0 + (a1 - a0) * frac;
     g.save(); g.translate(cx, cy); g.rotate(an); g.beginPath(); g.moveTo(R - 62, -3.5); g.lineTo(R - 4, -1.5); g.lineTo(R - 4, 1.5); g.lineTo(R - 62, 3.5); g.closePath(); g.fillStyle = '#ff3d47'; g.fill();
-    g.lineWidth = 2; g.strokeStyle = '#2a1d4a'; g.stroke(); g.restore();      // ponteiro curto na borda: não cobre o número
+    g.lineWidth = 2; g.strokeStyle = '#0c0c0e'; g.stroke(); g.restore();      // ponteiro curto na borda: não cobre o número
     // número
     g.font = '700 50px ' + CFG.FONT_DISPLAY; g.lineJoin = 'round';
-    const txt = String(Math.round(kmh)); g.lineWidth = 8; g.strokeStyle = '#2a1d4a'; g.strokeText(txt, cx, cy - 34);
+    const txt = String(Math.round(kmh)); g.lineWidth = 8; g.strokeStyle = '#0c0c0e'; g.strokeText(txt, cx, cy - 34);
     g.fillStyle = boost ? '#3dd6ff' : '#ffffff'; g.fillText(txt, cx, cy - 34);
-    g.font = '900 13px ' + CFG.FONT_UI; g.fillStyle = '#5d4f86'; g.fillText(boost ? 'BOOST!' : 'km/h', cx, cy - 4);
+    g.font = '900 13px ' + CFG.FONT_UI; g.fillStyle = '#4a4a50'; g.fillText(boost ? 'BOOST!' : 'km/h', cx, cy - 4);
   }
 
   // ================================ MENU ================================
@@ -450,7 +451,7 @@
     const P = p => [w / 2 - (p.x - cx) * s, h / 2 - (p.z - cz) * s];
     const path = () => { g.beginPath(); L.S.forEach((p, i) => { const [x, y] = P(p); i ? g.lineTo(x, y) : g.moveTo(x, y); }); g.closePath(); };
     g.lineJoin = 'round';
-    path(); g.lineWidth = 11; g.strokeStyle = '#2a1d4a'; g.stroke(); path(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
+    path(); g.lineWidth = 11; g.strokeStyle = '#0c0c0e'; g.stroke(); path(); g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.stroke();
     const [sx, sy] = P(L.S[def.startIdx]); g.fillStyle = '#ff3d47'; g.beginPath(); g.arc(sx, sy, 6, 0, 6.2832); g.fill(); g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke();
   }
 
@@ -686,14 +687,14 @@
       txt = String(txt); const F = 100, sw = thin ? 10 : kind === 'small' ? 12 : 16, sd = thin ? 5 : 8, w = Math.max(1, txt.length) * F * 0.74 + sw * 2, h = F * 1.18;
       const fill = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', bronze: 'url(#gNumBronze)', white: 'url(#gNumWhite)', go: 'url(#gNumGo)', small: '#fff' }[kind] || 'url(#gNumGold)';
       const esc = txt.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-      const t = (dy, f, st) => '<text x="' + (w / 2) + '" y="' + (F * 0.92 + dy) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" stroke="#2a1d4a" stroke-width="' + st + '" stroke-linejoin="round" paint-order="stroke fill" fill="' + f + '">' + esc + '</text>';
-      return '<svg class="bigNum" viewBox="0 0 ' + w.toFixed(0) + ' ' + (h + 8).toFixed(0) + '" aria-hidden="true">' + t(sd, '#2a1d4a', sw) + t(0, fill, sw) + (thin ? '' :
+      const t = (dy, f, st) => '<text x="' + (w / 2) + '" y="' + (F * 0.92 + dy) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" stroke="#0c0c0e" stroke-width="' + st + '" stroke-linejoin="round" paint-order="stroke fill" fill="' + f + '">' + esc + '</text>';
+      return '<svg class="bigNum" viewBox="0 0 ' + w.toFixed(0) + ' ' + (h + 8).toFixed(0) + '" aria-hidden="true">' + t(sd, '#0c0c0e', sw) + t(0, fill, sw) + (thin ? '' :
         '<text x="' + (w / 2) + '" y="' + (F * 0.92) + '" text-anchor="middle" font-family="Titan One, Fredoka, sans-serif" font-size="' + F + '" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="2.2" transform="translate(-2 -3)">' + esc + '</text>') + '</svg>';
     },
     // bolinha do "º" da posição: desenhada (não é glifo), grande, com o mesmo contorno fino do número
     posDot(mk) {
       const f = { gold: 'url(#gNumGold)', silver: 'url(#gNumSilver)', bronze: 'url(#gNumBronze)' }[mk] || 'url(#gNumWhite)';   // mesma cor do número da posição
-      return '<svg class="bigNum" viewBox="0 0 64 70" aria-hidden="true"><circle cx="32" cy="37" r="27" fill="#2a1d4a"/><circle cx="32" cy="32" r="27" fill="#2a1d4a"/><circle cx="32" cy="32" r="21" fill="' + f + '"/><circle cx="32" cy="32" r="8.5" fill="#2a1d4a"/></svg>';
+      return '<svg class="bigNum" viewBox="0 0 64 70" aria-hidden="true"><circle cx="32" cy="37" r="27" fill="#0c0c0e"/><circle cx="32" cy="32" r="27" fill="#0c0c0e"/><circle cx="32" cy="32" r="21" fill="' + f + '"/><circle cx="32" cy="32" r="8.5" fill="#0c0c0e"/></svg>';
     },
     countNum(txt, go) {
       const el = $('cdnum'); el.innerHTML = txt ? this.bigText(txt, go ? 'go' : 'gold') : ''; el.setAttribute('aria-label', txt || ''); el.className = go ? 'go' : ''; el.style.animation = 'none'; void el.offsetWidth; el.style.animation = ''; el.hidden = !txt;
