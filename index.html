@@ -321,6 +321,151 @@
 
 <!-- cortina das transições entre telas -->
 <div id="curtain" aria-hidden="true"></div>
+<!-- kartzinho da tela de carregar: branco, de lado, no canto inferior direito; quando a cortina sai (tudo carregado)
+     ele arranca e some pela esquerda. Controlado pelo script logo abaixo (observa a classe "on" da #curtain). -->
+<style>
+  #curtain { background: #000 !important; }
+  #curtain.kHold { transition: opacity .35s ease .55s !important; }          /* segura o preto enquanto o kart arranca */
+  #kartLoad { position: fixed; right: 6vw; bottom: 8vh; width: clamp(140px, 15vw, 250px); z-index: 41; pointer-events: none; display: none; }
+  #kartLoad.has3d { width: clamp(170px, 19vw, 300px); }
+  #kartLoad.show { display: block; animation: kIn .3s ease-out .2s both; }
+  #kartLoad .k3d { display: none; position: relative; }
+  #kartLoad.has3d .k3d { display: block; } #kartLoad.has3d svg { display: none; }
+  #kartLoad .k3d img { display: block; position: absolute; user-select: none; -webkit-user-drag: none; }
+  #kartLoad .k3d img.kb { position: relative; width: 100%; height: auto; }
+  #kartLoad .k3d img.wh { transform-origin: 50% 50%; animation: kSpin .8s linear infinite; }
+  #kartLoad .kBody { animation: kIdle .11s linear infinite alternate; transform-origin: 30% 90%; }
+  #kartLoad svg { display: block; width: 100%; height: auto; overflow: visible; }
+  #kartLoad .wh { transform-box: fill-box; transform-origin: center; animation: kSpin .8s linear infinite; }
+  #kartLoad .puff { position: absolute; right: -2%; top: 38%; width: 9%; aspect-ratio: 1; border-radius: 50%; background: #fff; opacity: 0; animation: kPuff 1s ease-out infinite; }
+  #kartLoad .puff:nth-child(2) { animation-delay: .33s; } #kartLoad .puff:nth-child(3) { animation-delay: .66s; }
+  #kartLoad .ln { position: absolute; left: 60%; height: 3px; border-radius: 2px; background: #fff; opacity: 0; transform-origin: left center; }
+  #kartLoad .ln:nth-of-type(1) { top: 40%; width: 70%; } #kartLoad .ln:nth-of-type(2) { top: 62%; width: 110%; } #kartLoad .ln:nth-of-type(3) { top: 82%; width: 55%; }
+  /* arrancada: empina (frente para cima), dá um tranco para trás e dispara para a esquerda, acelerando */
+  #kartLoad.go { animation: kGo .78s cubic-bezier(.5, 0, .95, .35) forwards; }
+  #kartLoad.go .kBody { animation: kWheelie .78s ease-out forwards; }
+  #kartLoad.go .wh, #kartLoad.go .k3d img.wh { animation-duration: .09s; }
+  #kartLoad.go .puff { animation: none; opacity: 0; }
+  #kartLoad.go .ln { animation: kLine .78s ease-in forwards; }
+  @keyframes kIn { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: none; } }
+  @keyframes kIdle { from { transform: translateY(0); } to { transform: translateY(-1.5px); } }
+  @keyframes kSpin { to { transform: rotate(-360deg); } }
+  @keyframes kPuff { 0% { opacity: .55; transform: translate(0, 0) scale(.5); } 100% { opacity: 0; transform: translate(160%, -90%) scale(1.6); } }
+  @keyframes kGo { 0% { transform: translateX(0); } 14% { transform: translateX(14px); } 100% { transform: translateX(calc(-100vw - 120%)); } }
+  @keyframes kWheelie { 0% { transform: rotate(0); } 14% { transform: rotate(7deg); } 45% { transform: rotate(3deg); } 100% { transform: rotate(0); } }
+  @keyframes kLine { 0%, 12% { opacity: 0; transform: scaleX(0); } 30% { opacity: .9; transform: scaleX(1); } 100% { opacity: .5; transform: scaleX(1.6); } }
+</style>
+<div id="kartLoad" aria-hidden="true">
+  <div class="kBody">
+    <svg viewBox="0 0 240 120" xmlns="http://www.w3.org/2000/svg">
+      <g fill="#fff" stroke="#000" stroke-width="3" stroke-linejoin="round" paint-order="stroke">
+        <rect x="186" y="51" width="38" height="9" rx="4.5"/>                                   <!-- escapamento -->
+        <rect x="158" y="56" width="32" height="22" rx="5"/>                                    <!-- motor -->
+        <rect x="34" y="82" width="176" height="8" rx="4"/>                                     <!-- chassi -->
+        <path d="M74 70 L30 74 Q15 76 17 85 L74 87 Z"/>                                         <!-- bico -->
+        <path d="M68 66 L150 61 Q168 61 170 73 L170 87 L60 89 Q54 77 68 66 Z"/>                 <!-- carenagem lateral -->
+        <rect x="142" y="36" width="15" height="34" rx="6" transform="rotate(12 149 53)"/>      <!-- encosto -->
+        <path d="M116 68 Q112 47 127 42 L143 45 Q150 60 147 69 Z"/>                             <!-- piloto -->
+        <path d="M104 74 L95 57" stroke-width="7" stroke-linecap="round"/>                      <!-- coluna da direção -->
+        <ellipse cx="93" cy="55" rx="4" ry="10" transform="rotate(-18 93 55)"/>                 <!-- volante -->
+        <path d="M128 51 L98 57" stroke-width="11" stroke-linecap="round"/>                     <!-- braço -->
+        <circle cx="132" cy="29" r="18"/>                                                        <!-- capacete -->
+      </g>
+      <path d="M116 25 Q121 17 134 19 L133 32 L117 33 Z" fill="#000"/>                          <!-- viseira -->
+      <ellipse cx="224" cy="55.5" rx="2.2" ry="3.2" fill="#000"/>                               <!-- boca do escapamento -->
+      <g class="wh"><circle cx="186" cy="89" r="22" fill="#fff" stroke="#000" stroke-width="3"/><circle cx="186" cy="89" r="11" fill="none" stroke="#000" stroke-width="3"/>
+        <path d="M180 89 H192 M186 83 V95" stroke="#000" stroke-width="3" stroke-linecap="round"/></g>
+      <g class="wh"><circle cx="58" cy="93" r="17" fill="#fff" stroke="#000" stroke-width="3"/><circle cx="58" cy="93" r="8.5" fill="none" stroke="#000" stroke-width="3"/>
+        <path d="M53.5 93 H62.5 M58 88.5 V97.5" stroke="#000" stroke-width="3" stroke-linecap="round"/></g>
+    </svg>
+    <div class="k3d"></div>   <!-- o kart do jogador (modelo 3D), todo branco: preenchido pelo script abaixo -->
+  </div>
+  <i class="puff"></i><i class="puff"></i><i class="puff"></i>
+  <b class="ln"></b><b class="ln"></b><b class="ln"></b>
+</div>
+<script>
+(function () {
+  const cur = document.getElementById('curtain'), k = document.getElementById('kartLoad'); if (!cur || !k) return;
+  const box3d = k.querySelector('.k3d');
+
+  // ---- foto do NOSSO kart (modelo 3D do jogo, buildKartModel) de lado, pintada toda de branco (até o contorno) ----
+  // Corpo e rodas do lado da câmera viram imagens separadas: as rodas giram por CSS. Por ser imagem + CSS, a animação
+  // continua lisa mesmo com o jogo ocupado montando a pista.
+  let key = '', busy = false;
+  function specNow() { return (window.Game && Game.spec) || (typeof Custom !== 'undefined' && Custom.spec) || null; }   // nomes globais de outros scripts (const no topo não vira window.X)
+  function snapshot(spec) {
+    const model = buildKartModel(Object.assign({}, spec), {}), g = model.group, rolls = model.rolls || [];
+    try { model.animate && model.animate(0, { steer: 0, speed: 0, boost: false, drift: 0 }); } catch (e) { }
+    if (model.body) model.body.position.y = 0;
+    const scene = new THREE.Scene(); scene.add(g);
+    scene.add(new THREE.AmbientLight(0xffffff, 0.75)); const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(2, 4, 3); scene.add(sun);
+    // nada de sombra-borrão, brilho, fogo...: só o que é sólido
+    g.traverse(o => { if (o.isSprite || o.isPoints || o.isLine) o.visible = false;
+      if (o.isMesh) { const ms = Array.isArray(o.material) ? o.material : [o.material];
+        if (ms.every(m => m && m.transparent && (m.depthWrite === false || m.opacity < 0.95) && !(m.alphaTest > 0))) o.visible = false; } });
+    g.updateMatrixWorld(true);
+    const wb = rolls.map(w => { const b = new THREE.Box3().setFromObject(w.g); return { w, b, c: b.getCenter(new THREE.Vector3()), r: Math.max(b.max.y - b.min.y, b.max.z - b.min.z) / 2 }; });
+    // frente do kart: as rodas da frente são as menores (kart: traseira maior); a frente tem que apontar para a ESQUERDA
+    let frontZ = 1;
+    if (wb.length >= 4) { const s = wb.slice().sort((a, b) => a.c.z - b.c.z), lo = s.slice(0, 2), hi = s.slice(-2), rr = l => (l[0].r + l[1].r) / 2;
+      frontZ = rr(hi) <= rr(lo) ? 1 : -1; }
+    const camX = frontZ > 0 ? 1 : -1;                                    // câmera em +x: +z aparece à esquerda
+    const near = wb.filter(o => Math.sign(o.c.x) === camX || Math.abs(o.c.x) < 1e-3);
+    // enquadramento: caixa do kart inteiro
+    const B = new THREE.Box3(); g.traverse(o => { if (o.isMesh && o.visible) B.expandByObject(o); });
+    const C = B.getCenter(new THREE.Vector3()), S = B.getSize(new THREE.Vector3()), pad = 1.08, hw = S.z / 2 * pad, hh = S.y / 2 * pad;
+    const PXM = 560 / (2 * hw), W = Math.round(2 * hw * PXM), H = Math.round(2 * hh * PXM);
+    const R = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true }); R.setPixelRatio(1); R.setClearColor(0x000000, 0);
+    const cam = new THREE.OrthographicCamera(-hw, hw, hh, -hh, 0.01, 100);
+    const shot = (cx, cy, halfW, halfH) => { R.setSize(Math.round(2 * halfW * PXM), Math.round(2 * halfH * PXM), false);
+      cam.left = -halfW; cam.right = halfW; cam.top = halfH; cam.bottom = -halfH; cam.updateProjectionMatrix();
+      cam.position.set(C.x + camX * 20, cy, cx); cam.up.set(0, 1, 0); cam.lookAt(C.x, cy, cx); R.render(scene, cam);
+      // pinta tudo de branco (mantém só um sombreado bem leve para ler a forma) e devolve a imagem
+      const c2 = document.createElement('canvas'); c2.width = R.domElement.width; c2.height = R.domElement.height; const x2 = c2.getContext('2d'); x2.drawImage(R.domElement, 0, 0);
+      const id = x2.getImageData(0, 0, c2.width, c2.height), d = id.data;
+      for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const l = (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11) / 255, v = Math.round(222 + 33 * l); d[i] = d[i + 1] = d[i + 2] = v; if (d[i + 3] > 200) d[i + 3] = 255; }
+      x2.putImageData(id, 0, 0); return c2.toDataURL('image/png'); };
+    // corpo: sem as rodas (as do lado da câmera vêm por cima, girando)
+    const vis = new Map(); g.traverse(o => vis.set(o, o.visible));
+    wb.forEach(o => o.w.g.visible = false);
+    const body = shot(C.z, C.y, hw, hh);
+    // cada roda do lado da câmera, sozinha
+    const wheels = near.map(o => { g.traverse(m => { if (m.isMesh) m.visible = false; }); wb.forEach(q => q.w.g.visible = q === o);
+      o.w.g.traverse(m => { if (m.isMesh) m.visible = vis.get(m); });
+      const rr = o.r * 1.12, url = shot(o.c.z, o.c.y, rr, rr);
+      const left = (camX > 0 ? (C.z + hw) - (o.c.z + rr) : (o.c.z - rr) - (C.z - hw)) * PXM, top = ((C.y + hh) - (o.c.y + rr)) * PXM;   // posição na foto do corpo
+      return { url, l: left / W * 100, t: top / H * 100, w: 2 * rr * PXM / W * 100 }; });
+    vis.forEach((v, o) => o.visible = v);
+    R.dispose(); try { R.forceContextLoss(); } catch (e) { }
+    try { model.dispose && model.dispose(); } catch (e) { }
+    return { body, wheels };
+  }
+  function refresh() {
+    if (busy || typeof buildKartModel !== 'function' || !window.THREE) return;
+    const sp = specNow(); if (!sp) return; const kk = JSON.stringify(sp); if (kk === key) return;
+    busy = true;
+    try { const r = snapshot(sp); key = kk;
+      box3d.innerHTML = '<img class="kb" alt="" src="' + r.body + '">' + r.wheels.map(w => '<img class="wh" alt="" src="' + w.url + '" style="left:' + w.l.toFixed(2) + '%;top:' + w.t.toFixed(2) + '%;width:' + w.w.toFixed(2) + '%">').join('');
+      k.classList.add('has3d');
+    } catch (e) { console.warn('[carregando] kart 3D indisponível, usando o desenho', e); key = kk; }
+    busy = false;
+  }
+  // tira a foto quando o jogo já está no menu (modelos carregados) e de novo se o jogador trocar o kart
+  const ready = () => !!(window.Game && ['menu', 'garage', 'lobby', 'waiting'].includes(Game.state));
+  setInterval(() => { if (ready() && !cur.classList.contains('on')) (window.requestIdleCallback || setTimeout)(refresh); }, 1500);
+
+  // ---- cortina "on" = carregando: o kart aparece (CSS espera 0,2 s: troca rápida de tela não mostra); "on" sai = arranca ----
+  let on = false, t0 = 0, tEnd = 0;
+  const show = () => { clearTimeout(tEnd); k.classList.remove('go'); void k.offsetWidth; k.classList.add('show'); t0 = performance.now(); };
+  const hide = () => { k.classList.remove('show', 'go'); cur.classList.remove('kHold'); };
+  const launch = () => { cur.classList.add('kHold'); k.classList.add('go'); tEnd = setTimeout(hide, 1000); };
+  new MutationObserver(() => { const now = cur.classList.contains('on'); if (now === on) return; on = now;
+    if (on) { if (ready()) refresh(); show(); }
+    else if (k.classList.contains('show') && !k.classList.contains('go')) { if (performance.now() - t0 > 250) launch(); else hide(); }
+  }).observe(cur, { attributes: true, attributeFilter: ['class'] });
+  if (cur.classList.contains('on')) { on = true; show(); }
+})();
+</script>
 
 <!-- ======================= Resultado de cada corrida da Copa ======================= -->
 <section id="roundUI" hidden>
@@ -373,7 +518,7 @@
   check();
 })();
 </script>
-<script src="js/config.js?v=202610310150"></script>
+<script src="js/config.js?v=202610311838"></script>
 <script src="js/icons.js?v=202610300000"></script>
 <script src="js/audio.js?v=202610300000"></script>
 <script src="js/textures.js?v=202610312900"></script>
@@ -385,26 +530,26 @@
 <script src="js/models/karts.js?v=202610311600"></script>
 <script src="js/custom.js?v=202610301600"></script>
 <script src="js/ai.js?v=202610300000"></script>
-<script src="js/tracks.js?v=202610313300"></script>
+<script src="js/tracks.js?v=202610311850"></script>
 <script src="js/pines.js?v=202610312300"></script>
 <script src="js/props.js?v=202610310300"></script>
-<script src="js/scenery.js?v=202610312300"></script>
+<script src="js/scenery.js?v=202610311840"></script>
 <script src="js/net.js?v=202610300000"></script>
 <script src="js/online.js?v=202610301200"></script>
 <script src="js/logo.js?v=202610300000"></script>
 <script src="js/logo3d.js?v=202610310300"></script>   <!-- KARTEC da logo em 3D (assets/karttec_logo.glb) -->
 <script src="js/ui.js?v=202610311500"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
-<script src="js/settings.js?v=202610311200"></script>
+<script src="js/settings.js?v=202610311740"></script>
 <script src="js/patchnotes.js?v=202610300000"></script>
 <script src="js/showroom.js?v=202610301800"></script>   <!-- vitrine + garagem 3D (assets/garagem.glb) -->
 <script src="js/garage.js?v=202610301600"></script>
 <script src="js/intro.js?v=202610300000"></script>
 <script src="js/podium.js?v=202610300000"></script>
 <script src="js/smoke.js?v=202610305800"></script>   <!-- fumaça fofa realista do jogo todo (escapamento, drift, poeira, giro da banana) -->
-<script src="js/items.js?v=202610302100"></script>   <!-- caixas de item, banana e dinossauro (tecla E) -->
-<script src="js/postfx.js?v=202610310400"></script>   <!-- acabamento da imagem da corrida (contorno, brilho, cor, FXAA) -->
-<script src="js/main.js?v=202610311700"></script>
+<script src="js/items.js?v=202610311845"></script>   <!-- caixas de item, banana e dinossauro (tecla E) -->
+<script src="js/postfx.js?v=202610311905"></script>   <!-- acabamento da imagem da corrida (contorno, brilho, cor, FXAA) -->
+<script src="js/main.js?v=202610311800"></script>
 <script src="js/cursor.js?v=202610300000"></script>
 </body>
 </html>

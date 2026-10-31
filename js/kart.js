@@ -233,11 +233,17 @@
     // feito "esticado" na vertical para sair redondo/proporcional).
     rayTex() { if (!this._rayT) { const W = 64, H = 128, c = document.createElement('canvas'); c.width = W * 3; c.height = H; const x = c.getContext('2d');
         // 0) feixe: base larga e quente embaixo (na roda), afinando até sumir na ponta (em cima)
+        // GLOW: halo largo e macio em volta do feixe (a célula ficou ~2,4x mais larga na tela; o feixe em si continua fino)
         x.save(); x.beginPath(); x.rect(0, 0, W, H); x.clip();
-        x.filter = 'blur(5px)'; let g = x.createLinearGradient(0, H, 0, 0); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.6, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-        x.fillStyle = g; x.beginPath(); x.moveTo(32 - 16, H); x.lineTo(32, 2); x.lineTo(32 + 16, H); x.closePath(); x.fill();
+        { const im = x.createImageData(W, H), d = im.data;
+          for (let j = 0; j < H; j++) for (let i = 0; i < W; i++) { const u = (i + 0.5 - 32) / 32, v = j / H, wid = 0.25 + 0.75 * v;   // mais largo na base (roda)
+            const a = Math.exp(-Math.pow(u / (0.42 * wid), 2) * 2.2) * Math.pow(v, 0.7) * 0.38, k = (j * W + i) * 4;
+            d[k] = d[k + 1] = d[k + 2] = 255; d[k + 3] = Math.round(a * 255); }
+          const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H; tmp.getContext('2d').putImageData(im, 0, 0); x.drawImage(tmp, 0, 0); }
+        x.filter = 'blur(3px)'; let g = x.createLinearGradient(0, H, 0, 0); g.addColorStop(0, 'rgba(255,255,255,.9)'); g.addColorStop(0.6, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        x.fillStyle = g; x.beginPath(); x.moveTo(32 - 7, H); x.lineTo(32, 2); x.lineTo(32 + 7, H); x.closePath(); x.fill();
         x.filter = 'none'; g = x.createLinearGradient(0, H, 0, 0); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.75, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-        x.fillStyle = g; x.beginPath(); x.moveTo(32 - 5, H); x.lineTo(32, 6); x.lineTo(32 + 5, H); x.closePath(); x.fill(); x.restore();
+        x.fillStyle = g; x.beginPath(); x.moveTo(32 - 2.2, H); x.lineTo(32, 6); x.lineTo(32 + 2.2, H); x.closePath(); x.fill(); x.restore();
         // 1) núcleo: bola de luz + 4 espinhos finos (estrela de lente)
         x.save(); x.translate(W + 32, 64); x.scale(1, 2);
         g = x.createRadialGradient(0, 0, 0, 0, 0, 31); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.18, 'rgba(255,255,255,.95)'); g.addColorStop(0.45, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
@@ -388,7 +394,7 @@
           D.set(p.dx, p.dy, p.dz).transformDirection(g.matrixWorld);
           const grow = Math.min(1, t / 0.25), L = p.len * (0.35 + 0.65 * grow * (2 - grow)), a = (1 - t) * (0.75 + 0.25 * Math.random());
           const wC = 0.65 + 0.35 * (1 - t);   // mistura de branco no começo (feixe quente) que vai para a cor
-          b.put(i, A.x + D.x * L * 0.5, A.y + D.y * L * 0.5, A.z + D.z * L * 0.5, p.w * (1 - t * 0.4), 0.01, 0,
+          b.put(i, A.x + D.x * L * 0.5, A.y + D.y * L * 0.5, A.z + D.z * L * 0.5, p.w * 2.4 * (1 - t * 0.4), 0.01, 0,   // x2,4: espaço para o halo (glow) da textura
             C.r + (1 - C.r) * (1 - wC), C.g + (1 - C.g) * (1 - wC), C.b + (1 - C.b) * (1 - wC), a, D.x * L, D.y * L, D.z * L, 0); }
         b.commit(); }
       // detritos: gravidade forte, giro, quicam (terra e gota quicam pouco; gota vira respingo e some)
@@ -698,7 +704,7 @@
           Fx.glint(w.x, w.y, w.z, -fx * (2 + Math.random() * 4) + lx * out * (1 + Math.random() * 4), 1.5 + Math.random() * 3, -fz * (2 + Math.random() * 4) + lz * out * (1 + Math.random() * 4), CC, 0.16 + Math.random() * 0.1, 0.35); } }
       // com carga: brilho colado nas rodas, pulsando (a "chama" do drift)
       if (lv > 0) { this.glowCD -= dt; if (this.glowCD <= 0) { this.glowCD = 0.03; const pul = 1 + 0.18 * Math.sin(this.fxT * 40);
-          wheels.forEach(s => { const w = g.localToWorld(_w.set(s * R.x, 0.22, R.z)); Fx.puff('glow', w.x, w.y, w.z, -fx * 2, 0.3, -fz * 2, col, (lv === 2 ? 1.5 : 1.1) * pul, 0.4, 0.12, 0.85); }); }
+          wheels.forEach(s => { const w = g.localToWorld(_w.set(s * R.x, 0.22, R.z)); Fx.puff('glow', w.x, w.y, w.z, -fx * 2, 0.3, -fz * 2, col, (lv === 2 ? 2.3 : 1.7) * pul, 0.4, 0.12, 1.0); }); }   // glow maior em volta das rodas
         // leque de chama colorida saindo das rodas para trás e para fora (a "língua" de fogo do drift carregado do MK8)
         this.fanAcc = (this.fanAcc || 0) + dt * (lv === 2 ? 34 : 24);
         while (this.fanAcc >= 1) { this.fanAcc -= 1; wheels.forEach(s => { const w = g.localToWorld(_w.set(s * R.x, 0.2, R.z)), b = 3 + Math.random() * 3, o = 1 + Math.random() * 2.5;

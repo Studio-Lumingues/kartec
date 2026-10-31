@@ -33,7 +33,7 @@
   const camera = new THREE.PerspectiveCamera(CAMC.FOV, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
   // acabamento da imagem da corrida (contorno de tinta, brilho, cor, FXAA): js/postfx.js; CFG.GFX ajusta; modo leve desliga
   const G0 = CFG.GFX || {};
-  const postFX = window.PostFX && G0.POSTFX !== false ? PostFX.create(renderer, { ao: G0.AO, ink: G0.INK, bloom: G0.BLOOM, sat: G0.SAT, con: G0.CONTRAST, vig: G0.VIGNETTE, scatter: G0.SCATTER, rays: G0.RAYS, sharpen: G0.SHARPEN }) : null;
+  const postFX = window.PostFX && G0.POSTFX !== false ? PostFX.create(renderer, { ao: G0.AO, ink: G0.INK, bloom: G0.BLOOM, sat: G0.SAT, con: G0.CONTRAST, vig: G0.VIGNETTE, scatter: G0.SCATTER, rays: G0.RAYS, sharpen: G0.SHARPEN, dof: G0.DOF, dofLens: G0.DOF_LENS }) : null;
 
   // ---------------- memória: utilidades (guia de performance) ----------------
   // textura que o three.js consegue reenviar sozinho se for descartada (imagem, canvas, bitmap ou dados);
@@ -1019,7 +1019,10 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) { this.cullTrack(); this.kartCull(); if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+      else if (this.scene) { this.cullTrack(); this.kartCull();
+        if (postFX && this.player) { camera.updateMatrixWorld(); const e = camera.matrixWorld.elements, p = this.player.pos;   // foco do desfoque: profundidade do seu kart na tela
+          postFX.focus = Math.max(4, -((p.x - e[12]) * e[8] + (p.y - e[13]) * e[9] + (p.z - e[14]) * e[10])); }
+        if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
       if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
     },
     // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa

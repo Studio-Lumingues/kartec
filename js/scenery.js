@@ -134,6 +134,8 @@
       const F = CFG.FILL, dens = opts.density || F.DENSITY, CH = F.CHUNK, W = tr.W, far = (def.fogFar || 820) - 40;
       // mesma semente de antes: o cenário do Circuito Clássico continua idêntico
       let seed = 1234 + def.id.length * 77; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+      // folhas caídas: sorteio próprio (não mexe na sequência do resto: o cenário de antes continua igual)
+      let lseed = 777 + def.id.length * 31; const lrnd = () => { lseed = (lseed * 16807) % 2147483647; return lseed / 2147483647; };
       const dist = tr.N > 3000 ? distField(tr, far) : trackIndex(tr, 60), blocked = circleIndex(tr.blockers.concat(tr.obstacles.map(o => ({ x: o.x, z: o.z, r: o.r + 2 }))), 80);
       const S0 = tr.S[tr.startIdx];
       let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9; tr.S.forEach(p => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); z0 = Math.min(z0, p.z); z1 = Math.max(z1, p.z); });
@@ -165,6 +167,12 @@
         if (window.Bush) kind('bush', Bush.geometry('lo'), Bush.material(), { sMin: 0.65, sMax: 1.15, r: 2.2, shadow: false, y: 0.05,
           tint: () => new THREE.Color().setHSL(0.22 + rnd() * 0.09, 0.3 + rnd() * 0.2, 0.84 + rnd() * 0.14) });
         else kind('bush', GEOS.bush(), m, { sMin: 0.8, sMax: 1.5, r: 1.6, shadow: false });
+        // folhas caídas da moita na grama: deitadas no chão (seguem a inclinação), recebem sombra, só aparecem perto
+        // (blocos pequenos de 160 m, escondidos além de 210 m da câmera: de longe nem dá para ver uma folha)
+        if (window.Bush && Bush.litterGeometry) kind('leaves', Bush.litterGeometry(), Bush.litterMaterial(), { sMin: 0.75, sMax: 1.3, r: 1.5, shadow: false, recv: true, tilt: true, order: 2, chunk: 160, cull: 230,
+          tint: () => new THREE.Color().setHSL(0.2 + lrnd() * 0.06, 0.25 + lrnd() * 0.2, 0.86 + lrnd() * 0.12) });
+        // camada densa na beira da pista (até 60 m): é onde a câmera passa; só desenhada até ~90 m dela
+        if (kinds.leaves) kinds.leavesNear = Object.assign({}, kinds.leaves, { id: 'leavesNear', list: [], chunk: 70, cull: 90 });
         kind('flowers', GEOS.flowers(), m, { sMin: 0.8, sMax: 1.3, r: 1, shadow: false, tint: () => new THREE.Color([0xff7ab8, 0xffe14a, 0xffffff, 0xff8a3d, 0xb08aff][Math.floor(rnd() * 5)]) });
         kind('rock', GEOS.rock(), m, { sMin: 0.8, sMax: 2.4, r: 1.5, shadow: false });
         if (!PINES) kind('forest', GEOS.forest(), m, { sMin: 1.2, sMax: 2.6, r: 8, shadow: false });
@@ -178,33 +186,50 @@
         ];
       }
 
+      if (kinds.leaves) bands.push({ d0: W + 60, d1: 260, step: 8, p: 0.33, rng: lrnd, pick: () => 'leaves' },     // bastante folha em toda a grama perto da pista
+                                   { d0: W + 5, d1: W + 60, step: 4.6, p: 0.34, rng: lrnd, pick: () => 'leavesNear' });   // e mais ainda na beira
+      const rnd0 = rnd;
       // ---- amostragem: grade com jitter por faixa ----
       bands.forEach((b, bi) => {
-        const step = b.step / Math.sqrt(dens);
+        const step = b.step / Math.sqrt(dens), rnd = b.rng || rnd0;
         for (let x = x0; x <= x1; x += step) for (let z = z0; z <= z1; z += step) {
           if (rnd() > b.p) continue;
           const px = x + (rnd() - 0.5) * step * 0.9, pz = z + (rnd() - 0.5) * step * 0.9, d = dist(px, pz, b.d1 + 1);
           if (d < b.d0 || d > b.d1) continue;
           if (Math.hypot(px - S0.x, pz - S0.z) < W + 50) continue;
           const id = b.pick(px, pz); if (!id) continue; const k = kinds[id];
-          if (!land(px, pz) || blocked(px, pz, k.r + 3) || (tr.clearAt && tr.clearAt(px, pz))) continue;
+          if (!land(px, pz) || blocked(px, pz, k.tilt ? 0.3 : k.r + 3) || (tr.clearAt && tr.clearAt(px, pz))) continue;
+          // mar (tracks.js): nada na praia nem no campo aberto até ela; morros e pinheiros do horizonte ficam mais longe ainda
+          if (id === 'leaves' || id === 'leavesNear') { if (tr.sea && (q => q.e < q.bw + 4)(tr.sea.info(px, pz))) continue; }   // folhas: em toda grama, menos na areia
+          else if (tr.seaDist && tr.seaDist(px, pz) < (id === 'hill' ? 300 : id === 'pineFar' ? 170 : 150)) continue;
           k.list.push({ x: px, z: pz, d, lo: bi > 0 && !!k.geoLo });   // longe da pista: versão leve do mesmo modelo
         }
       });
+      if (kinds.leaves) {
+        const Lk = kinds.leaves, around = (x, z, s, n) => { for (let q = 0; q < n; q++) {
+          const a = lrnd() * 6.283, r = (1.2 + lrnd() * 1.8) * s, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r, d = dist(px, pz, 400);
+          if (d < W + 3 || !land(px, pz) || (tr.clearAt && tr.clearAt(px, pz)) || (tr.sea && (q2 => q2.e < q2.bw + 4)(tr.sea.info(px, pz)))) continue;
+          Lk.list.push({ x: px, z: pz, d, lo: false }); } };
+        if (kinds.bush) kinds.bush.list.slice().forEach(b => around(b.x, b.z, 1, lrnd() < 0.6 ? 1 : 2));
+        (tr.leafSpots || []).forEach(b => around(b.x, b.z, Math.max(0.8, b.s || 1), 2));
+      }
       // ---- monta os blocos (InstancedMesh por bloco e por tipo) ----
       const group = new THREE.Group(); group.userData.dynamic = true; root.add(group);
       const chunks = [], d = new THREE.Object3D(), tmp = new THREE.Color();
       const byChunk = new Map();
       // blocos: o que fica perto da pista (versão detalhada, projeta sombra) em 2x CH; o que é distante (versão leve, florestas,
       // morros) em blocos 3x maiores -> bem menos chamadas de desenho (eram ~420 só de cenário por quadro)
-      const push = (k, inst) => { const ch = inst.lo || k.id === 'forest' || k.id === 'hill' || k.id === 'pineFar' ? CH * 3 : CH * 2;   // perto: 2x (600 m); longe: 3x (900 m)
+      const push = (k, inst) => { const ch = k.chunk || inst.lo || k.id === 'forest' || k.id === 'hill' || k.id === 'pineFar' ? CH * 3 : CH * 2;   // perto: 2x (600 m); longe: 3x (900 m)
         const sp = k.split && !inst.lo;   // pinheiro perto: um bloco por modelo
         const key = Math.floor(inst.x / ch) + ',' + Math.floor(inst.z / ch) + ',' + k.id + (inst.lo ? 'L' : '') + (sp ? ':' + inst.v : '');
         if (!byChunk.has(key)) byChunk.set(key, { k, geo: sp ? k.split(inst.v) : inst.lo ? k.geoLo : k.geo, items: [] }); byChunk.get(key).items.push(inst); };
-      Object.values(kinds).forEach(k => {
+      Object.values(kinds).forEach(k => { const rnd = k.id === 'leaves' || k.id === 'leavesNear' ? lrnd : rnd0;
         k.list.forEach(it => {
           const yaw = k.yaw ? rnd() * Math.PI * 2 : 0;
-          const s = k.sMin + rnd() * (k.sMax - k.sMin); push(k, { x: it.x, z: it.z, y: k.y + (tr.heightAt ? tr.heightAt(it.x, it.z) : 0), sx: s, sy: s, sz: s, ry: yaw, near: it.d < 160, lo: it.lo, c: k.tint ? k.tint() : null, v: k.variants ? k.variants(it) : 0 });
+          const s = k.sMin + rnd() * (k.sMax - k.sMin); let q = null;
+          if (k.tilt && tr.heightAt) { const H = tr.heightAt, e = 0.8, nx = H(it.x - e, it.z) - H(it.x + e, it.z), nz = H(it.x, it.z - e) - H(it.x, it.z + e);   // deitado no chão: normal do terreno
+            q = new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), V3(nx, 2 * e, nz).normalize()).multiply(new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), yaw)); }
+          push(k, { x: it.x, z: it.z, y: k.y + (tr.heightAt ? tr.heightAt(it.x, it.z) : 0), sx: s, sy: s, sz: s, ry: yaw, q, near: it.d < 160, lo: it.lo, c: k.tint ? k.tint() : null, v: k.variants ? k.variants(it) : 0 });
         });
       });
       let total = 0;
@@ -218,13 +243,13 @@
         if (k.variants) g.setAttribute('iVar', new THREE.InstancedBufferAttribute(Float32Array.from(items.map(i => i.v)), 1));   // modelo de cada pinheiro
         g.boundingSphere = new THREE.Sphere(V3(0, 0, 0), R);
         const im = new THREE.InstancedMesh(g, k.mat, items.length);
-        items.forEach((i, n) => { d.position.set(i.x - cx, i.y, i.z - cz); d.rotation.set(0, i.ry, 0); d.scale.set(i.sx, i.sy, i.sz); d.updateMatrix(); im.setMatrixAt(n, d.matrix);
+        items.forEach((i, n) => { d.position.set(i.x - cx, i.y, i.z - cz); if (i.q) d.quaternion.copy(i.q); else d.rotation.set(0, i.ry, 0); d.scale.set(i.sx, i.sy, i.sz); d.updateMatrix(); im.setMatrixAt(n, d.matrix);
           im.setColorAt(n, i.c || tmp.set(0xffffff)); });   // sempre com instanceColor: o r128 não separa programas com/sem cor de instância
         im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
-        im.position.set(cx, 0, cz); im.castShadow = k.shadow && items.some(i => i.near); im.receiveShadow = false;
+        im.position.set(cx, 0, cz); im.castShadow = k.shadow && items.some(i => i.near); im.receiveShadow = !!k.recv; if (k.order) im.renderOrder = k.order;   // folhas: depois do chão (não gravam profundidade)
         if (k.variants) im.customDepthMaterial = Pines.depthMaterial();   // sombra com o modelo certo de cada árvore
         im.userData.noOutline = true; im.matrixAutoUpdate = false; im.updateMatrix();
-        group.add(im); chunks.push({ im, cx, cz, R }); total += items.length;
+        group.add(im); chunks.push({ im, cx, cz, R, cull: k.cull || 0 }); total += items.length;
       });
       // os maiores objetos também bloqueiam o lens flare (teste barato por esfera)
       Object.values(kinds).forEach(k => { if (k.id === 'hill' || k.id === 'forest' || k.id === 'pineFar' || k.id === 'pine') k.list.forEach((it, n) => { if (n % 3 === 0) tr.blockers.push({ x: it.x, y: 10, z: it.z, r: k.r }); }); });
@@ -236,9 +261,9 @@
         update(dt, cam, fogFar) {
           t -= dt; if (t > 0) return; t = F.CULL_EVERY;
           const lim = fogFar + 30;
-          for (const c of chunks) { const dx = c.cx - cam.x, dz = c.cz - cam.z; c.im.visible = Math.sqrt(dx * dx + dz * dz) - c.R < lim; }
+          for (const c of chunks) { const dx = c.cx - cam.x, dz = c.cz - cam.z; c.im.visible = Math.sqrt(dx * dx + dz * dz) - c.R < (c.cull ? Math.min(lim, c.cull) : lim); }
         },
-        dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || (k.id === 'bush' && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/pines.js; arbusto: window.Bush)
+        dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || ((k.id === 'bush' || k.id === 'leaves' || k.id === 'leavesNear') && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/pines.js; arbusto: window.Bush)
           k.geo.dispose(); if (k.geoLo) k.geoLo.dispose(); }); }
       };
     }

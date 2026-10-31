@@ -9,6 +9,11 @@
 //  * luz do sol na névoa (dispersão): olhando para o sol, a distância fica dourada/clara; mesma conta do céu (main.js),
 //    então o horizonte casa com o céu sem emenda
 //  * raios de sol (god rays): o céu claro perto do sol é "arrastado" na direção dele; árvores e montanhas cortam os raios
+//  * profundidade de campo de lente (bokeh): círculo de confusão de lente fina (abertura f/N, distância focal, plano de
+//    foco no kart com autofoco suave), desfoque em disco com espiral de ângulo áureo, sem vazamento de cor nas bordas
+//    (amostragem "scatter-as-gather" + upsample bilateral) e sem pontos estourados (média ponderada de Karis)
+//    Objetos na camada PostFX.SHARP_LAYER (caixas surpresa) nunca desfocam: uma máscara deles (com teste de profundidade
+//    contra a cena) zera o desfoque ali e os tira do desfoque dos vizinhos (sem halo da cor deles no fundo)
 // Uso: const fx = PostFX.create(renderer); fx.render(scene, camera)  (fx.ok = false -> desenha direto, sem efeitos)
 // =====================================================================================
 (function () {
@@ -97,6 +102,66 @@
       gl_FragColor = vec4(c, 1.0);
     }`;
 
+  // ===================== PROFUNDIDADE DE CAMPO (BOKEH) =====================
+  // Círculo de confusão (CoC) de lente fina, só para o que está ATRÁS do plano de foco:
+  //   coc(z) = K * max(0, z - S - R) / z      (px na tela inteira; tende a K no infinito -> fundo distante com desfoque uniforme)
+  //   K = f² / (N (S - f)) / sensor * altura da tela   (f = distância focal, N = f-stop, S = distância de foco)
+  // R = zona de foco (profundidade nítida extra atrás do kart). O que está na frente do foco (fadinha, barras de cinema,
+  // asfalto embaixo da câmera) fica sempre nítido: desfocar o primeiro plano numa câmera de perseguição só atrapalha.
+  const COC = `uniform sampler2D tDep; uniform sampler2D tSharp; uniform float uHasSharp; uniform float uNear; uniform float uFar; uniform float uS; uniform float uR; uniform float uK; uniform float uMaxPx;
+    float linZ(float d){ return (uNear * uFar) / (uFar - d * (uFar - uNear)); }
+    float cocRaw(vec2 p){ float d = texture2D(tDep, p).x; if (d >= 0.99999) return min(uK, uMaxPx);   // céu: desfoque do infinito
+      float z = linZ(d); return min(uK * max(0.0, z - uS - uR) / z, uMaxPx); }
+    float cocPx(vec2 p){ float c = cocRaw(p); return uHasSharp > 0.5 ? c * (1.0 - texture2D(tSharp, p).r) : c; }   // máscara: sempre nítido
+`;   // (a quebra de linha final importa: este trecho é colado na frente de outros shaders)
+  // máscara dos objetos que nunca desfocam: desenhados em branco onde ficam na frente da cena (profundidade da cena em tDep)
+  const SHARP_VS = 'void main(){ gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }';
+  const SHARP_FS = `uniform sampler2D tDep; uniform vec2 uRes;
+    void main(){ if (gl_FragCoord.z > texture2D(tDep, gl_FragCoord.xy / uRes).x + 0.00002) discard; gl_FragColor = vec4(1.0); }`;
+  // 1) meia tela: 4 amostras da tela inteira. Peso de Karis (1 / (1 + luminância)) tira os pontos estourados, e o peso pelo
+  //    CoC impede que um pixel nítido (kart, poste) "pinte" o bloco de fundo ao lado. alfa = CoC (0..1 de uMaxPx), o maior do bloco
+  const DOF_PRE = COC + `uniform sampler2D tSrc; uniform vec2 uPxF; varying vec2 vUv;
+    void main(){ vec3 acc = vec3(0.0); float ws = 0.0, cm = 0.0;
+      for (int i = 0; i < 4; i++) { vec2 o = vec2(i == 1 || i == 3 ? 0.5 : -0.5, i >= 2 ? 0.5 : -0.5) * uPxF, p = vUv + o;
+        vec3 c = texture2D(tSrc, p).rgb; float k = cocPx(p) / uMaxPx;
+        float w = (k + 0.002) / (1.0 + dot(c, vec3(0.299, 0.587, 0.114)));
+        acc += c * w; ws += w; cm = max(cm, k); }
+      gl_FragColor = vec4(acc / ws, cm); }`;
+  // 2) bokeh: disco com N amostras em espiral de ângulo áureo (distribuição uniforme, sem padrão de grade) e raio = CoC do pixel.
+  //    "scatter-as-gather": uma amostra só entra se o desfoque DELA alcança este pixel -> o fundo desfocado nunca puxa a cor
+  //    de um objeto nítido da frente (sem halo/vazamento de cor). Espiral fixa (sem tremer de um quadro para outro).
+  const DOF_BOKEH = (ns) => `uniform sampler2D tSrc; uniform vec2 uPx; uniform float uMaxR; varying vec2 vUv;
+    void main(){ vec4 c0 = texture2D(tSrc, vUv); float r0 = c0.a * uMaxR;
+      if (r0 < 0.5) { gl_FragColor = c0; return; }
+      vec3 acc = c0.rgb; float ws = 1.0;
+      for (int i = 0; i < ${ns}; i++) { float fi = float(i) + 0.5, r = sqrt(fi / ${ns}.0) * r0, th = fi * 2.39996323;
+        vec4 s = texture2D(tSrc, vUv + vec2(cos(th), sin(th)) * r * uPx);
+        float w = clamp(s.a * uMaxR - r + 1.0, 0.0, 1.0);                              // o CoC da amostra cobre a distância até aqui?
+        acc += s.rgb * w; ws += w; }
+      gl_FragColor = vec4(acc / ws, c0.a); }`;
+  // 3) filtro tenda (4 amostras bilineares nas diagonais = 3x3) ponderado pela semelhança de CoC: alisa o granulado do disco
+  //    sem misturar fundo com primeiro plano
+  const DOF_TENT = `uniform sampler2D tSrc; uniform vec2 uPx; varying vec2 vUv;
+    void main(){ vec4 c0 = texture2D(tSrc, vUv); vec3 acc = c0.rgb; float ws = 1.0;
+      for (int i = 0; i < 4; i++) { vec2 o = vec2(i == 1 || i == 3 ? 0.75 : -0.75, i >= 2 ? 0.75 : -0.75) * uPx; vec4 s = texture2D(tSrc, vUv + o);
+        float w = max(0.0, 1.0 - abs(s.a - c0.a) * 6.0); acc += s.rgb * w; ws += w; }
+      gl_FragColor = vec4(acc / ws, c0.a); }`;
+  // 4) composição na tela inteira: upsample BILATERAL (as 4 amostras de meia tela pesam pela semelhança de CoC com este pixel:
+  //    a cor de um objeto nítido não escorre para o fundo vizinho) e mistura suave pelo CoC deste pixel (de ~1 a 3,5 px)
+  //    -> a passagem nítido -> desfocado é gradual, sem linha de corte nem serrilhado
+  const DOF_COMP = COC + `uniform sampler2D tSrc; uniform sampler2D tBlur; uniform vec2 uPxH; uniform float uDebug; varying vec2 vUv;
+    void main(){ vec3 c = texture2D(tSrc, vUv).rgb; float cp = cocPx(vUv), kn = cp / uMaxPx;
+      vec2 t = vUv / uPxH - 0.5, b = floor(t), f = t - b; vec3 acc = vec3(0.0); float ws = 0.0;
+      for (int i = 0; i < 4; i++) { vec2 o = vec2(i == 1 || i == 3 ? 1.0 : 0.0, i >= 2 ? 1.0 : 0.0);
+        vec4 s = texture2D(tBlur, (b + o + 0.5) * uPxH);
+        float wb = (o.x > 0.5 ? f.x : 1.0 - f.x) * (o.y > 0.5 ? f.y : 1.0 - f.y);
+        float w = wb * (0.02 + max(0.0, 1.0 - abs(s.a - kn) * 5.0)); acc += s.rgb * w; ws += w; }
+      vec3 bl = acc / max(ws, 1e-4);
+      float k = smoothstep(1.0, 3.5, cp);
+      vec3 res = mix(c, bl, k);
+      if (uDebug > 0.5) res = mix(res * 0.35, vec3(1.0, 0.45, 0.1), kn);           // modo de ajuste: laranja = quanto desfoca
+      gl_FragColor = vec4(res, 1.0); }`;
+
   // FXAA (versão clássica do exemplo do three.js)
   const FXAA = `uniform sampler2D tSrc; uniform vec2 uPx; uniform float uSharp; varying vec2 vUv;
     float dith(){ return (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0; }
@@ -119,9 +184,9 @@
     }`;
 
   function create(renderer, opts) {
-    const O = { ink: 0.25, bloom: 0.12, threshold: 0.97, sat: 1.04, con: 0.1, vig: 0.08, ao: 0.45, scatter: 1, rays: 0.25, sharpen: 0.3 }; Object.keys(opts || {}).forEach(k => { if (opts[k] != null) O[k] = opts[k]; });
+    const O = { ink: 0.25, bloom: 0.12, threshold: 0.97, sat: 1.04, con: 0.1, vig: 0.08, ao: 0.45, scatter: 1, rays: 0.25, sharpen: 0.3, dof: 1, dofLens: null }; Object.keys(opts || {}).forEach(k => { if (opts[k] != null) O[k] = opts[k]; });
     // fx.sky: definido pelo main.js a cada quadro (direção e cor do sol, início/fim da névoa)
-    const fx = { ok: true, opts: O, sky: { dir: new THREE.Vector3(0.4, 0.7, 0.3).normalize(), col: new THREE.Color(0, 0, 0), fogN: 500, fogF: 1500 } };
+    const fx = { ok: true, opts: O, focus: 15, sky: { dir: new THREE.Vector3(0.4, 0.7, 0.3).normalize(), col: new THREE.Color(0, 0, 0), fogN: 500, fogF: 1500 } };
     try {
       const gl2 = renderer.capabilities.isWebGL2, hasDep = gl2 || !!renderer.extensions.get('WEBGL_depth_texture');
       const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), scn = new THREE.Scene(), quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2)); quad.frustumCulled = false; scn.add(quad);
@@ -135,11 +200,22 @@
       const mFxaa = mat(FXAA, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uSharp: { value: O.sharpen } });
       const mRMask = mat(RMASK, { tSrc: { value: null }, tDep: { value: null }, uSunUv: { value: new THREE.Vector2() }, uAsp: { value: 1 } });
       const mRBlur = mat(RBLUR, { tSrc: { value: null }, uSunUv: { value: new THREE.Vector2() }, uLen: { value: 1 } });
+      // profundidade de campo: parâmetros da lente (CFG.GFX.DOF_LENS sobrescreve)
+      const LENS = Object.assign({ FSTOP: 4, FOCAL_MM: 85, SENSOR_MM: 24, FOCUS_RANGE: 250, MAX_PX: 8, SAMPLES: 32, AF_SPEED: 4, DEBUG: false }, O.dofLens || {});
+      const cocU = () => ({ tSrc: { value: null }, tDep: { value: null }, tSharp: { value: null }, uHasSharp: { value: 0 }, uNear: { value: 0.5 }, uFar: { value: 2300 }, uS: { value: 15 }, uR: { value: 35 }, uK: { value: 8 }, uMaxPx: { value: 12 } });
+      const mDPre = mat(DOF_PRE, Object.assign(cocU(), { uPxF: { value: new THREE.Vector2() } }));
+      const mDBok = mat(DOF_BOKEH(Math.max(8, Math.min(64, LENS.SAMPLES | 0))), { tSrc: { value: null }, uPx: { value: new THREE.Vector2() }, uMaxR: { value: 6 } });
+      const mDTent = mat(DOF_TENT, { tSrc: { value: null }, uPx: { value: new THREE.Vector2() } });
+      const mDComp = mat(DOF_COMP, Object.assign(cocU(), { tBlur: { value: null }, uPxH: { value: new THREE.Vector2() }, uDebug: { value: 0 } }));
+      const mSharp = new THREE.ShaderMaterial({ uniforms: { tDep: { value: null }, uRes: { value: new THREE.Vector2() } }, vertexShader: SHARP_VS, fragmentShader: SHARP_FS,
+        depthTest: false, depthWrite: false, side: THREE.DoubleSide, fog: false });
+      const _cc = new THREE.Color();
+      fx.lens = LENS; let afS = 0, afT = 0;                                            // autofoco suave (como o motor de uma lente)
       const _sp = new THREE.Vector3();
       const P = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat, stencilBuffer: false };
-      let w = 0, h = 0, rtS, rtC, b1a, b1b, b2a, b2b, rRa, rRb;
+      let w = 0, h = 0, rtS, rtC, b1a, b1b, b2a, b2b, rRa, rRb, rtD, dA, dB, rtM;
       const size = new THREE.Vector2();
-      const free = () => [rtS, rtC, b1a, b1b, b2a, b2b, rRa, rRb].forEach(t => t && t.dispose());
+      const free = () => [rtS, rtC, b1a, b1b, b2a, b2b, rRa, rRb, rtD, dA, dB, rtM].forEach(t => t && t.dispose());
       const ensure = () => {
         renderer.getDrawingBufferSize(size); const W = Math.max(2, size.x | 0), H = Math.max(2, size.y | 0);
         if (W === w && H === h) return; w = W; h = H; free();
@@ -148,6 +224,8 @@
         rtC = new THREE.WebGLRenderTarget(w, h, Object.assign({ depthBuffer: false }, P));
         const q = (k) => new THREE.WebGLRenderTarget(Math.max(1, w >> k), Math.max(1, h >> k), Object.assign({ depthBuffer: false }, P));
         b1a = q(2); b1b = q(2); b2a = q(3); b2b = q(3); rRa = q(2); rRb = q(2);
+        rtD = new THREE.WebGLRenderTarget(w, h, Object.assign({ depthBuffer: false }, P)); dA = q(1); dB = q(1);   // desfoque de distância
+        rtM = new THREE.WebGLRenderTarget(w, h, Object.assign({ depthBuffer: false }, P));   // máscara do que nunca desfoca
       };
       const pass = (m, target) => { quad.material = m; renderer.setRenderTarget(target); renderer.render(scn, cam); };
       const blur = (src, tmp, k) => { const W = Math.max(1, w >> k), H = Math.max(1, h >> k);
@@ -179,12 +257,39 @@
           U.uInvProj.value.copy(camera.projectionMatrixInverse); U.uCamW.value.copy(camera.matrixWorld); U.uSun.value.copy(SK.dir); U.uSunCol.value.copy(SK.col);
           U.uFogN.value = SK.fogN; U.uFogF.value = SK.fogF; U.uScatter.value = O.scatter; U.tRay.value = rRa.texture; U.uRays.value = rayK; mFxaa.uniforms.uSharp.value = O.sharpen;
           pass(mComp, rtC);
-          mFxaa.uniforms.tSrc.value = rtC.texture; mFxaa.uniforms.uPx.value.set(1 / w, 1 / h); pass(mFxaa, prev);
+          // profundidade de campo: meia tela (Karis + CoC) -> bokeh em disco -> tenda -> composição bilateral na tela inteira
+          let outT = rtC;
+          if (hasDep && O.dof > 0.001) {
+            const now = performance.now(), dt = afT ? Math.min(0.1, (now - afT) / 1000) : 1; afT = now;
+            const want = Math.max(2, fx.focus || 15); afS = afS ? afS + (want - afS) * (1 - Math.exp(-LENS.AF_SPEED * dt)) : want;
+            const f = LENS.FOCAL_MM / 1000, S = Math.max(afS, f * 4);
+            const K = O.dof * (f * f) / (LENS.FSTOP * (S - f)) / (LENS.SENSOR_MM / 1000) * h;   // CoC no infinito, em px
+            const maxPx = Math.max(1, LENS.MAX_PX * h / 1080);
+            // máscara das caixas surpresa (camada SHARP_LAYER): só os objetos dessa camada, sem sombras, sem céu
+            let hasSharp = 0;
+            if (window.PostFX.sharpN > 0) {
+              const lm = camera.layers.mask, bg = scene.background, au = renderer.shadowMap.autoUpdate, ca = renderer.getClearAlpha(); renderer.getClearColor(_cc);
+              mSharp.uniforms.tDep.value = rtS.depthTexture; mSharp.uniforms.uRes.value.set(w, h);
+              camera.layers.set(window.PostFX.SHARP_LAYER); scene.background = null; scene.overrideMaterial = mSharp; renderer.shadowMap.autoUpdate = false; renderer.setClearColor(0x000000, 1);
+              try { renderer.setRenderTarget(rtM); renderer.clear(); renderer.render(scene, camera); hasSharp = 1; }
+              finally { camera.layers.mask = lm; scene.background = bg; scene.overrideMaterial = null; renderer.shadowMap.autoUpdate = au; renderer.setClearColor(_cc, ca); }
+            }
+            [mDPre, mDComp].forEach(m => { const u = m.uniforms; u.tSharp.value = rtM.texture; u.uHasSharp.value = hasSharp; u.tDep.value = rtS.depthTexture; u.uNear.value = camera.near; u.uFar.value = camera.far;
+              u.uS.value = S; u.uR.value = LENS.FOCUS_RANGE; u.uK.value = K; u.uMaxPx.value = maxPx; });
+            const W2 = Math.max(1, w >> 1), H2 = Math.max(1, h >> 1);
+            mDPre.uniforms.tSrc.value = rtC.texture; mDPre.uniforms.uPxF.value.set(1 / w, 1 / h); pass(mDPre, dA);
+            mDBok.uniforms.tSrc.value = dA.texture; mDBok.uniforms.uPx.value.set(1 / W2, 1 / H2); mDBok.uniforms.uMaxR.value = maxPx / 2; pass(mDBok, dB);
+            mDTent.uniforms.tSrc.value = dB.texture; mDTent.uniforms.uPx.value.set(1 / W2, 1 / H2); pass(mDTent, dA);
+            const U2 = mDComp.uniforms; U2.tSrc.value = rtC.texture; U2.tBlur.value = dA.texture; U2.uPxH.value.set(1 / W2, 1 / H2); U2.uDebug.value = LENS.DEBUG ? 1 : 0; pass(mDComp, rtD);
+            outT = rtD;
+          }
+          mFxaa.uniforms.tSrc.value = outT.texture; mFxaa.uniforms.uPx.value.set(1 / w, 1 / h); pass(mFxaa, prev);
         } catch (e) { console.warn('[postfx] desligado:', e); fx.ok = false; renderer.setRenderTarget(null); renderer.render(scene, camera); }
       };
       fx.dispose = free;
     } catch (e) { console.warn('[postfx] indisponível:', e); fx.ok = false; fx.render = (s, c) => renderer.render(s, c); }
     return fx;
   }
-  window.PostFX = { create };
+  // SHARP_LAYER: camada dos objetos que nunca desfocam (items.js liga nas caixas); sharpN: quantos existem (0 = pula a máscara)
+  window.PostFX = { create, SHARP_LAYER: 7, sharpN: 0 };
 })();

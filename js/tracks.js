@@ -5,7 +5,7 @@
 //    cenário do tema 'classic' (grama, rio com pontes, cachoeira, lagos). As pistas Cidade e Praia foram
 //    removidas. Devolve o objeto "track" usado pela física e pela IA.
 // =====================================================================================
-console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à noite, sem pedrinhas)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
+console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
 (function () {
   // ===================================================================================
   // GfxFX — melhorias gráficas compartilhadas (usadas aqui e no scenery.js)
@@ -220,7 +220,72 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
     // sombra com o recorte das folhas (sem quadrados no chão)
     let depthM = null;
     const depthMaterial = () => depthM || (depthM = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: texture(), alphaTest: 0.5, side: THREE.DoubleSide }));
-    return { texture, geometry, material, depthMaterial };
+    // ---- FOLHAS CAÍDAS (litter): as mesmas folhas da moita, soltas e deitadas na grama ----
+    //  * atlas 4x2 com uma folha por célula, desenhada com o MESMO traço da moita (forma pontuda + nervura, tons claros:
+    //    a cor vem do vértice, igual à moita -> mesmo verde);
+    //  * tufo de ~2,8 m: folhas mais juntas no meio, cada uma dobrada na nervura (não fica papel chapado), quase deitadas;
+    //  * ~1/4 das folhas um pouco amareladas/secas (folha que caiu há mais tempo).
+    let ltex = null, lgeo = null, lmat = null;
+    function litterTexture() {
+      if (ltex) return ltex; srand = 991;
+      const c = document.createElement('canvas'); c.width = 256; c.height = 128; const g = c.getContext('2d'); g.clearRect(0, 0, 256, 128);
+      for (let k = 0; k < 8; k++) { const cx = (k % 4) * 64, cy = Math.floor(k / 4) * 64, len = 50 + rr() * 8, wid = 11 + rr() * 6, lum = 0.78 + rr() * 0.2, l1 = Math.round(lum * 255), l0 = Math.round(lum * 0.72 * 255);
+        g.save(); g.translate(cx + 32 - len / 2, cy + 32); g.rotate((rr() - 0.5) * 0.12);
+        const gr = g.createLinearGradient(0, -wid, 0, wid); gr.addColorStop(0, `rgb(${l0},${l1},${l0})`); gr.addColorStop(0.5, `rgb(${l1},${l1},${Math.round(l1 * 0.9)})`); gr.addColorStop(1, `rgb(${Math.round(l0 * 0.85)},${l0},${Math.round(l0 * 0.8)})`);
+        g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(len * 0.3, -wid, len * 0.75, -wid * 0.8, len, 0); g.bezierCurveTo(len * 0.75, wid * 0.8, len * 0.3, wid, 0, 0); g.fill();
+        g.strokeStyle = 'rgba(40,60,20,0.4)'; g.lineWidth = 1.4; g.beginPath(); g.moveTo(len * 0.02, 0); g.lineTo(len * 0.92, 0); g.stroke();
+        for (let s = 1; s <= 4; s++) { const x = len * (0.15 + s * 0.16); g.lineWidth = 0.8; g.beginPath(); g.moveTo(x, 0); g.lineTo(x + len * 0.09, -wid * 0.55); g.moveTo(x, 0); g.lineTo(x + len * 0.09, wid * 0.55); g.stroke(); }
+        g.strokeStyle = 'rgba(70,52,30,0.9)'; g.lineWidth = 2; g.beginPath(); g.moveTo(0, 0); g.lineTo(-5, 0); g.stroke();   // talinho
+        g.restore(); }
+      // fundo transparente do canvas é PRETO: de longe (mipmaps) o preto vazava para a folha e ela virava um pontinho escuro.
+      // Copia os pixels e pinta o fundo (alfa 0) com o tom médio da folha -> a borda nunca escurece.
+      const id = g.getImageData(0, 0, 256, 128), px = id.data, out = new Uint8Array(px.length);
+      for (let y = 0; y < 128; y++) for (let x = 0; x < 256; x++) { const i = (y * 256 + x) * 4, o = ((127 - y) * 256 + x) * 4;   // vira na vertical (DataTexture não usa flipY)
+        if (px[i + 3] < 128) { out[o] = 196; out[o + 1] = 214; out[o + 2] = 178; out[o + 3] = px[i + 3]; } else { out[o] = px[i]; out[o + 1] = px[i + 1]; out[o + 2] = px[i + 2]; out[o + 3] = px[i + 3]; } }
+      ltex = new THREE.DataTexture(out, 256, 128, THREE.RGBAFormat); ltex.anisotropy = 4; ltex.generateMipmaps = true;
+      ltex.minFilter = THREE.LinearMipmapLinearFilter; ltex.magFilter = THREE.LinearFilter; ltex.needsUpdate = true;
+      return ltex;
+    }
+    function litterGeometry() {
+      if (lgeo) return lgeo; srand = 5151;
+      const P = [], Nn = [], U = [], C = [], col = new THREE.Color();
+      const greens = [0x2a5e20, 0x336c25, 0x3f7f2c, 0x3f7f2c, 0x4a8a30, 0x5a9636, 0x8fbf45], dry = [0x9a9a3c, 0xa8903e, 0x8a7a34];   // tons da moita (sombra -> ponta)
+      const NL = 48, R = 2.5;
+      for (let k = 0; k < NL; k++) {
+        const a = rr() * 6.283, d = R * Math.pow(rr(), 0.8), cx = Math.cos(a) * d, cz = Math.sin(a) * d;
+        const L = 0.19 + rr() * 0.1, Wd = L * 0.36, yaw = rr() * 6.283, cy = Math.cos(yaw), sy = Math.sin(yaw);
+        const tx = (rr() - 0.5) * 0.35, tz = (rr() - 0.5) * 0.35, fold = 0.012 + rr() * 0.02, y0 = 0.035 + k * 0.0015;   // inclinação, dobra na nervura, camadas
+        const cell = (rr() * 8) | 0, u0 = (cell % 4) * 0.25, v0 = 1 - (Math.floor(cell / 4) + 1) * 0.5;
+        const isDry = rr() < 0.18; col.set(isDry ? dry[(rr() * dry.length) | 0] : greens[(rr() * greens.length) | 0]).multiplyScalar(0.88 + rr() * 0.24);
+        // local: x ao longo da folha (-L..L), z na largura (-Wd..Wd); nervura (z=0) levantada pela dobra
+        const V = (lx, lz) => { const ly = y0 + fold * 0.5 + lx * tx + lz * tz; return [cx + lx * cy - lz * sy, ly, cz + lx * sy + lz * cy]; };
+        const UVo = (lx, lz) => [u0 + (lx / L * 0.5 + 0.5) * 0.25, v0 + (lz / (Wd * 2.6) * 0.5 + 0.5) * 0.5];   // a folha ocupa ~80% x 40% da célula
+        const wd = Wd * 1.3, q = [[-L, -wd], [L, -wd], [L, wd], [-L, wd]];   // 2 triângulos por folha (leve: tem MUITA folha no mapa)
+        [0, 2, 1, 0, 3, 2].forEach(i => { const [lx, lz] = q[i]; P.push(...V(lx, lz)); U.push(...UVo(lx, lz)); Nn.push(0, 1, 0); C.push(col.r, col.g, col.b); });
+      }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeBoundingSphere();
+      return (lgeo = g);
+    }
+    function litterMaterial() {
+      if (lmat) return lmat;
+      const Lam = (window.Toon && Toon.Lambert) || THREE.MeshLambertMaterial;
+      lmat = new Lam({ color: 0xffffff, vertexColors: true, map: litterTexture(), alphaTest: 0.5, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+      // NÃO grava profundidade: para os pós-efeitos (contorno, sombra de contato, desfoque) a folha é parte do chão.
+      // Antes cada folha (5 cm acima da grama) ganhava contorno escuro e de longe a grama ficava cheia de pontos pretos.
+      // Quem usa este material desenha DEPOIS do chão (renderOrder, no scenery.js), senão a grama cobriria as folhas.
+      lmat.depthWrite = false;
+      lmat.userData.noToon = true; lmat.extensions = { derivatives: true };
+      // de longe as versões menores da textura (mipmaps) "lavam" o recorte e a folha sumia no alphaTest:
+      // compensa o alfa pelo nível de mip (quanto mais longe, mais opaca) -> folha continua visível de longe
+      GfxFX.chain(lmat, 'litter-mipalpha', sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `#ifdef USE_MAP
+          { vec2 tc = vUv * vec2(256.0, 128.0); float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tc), dFdx(tc)), dot(dFdy(tc), dFdy(tc)))));
+            diffuseColor.a *= 1.0 + lod * 0.3; }
+          #endif
+          #include <alphatest_fragment>`); });
+      return lmat;
+    }
+    return { texture, geometry, material, depthMaterial, litterGeometry, litterMaterial };
   })();
   window.Bush = Bush;
 
@@ -492,7 +557,8 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
       if (kind === 'bush') {   // moita nova (Bush): folhagem recortada, 1 material, sombra com o recorte das folhas
         const im = new THREE.InstancedMesh(Bush.geometry('hi'), Bush.material(), list.length), d = new THREE.Object3D(), c = new THREE.Color();
         list.forEach((o, i) => { d.position.set(o.x, (o.y || 0) + 0.1, o.z); d.rotation.set(0, o.r, 0); d.scale.set(o.s * (0.95 + rnd() * 0.2), o.s * (0.85 + rnd() * 0.25), o.s * (0.95 + rnd() * 0.2)); d.updateMatrix(); im.setMatrixAt(i, d.matrix);
-          im.setColorAt(i, c.setHSL(0.24 + rnd() * 0.07, 0.3 + rnd() * 0.2, 0.86 + rnd() * 0.12)); tr.blockers.push({ x: o.x, y: (o.y || 0) + 0.8 * o.s, z: o.z, r: 1.3 * o.s }); });
+          im.setColorAt(i, c.setHSL(0.24 + rnd() * 0.07, 0.3 + rnd() * 0.2, 0.86 + rnd() * 0.12)); tr.blockers.push({ x: o.x, y: (o.y || 0) + 0.8 * o.s, z: o.z, r: 1.3 * o.s });
+          (tr.leafSpots = tr.leafSpots || []).push({ x: o.x, z: o.z, s: o.s }); });   // scenery.js espalha folhas caídas em volta
         im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.customDepthMaterial = Bush.depthMaterial(); im.userData.noOutline = true; im.frustumCulled = false; return add(im);
       }
       const geo = PLANTS[kind](1);
@@ -1006,7 +1072,31 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         const tx = fx - i, tz = fz - j, A = G.A, row = jj => { const o = jj * G.nx; return cr4(A[o + i - 1], A[o + i], A[o + i + 1], A[o + i + 2], tx); };
         return Math.max(0, cr4(row(j - 1), row(j), row(j + 1), row(j + 2), tz)); };
       let waterDist = () => 1e9;                                                         // distância até a beira d'água (rio e laguinhos, definida mais abaixo)
-      const gH = (x, z, r) => { r = r || roadInfo(x, z); let h = natH(x, z, r); if (h > 0.01) { const wd = waterDist(x, z); if (wd < 45) h *= 1 - (1 - sm(8, 45, wd)) * sm(W + 6, W + 18, r.d); } return h; };
+      // ===== MAR no fim do rio =====
+      // Costa reta e ondulada, perpendicular ao rio na primeira ponte, do lado de FORA do circuito. Fica sempre a pelo menos
+      // W + praia + 80 m do asfalto (a parte da pista que mais avança para o mar decide onde a costa fica). Perto da foz a costa
+      // entra um pouco (enseada). info(x, z).e = distância da linha da água para dentro da terra (negativo = no mar);
+      // bw = largura da praia de areia naquele ponto (borda recortada).
+      const SEA = (() => { const b0 = bridges[0]; if (b0 === undefined) return null;
+        const D = V3(T[b0].z, 0, -T[b0].x).normalize(), P = V3(D.z, 0, -D.x);
+        const ex = S[b0].x + T[b0].z * 240, ez = S[b0].z - T[b0].x * 240, latR = ex * P.x + ez * P.z;
+        const wob = l => 14 * Math.sin(l * 0.0093 + 0.7) + 6 * Math.sin(l * 0.027 + 2.1) + 2.5 * Math.sin(l * 0.071) - 22 * Math.exp(-Math.pow((l - latR) / 80, 2));
+        const BW = 110, jag = l => 3 * Math.sin(l * 0.21 + 0.4) + 2 * Math.sin(l * 0.53 + 1.1) + 1.2 * Math.sin(l * 1.37);
+        let c0 = -1e9; for (let i = 0; i < N; i++) { const d = S[i].x * D.x + S[i].z * D.z, l = S[i].x * P.x + S[i].z * P.z; c0 = Math.max(c0, d - wob(l)); }
+        c0 += W + BW + 80;
+        const info = (x, z) => { const l = x * P.x + z * P.z; return { e: c0 + wob(l) - (x * D.x + z * D.z), l, bw: BW + jag(l) }; };
+        // ponto (x, z) a uma distância e da água (para dentro da terra) na posição lateral l
+        const at = (l, e) => { const d = c0 + wob(l) - e; return [D.x * d + P.x * l, D.z * d + P.z * l]; };
+        console.info('[mar] costa a', c0.toFixed(0), 'm do centro, na direção', D.x.toFixed(2), D.z.toFixed(2));
+        return { D, P, latR, c0, wob, BW, info, at, bwAt: l => BW + jag(l), e: (x, z) => info(x, z).e };
+      })();
+      tr.sea = SEA; tr.seaDist = SEA ? SEA.e : null;                                     // scenery.js não planta nada no mar nem na praia
+      // grama perto do mar: desce até ~0,55 m (altura da praia) e, embaixo da areia, afunda abaixo da água
+      // (só abaixa: onde o chão já é mais baixo, como no canal do rio, ele não sobe)
+      const seaGround = (h, x, z) => { if (!SEA) return h; const q = SEA.info(x, z); if (q.e > q.bw + 110) return h;
+        if (q.e >= q.bw) return Math.min(h, lerp(0.55, h, sm(q.bw, q.bw + 110, q.e)));
+        return Math.min(h, lerp(-0.8, 0.55, sm(q.bw - 25, q.bw - 6, q.e))); };
+      const gH = (x, z, r) => { r = r || roadInfo(x, z); let h = natH(x, z, r); if (h > 0.01) { const wd = waterDist(x, z); if (wd < 45) h *= 1 - (1 - sm(8, 45, wd)) * sm(W + 6, W + 18, r.d); } return seaGround(h, x, z); };
       // ---- cordilheira em volta do mapa (profundidade): picos low-poly com grama na base, pedra e neve no topo ----
       { const mm = mountainMat();
         const peak = (x, z, rx, h, rz, k) => {
@@ -1023,13 +1113,13 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
           const m = new THREE.Mesh(g, mm); m.scale.set(rx, h, rz); m.position.set(x, -2, z); m.rotation.y = k * 1.7; add(m);
           tr.blockers.push({ x, y: h * 0.3, z, r: Math.min(rx, h) * 0.7 }); };
         const cx = (L.bbox.x0 + L.bbox.x1) / 2, cz = (L.bbox.z0 + L.bbox.z1) / 2;
-        const bA0 = bridges[0], RE = { x: S[bA0].x + T[bA0].z * 240, z: S[bA0].z - T[bA0].x * 240 };   // lago no fim do rio
-        const nearLake = (x, z, r) => Math.hypot(x - RE.x, z - RE.z) < r + 70;
+        // lado do mar: sem cordilheira nem morros (a vista do mar vai limpa até o horizonte)
+        const nearLake = (x, z, r) => !!SEA && SEA.e(x, z) < r + 220;
         for (let k = 0; k < 22; k++) {
           const a = k / 22 * Math.PI * 2 + rnd() * 0.2, r = RAD + 290 + rnd() * 260, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r * 0.85;
           if (nearTrack({ x, z }, 330)) continue;
           const h = 110 + rnd() * 170, rx = 120 + rnd() * 110; if (nearLake(x, z, rx)) continue; peak(x, z, rx, h, rx * (0.8 + rnd() * 0.4), k);
-          if (rnd() < 0.7) peak(x + Math.cos(a + 1.6) * rx * 0.9, z + Math.sin(a + 1.6) * rx * 0.9, rx * 0.7, h * (0.55 + rnd() * 0.3), rx * 0.6, k + 7);
+          if (rnd() < 0.7) { const x2 = x + Math.cos(a + 1.6) * rx * 0.9, z2 = z + Math.sin(a + 1.6) * rx * 0.9, hh = h * (0.55 + rnd() * 0.3); if (!nearLake(x2, z2, rx * 0.7)) peak(x2, z2, rx * 0.7, hh, rx * 0.6, k + 7); }
         }
         // morros verdes mais perto, entre a pista e a cordilheira
         for (let k = 0; k < 16; k++) { const a = rnd() * Math.PI * 2, r = RAD + 120 + rnd() * 140, x = cx + Math.cos(a) * r, z = cz + Math.sin(a) * r * 0.85;
@@ -1054,14 +1144,17 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         float wNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y); }`;
       wUni.uSunCol = { value: new THREE.Color(1, 0.96, 0.88) }; wUni.uHasRT = { value: 0 }; wUni.uRefl.value = WC.REFL;
+      wUni.uSeaDeep = { value: new THREE.Color(WC.SEA_DEEP || '#0a4f86') };   // azul do mar aberto (cor de vértice do mar: g - r = profundidade, b - r > 1,5 = é mar)
       wUni.uSky = { value: new THREE.Color(0xbfe4ff) }; wUni.uLite = { value: 0 };   // uLite: água simples (sem cáustica nem ondinhas finas)   // sem textura ainda: reflete só a cor do céu (esta linha estava dentro do comentário acima e a água quebrava)
       const waterM = new THREE.ShaderMaterial({ uniforms: wUni, vertexColors: true, transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
         extensions: { derivatives: true },
-        vertexShader: `uniform float uT; attribute vec2 flow; varying vec3 vW; varying float vEdge; varying vec2 vFlow;
+        vertexShader: `uniform float uT; attribute vec2 flow; varying vec3 vW; varying float vEdge; varying vec2 vFlow; varying float vSea; varying float vIsSea;
           #include <fog_pars_vertex>
           void main(){ vec4 w = modelMatrix * vec4(position, 1.0);
+            vSea = clamp(color.g - color.r, 0.0, 1.0); vIsSea = step(1.5, color.b - color.r);   // só o mar tem g/b diferentes de r
             float calm = 1.0 - 0.7 * smoothstep(0.7, 1.0, color.r);                       // ondas menores na beira (raso)
-            w.y += calm * (0.018 * sin(w.x * 0.31 + uT * 1.5) + 0.014 * sin(w.z * 0.43 - uT * 1.2) + 0.01 * sin((w.x - w.z) * 0.6 + uT * 2.3));
+            w.y += calm * (0.018 * sin(w.x * 0.31 + uT * 1.5) + 0.014 * sin(w.z * 0.43 - uT * 1.2) + 0.01 * sin((w.x - w.z) * 0.6 + uT * 2.3)) * (1.0 + 3.0 * vSea);
+            w.y += vSea * (0.16 * sin(dot(w.xz, vec2(0.011, 0.043)) + uT * 0.8) + 0.07 * sin(dot(w.xz, vec2(-0.031, 0.022)) + uT * 1.1));   // marola do mar aberto
             vW = w.xyz; vEdge = color.r; vFlow = flow; vec4 mvPosition = viewMatrix * w; gl_Position = projectionMatrix * mvPosition;
             #include <fog_vertex>
           }`,
@@ -1069,7 +1162,7 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
           uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uSky; uniform float uHasRT; uniform float uLite; uniform float uDepth; uniform vec3 uAbsorb; uniform vec3 uBed; uniform float uSRGB;
           vec3 toLin(vec3 c){ return uSRGB > 0.5 ? pow(max(c, 0.0), vec3(2.2)) : c; }
           vec3 toOut(vec3 c){ return uSRGB > 0.5 ? pow(max(c, 0.0), vec3(1.0 / 2.2)) : c; }
-          varying vec3 vW; varying float vEdge; varying vec2 vFlow;
+          varying vec3 vW; varying float vEdge; varying vec2 vFlow; varying float vSea; varying float vIsSea; uniform vec3 uSeaDeep;
           #include <fog_pars_fragment>
           ${W_NOISE}
           vec2 waves(vec2 p, float t){ vec2 g = vec2(0.0);
@@ -1102,11 +1195,12 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
             float detail = 1.0 - smoothstep(30.0, 220.0, dist);
             vec2 p = vW.xz - vFlow * t * 0.9;
             vec2 rp = uLite > 0.5 ? vec2(0.0) : ripple(p, t);
-            vec2 g = (waves(p, t) + rp * detail) * mix(0.5, 1.0, detail);
+            vec2 g = (waves(p, t) * (1.0 + 0.7 * vSea) + rp * detail) * mix(0.5, 1.0, detail);
             vec3 N = normalize(vec3(-g.x * 1.4, 1.0, -g.y * 1.4));
             vec3 V = normalize(cameraPosition - vW);
             // REFRAÇÃO: o raio entra na água, entorta (índice 1,33) e acerta o fundo; profundidade maior no meio, rasa na beira
-            float depth = mix(uDepth, 0.18, smoothstep(0.5, 0.98, vEdge));
+            float depth = mix(uDepth, 0.18, smoothstep(0.5, 0.98, vEdge)) * (1.0 + 5.0 * vSea);   // mar: bem mais fundo longe da costa
+            vec3 deepC = mix(uDeep, uSeaDeep, vSea);
             vec3 Rr = refract(-V, N, 1.0 / 1.33);
             float path = depth / max(-Rr.y, 0.12);
             vec2 bxz = vW.xz + Rr.xz * path;
@@ -1117,7 +1211,7 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
             under *= 0.82 + uSunCol * ca * 1.35 * sunUp * mix(0.35, 1.0, detail) * exp(-depth * 0.25);
             // absorção: o vermelho some primeiro -> turquesa; espalhamento soma a cor da água no fundo
             vec3 tr = exp(-uAbsorb * path * 1.4);
-            under = (under * tr + toLin(uDeep) * (1.0 - exp(-path * 0.9)) * 0.55) * 0.85;
+            under = (under * tr + toLin(deepC) * (1.0 - exp(-path * 0.9)) * 0.55) * 0.85;
             // luz do ambiente: o fundo só aparece claro quando há luz (antes a água tinha brilho próprio e ficava fluorescente à noite)
             float dayK = clamp(max(dot(uSunCol, vec3(0.3, 0.59, 0.11)) * 0.9, dot(toLin(uSky), vec3(0.3, 0.59, 0.11)) * 1.4), 0.0, 1.0);
             under *= mix(0.1, 1.0, dayK);
@@ -1131,6 +1225,11 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
             vec3 col = mix(under, refl, clamp(fres * 1.05, 0.0, 0.9) * uRefl);
             vec3 H = normalize(uSunDir + V); float nh = max(dot(N, H), 0.0);
             col += uSunCol * (pow(nh, 1200.0) * 5.0 + pow(nh, 120.0) * 0.12) * (0.4 + 0.6 * detail);
+            // espuma do mar: ondinhas brancas chegando na praia + faixa de espuma rente à areia
+            if (vIsSea > 0.5) { float nz = wNoise(vW.xz * 0.05);
+              float fw = smoothstep(0.62, 1.0, sin(vEdge * 34.0 - t * 1.4 + nz * 5.0) * 0.5 + 0.5) * smoothstep(0.72, 0.97, vEdge);
+              float foam = fw * (0.45 + 0.55 * wNoise(vW.xz * 0.7 + t * 0.35)) + smoothstep(0.95, 1.0, vEdge) * 0.8;
+              col = mix(col, toLin(vec3(0.93, 0.97, 1.0)) * mix(0.12, 1.0, dayK), clamp(foam, 0.0, 0.85) * mix(0.4, 1.0, detail)); }
             float a = 1.0 - smoothstep(0.975, 1.0, vEdge) * 0.85;                           // beira se funde com a areia
             gl_FragColor = vec4(toOut(col), a);
             #include <fog_fragment>
@@ -1210,21 +1309,41 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
       const BANKP = e => e >= 10 ? 0 : e >= 1.2 ? (u => 0.85 * u * u * (3 - 2 * u))((10 - e) / 8.8) : e >= 0 ? 0.85 : e >= -0.4 ? 0.14 + 0.71 * (e + 0.4) / 0.4 : 0.14;
       let bankBase = () => 0;                                                            // chão sem areia: a grade da grama (definido quando ela fica pronta)
       const PROF = [[10.4, -0.08]].concat([9.2, 8.2, 7.2, 6.2, 5.3, 4.4, 3.5, 2.6, 1.9, 1.2, 0, -0.4].map(e => [e, BANKP(e)])), PC = PROF.length;   // a borda de fora da areia fica ENTERRADA (antes ficava rente à grama e as duas "brigavam": risco claro tracejado)
+      // ---- praia do mar (mesma conta para o desenho e para a física) ----
+      // perfil: plana a ~0,6 m, desce suave até a água (0,47 m na linha d'água) e continua descendo embaixo do mar.
+      // Onde o rio cruza a praia, um canal (seaCarve) desce até o leito do rio.
+      const seaCarve = eR => eR <= -2 ? 0.14 : eR < 0 ? 0.14 + 0.33 * (eR + 2) / 2 : 0.47 + 0.15 * sm(0, 15, eR);
+      const beachProf = q => q.e >= 2 ? 0.55 + 0.07 * sm(2, q.bw, q.e) : q.e >= 0 ? 0.47 + 0.04 * q.e : Math.max(0.15, 0.47 + 0.05 * q.e);
+      // q = SEA.info(x, z); eR = distância até a beira do rio (negativo = dentro do rio). -1e9 = fora da praia
+      const beachH = (x, z, q, eR) => { if (!q || q.e > q.bw + 1.2) return -1e9; const g0 = bankBase(x, z);
+        if (q.e >= q.bw) return g0 + 0.02 - 0.14 * (q.e - q.bw) / 1.2;                // borda de fora enterrada na grama
+        const ge = bankBase(...SEA.at(q.l, q.bw)) + 0.03;                                  // chão onde a areia começa: sobe dele até o perfil em 12 m (sem degrau)
+        let h = lerp(ge, beachProf(q), sm(q.bw, q.bw - 12, q.e)); if (eR !== undefined && eR < 15) h = Math.min(h, seaCarve(eR)); return Math.max(h, g0 + 0.03); };
+      // margem de areia do rio chegando na praia: vai virando a praia nos últimos 25 m (sem degrau)
+      const seaBlendBank = (h, x, z, eR) => { if (!SEA || h < -1e8) return h; const q = SEA.info(x, z); if (q.e > q.bw + 25) return h;
+        const b = Math.max(Math.min(0.62, seaCarve(eR)), bankBase(x, z) + 0.03); return lerp(b, h, sm(q.bw, q.bw + 25, q.e)); };
       // ---- rio ----
       const rp = [PV(bB, 74), PV(bB, 64), PV(bB, 45), PV(bB, 0), PV(bB, -45)];
       { const a3 = PV(bA, -45), b3 = rp[4].clone(), dir = a3.clone().sub(b3), len = dir.length(); dir.normalize(); const perp = V3(-dir.z, 0, dir.x);
         for (let k = 1; k <= 5; k++) { const t = k / 6; rp.push(b3.clone().addScaledVector(dir, len * t).addScaledVector(perp, 58 * Math.sin(t * Math.PI) * Math.sin(k * 2.2 + 0.4))); }
-        const tA = T[bA]; rp.push(a3, PV(bA, 0), PV(bA, 45), PV(bA, 95), PV(bA, 140).addScaledVector(tA, 35), PV(bA, 190).addScaledVector(tA, -30), PV(bA, 240)); }
-      const riverC = new THREE.CatmullRomCurve3(rp, false, 'centripetal'), RM = 260, RL = riverC.getLength(), rpts = [], rtan = [];
+        const tA = T[bA]; rp.push(a3, PV(bA, 0), PV(bA, 45), PV(bA, 95), PV(bA, 140).addScaledVector(tA, 35), PV(bA, 190).addScaledVector(tA, -30), PV(bA, 240));
+        // MAR: o rio continua reto até entrar ~90 m no mar (a ponta dentro do mar fica escondida embaixo da água do mar)
+        if (SEA) { const L0 = rp[rp.length - 1], ext = SEA.e(L0.x, L0.z) + 90; if (ext > 10) rp.push(L0.clone().addScaledVector(SEA.D, ext * 0.5), L0.clone().addScaledVector(SEA.D, ext)); } }
+      const riverC = new THREE.CatmullRomCurve3(rp, false, 'centripetal'), RM = SEA ? 320 : 260, RL = riverC.getLength(), rpts = [], rtan = [];
       for (let k = 0; k <= RM; k++) rpts.push(riverC.getPointAt(k / RM));
       // largura (meia-largura em m) ao longo do rio: poço da cachoeira (14 m) -> RHW (9 m) -> vai alargando rio abaixo até
       // RHW_END (18 m: leito de ~36 m) -> foz larga (RDELTA) e fecha
       const HEAD = 26 / RL, MOUTH = 0.84;
-      // MAR: a foz do rio abre num mar grande. O tamanho cabe no espaço livre: distância da pista (menos largura, areia e folga)
-      { let md = 1e9; for (let k = Math.round(RM * MOUTH); k <= RM; k++) for (let i = 0; i < N; i += 2) md = Math.min(md, Math.hypot(S[i].x - rpts[k].x, S[i].z - rpts[k].z));
-        RDELTA = Math.max(34, Math.min(130, md - W - 26)); console.info('[mar] meia-largura da foz:', RDELTA.toFixed(0), 'm (pista mais próxima a', md.toFixed(0), 'm)'); }
+      // com mar: a foz começa a abrir ~80 m antes da praia (TF0) e chega à largura total na linha da água (TC)
+      let TF0 = MOUTH, TC = 1;
+      if (SEA) { let kF = -1, kC = -1; for (let k = 0; k <= RM; k++) { const e = SEA.e(rpts[k].x, rpts[k].z); if (kF < 0 && e < SEA.BW + 80) kF = k; if (kC < 0 && e < 0) { kC = k; break; } }
+        if (kF > 0 && kC > kF) { TF0 = kF / RM; TC = kC / RM; } }
+      // a foz abre na largura que cabe no espaço livre: distância da pista (menos largura, areia e folga)
+      { let md = 1e9; for (let k = Math.round(RM * TF0); k <= Math.round(RM * TC); k++) for (let i = 0; i < N; i += 2) md = Math.min(md, Math.hypot(S[i].x - rpts[k].x, S[i].z - rpts[k].z));
+        RDELTA = Math.max(34, Math.min(SEA ? 70 : 130, md - W - 26)); console.info('[mar] meia-largura da foz:', RDELTA.toFixed(0), 'm (pista mais próxima a', md.toFixed(0), 'm)'); }
       const hwf = t => { if (t < HEAD) { const u = t / HEAD; return RHW + (14 - RHW) * (1 - u * u * (3 - 2 * u)); }
-        if (t < MOUTH) { const u = (t - HEAD) / (MOUTH - HEAD); return RHW + (RHW_END - RHW) * (1 - (1 - u) * (1 - u)); }   // alarga rápido no começo e depois estabiliza
+        if (t < TF0) { const u = (t - HEAD) / (TF0 - HEAD); return RHW + (RHW_END - RHW) * (1 - (1 - u) * (1 - u)); }   // alarga rápido no começo e depois estabiliza
+        if (SEA) { const u = Math.min(1, (t - TF0) / (TC - TF0)); return RHW_END + (RDELTA - RHW_END) * u * u * (3 - 2 * u); }   // foz abrindo para o mar
         const u = (t - MOUTH) / (1 - MOUTH); return u < 0.5 ? RHW_END + (RDELTA - RHW_END) * Math.sin(u * Math.PI) : RDELTA * Math.sqrt(Math.max(0, 1 - Math.pow((u - 0.5) / 0.5, 2))); };
       { // suaviza quinas até o raio mínimo ser maior que a bacia (evita a água vazar da areia)
         const P0 = rpts.map(p => p.clone()), pin = k => k < 3 || k > RM - 2 || bridges.some(b => Math.hypot(P0[k].x - S[b].x, P0[k].z - S[b].z) < 6);
@@ -1242,11 +1361,13 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
       // atalho que cruzaria o rio é descartado (não dá para passar pela água)
       tr.shortcuts = tr.shortcuts.filter(sc => { const bad = sc.pts.some((q, k) => k > 3 && k < sc.pts.length - 4 && nearRiver(q.x, q.z, sc.hw + 3)); if (bad) console.warn('[atalho] ' + sc.i + '→' + sc.j + ' cruza o rio: desligado'); return !bad; });
       const riverDist = (x, z) => rpts.reduce((a, p, k) => Math.min(a, Math.hypot(p.x - x, p.z - z) - (rHW[k] - RHW)), 1e9);
+      // trecho do rio já dentro do mar (> 30 m da linha da água): não é desenhado (a água do mar cobre)
+      const riverInSea = k => !!SEA && SEA.e(rpts[k].x, rpts[k].z) < -30;
       function ribbonGeo(hwA, cs, colored) {
         const pos = [], uv = [], col = [], idx = [];
         for (let k = 0; k <= RM; k++) { const p = rpts[k], t = rtan[k], hw = hwA(k / RM);
           for (let c = 0; c <= cs; c++) { const u = c / cs * 2 - 1; pos.push(p.x + t.z * hw * u, 0, p.z - t.x * hw * u); uv.push(c / cs, k / RM * RL / 20); if (colored) { const q = dcol(Math.abs(u)); col.push(q.r, q.g, q.b); } } }
-        for (let k = 0; k < RM; k++) for (let c = 0; c < cs; c++) { const a = k * (cs + 1) + c, d = a + cs + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+        for (let k = 0; k < RM; k++) { if (riverInSea(k) && riverInSea(k + 1)) continue; for (let c = 0; c < cs; c++) { const a = k * (cs + 1) + c, d = a + cs + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); } }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
         if (colored) { g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); const fl = []; for (let k = 0; k <= RM; k++) for (let c = 0; c <= cs; c++) fl.push(rtan[k].x, rtan[k].z); g.setAttribute('flow', new THREE.Float32BufferAttribute(fl, 2)); }
         g.setIndex(idx); g.computeVertexNormals(); return g;
@@ -1255,12 +1376,54 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         for (let k = 0; k <= RM; k++) for (let c = 0; c <= BC; c++) P.setY(k * (BC + 1) + c, WATER_Y - bedDepth(Math.abs(c / BC * 2 - 1)));
         g.computeVertexNormals(); const o = new THREE.Mesh(g, bedM); o.receiveShadow = true; o.userData.noOutline = true; add(o); }
       [1, -1].forEach(sg => afterGrid.push(() => { const pos = [], uv = [], idx = [];
-        for (let k = 0; k <= RM; k++) { const p = rpts[k], t = rtan[k], hw = rHW[k]; PROF.forEach(([d], c) => { const x = p.x + t.z * sg * (hw + d), z = p.z - t.x * sg * (hw + d); pos.push(x, bankH(d, bankBase(x, z)), z); uv.push(x / 3.5, z / 3.5); }); }   // altura relativa ao chão de verdade; UV no mundo
-        for (let k = 0; k < RM; k++) for (let c = 0; c < PC - 1; c++) { const a = k * PC + c, d = a + PC; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+        const inBeach = [];   // vértice já na praia do mar: a margem do rio some ali (a praia continua)
+        for (let k = 0; k <= RM; k++) { const p = rpts[k], t = rtan[k], hw = rHW[k]; PROF.forEach(([d], c) => { const x = p.x + t.z * sg * (hw + d), z = p.z - t.x * sg * (hw + d);
+          pos.push(x, seaBlendBank(bankH(d, bankBase(x, z)), x, z, d), z); uv.push(x / 3.5, z / 3.5); inBeach.push(!!SEA && SEA.info(x, z).e < SEA.info(x, z).bw - 2); }); }   // altura relativa ao chão de verdade; UV no mundo
+        for (let k = 0; k < RM; k++) for (let c = 0; c < PC - 1; c++) { const a = k * PC + c, d = a + PC; if (inBeach[a] || inBeach[a + 1] || inBeach[d] || inBeach[d + 1]) continue; idx.push(a, d, a + 1, a + 1, d, d + 1); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
         const m = new THREE.Mesh(g, bankM); m.receiveShadow = true; add(m); }));
       const riverGeo = ribbonGeo(t => Math.max(0, hwf(t) - 0.15), 8, true); riverGeo.translate(0, WATER_Y, 0); add(waterMesh(riverGeo));
       tr.minimap.push({ type: 'river', pts: rpts.map((p, k) => [p.x, p.z, rHW[k]]) });
+      // ===== MAR: água até o horizonte + praia de areia (depois da grade da grama: a areia segue a altura dela) =====
+      if (SEA) afterGrid.push(() => {
+        const D = SEA.D;
+        // onde o rio chega na costa (posição lateral) e a meia-largura dele ali
+        let kC = RM; for (let k = 0; k <= RM; k++) if (SEA.e(rpts[k].x, rpts[k].z) < 0) { kC = k; break; }
+        const latRiv = rpts[kC].x * SEA.P.x + rpts[kC].z * SEA.P.z, hwC = rHW[kC], k0 = Math.max(0, kC - 60), k1 = Math.min(RM, kC + 40);
+        const nearMouth = l => Math.abs(l - latRiv) < hwC + 70;
+        const riverFrac = (x, z) => { let b = 1e9; for (let k = k0; k <= k1; k++) b = Math.min(b, Math.hypot(rpts[k].x - x, rpts[k].z - z) / Math.max(1, rHW[k])); return b; };   // 0 = meio do rio, 1 = margem
+        const riverEdge = (x, z) => { let b = 1e9; for (let k = k0; k <= k1; k++) b = Math.min(b, Math.hypot(rpts[k].x - x, rpts[k].z - z) - rHW[k]); return b; };          // m além da margem
+        // colunas ao longo da costa: mais juntas na foz (o canal do rio corta a praia)
+        const HL = GS / 2 + 400, lats = []; for (let l = -HL; l <= HL;) { lats.push(l); l += nearMouth(l) ? 2.5 : 8; }
+        const NC = lats.length;
+        const grid = (rows, vert, mat) => { const pos = [], idx = [], extra = {};
+          rows.forEach((r, j) => lats.forEach(l => vert(r, l, pos, extra)));
+          for (let j = 0; j < rows.length - 1; j++) for (let i = 0; i < NC - 1; i++) { const a = j * NC + i, b = a + 1, c = a + NC, d = c + 1; idx.push(a, c, b, b, c, d); }
+          for (let q = 0; q < idx.length; q += 3) { const A = idx[q] * 3, B = idx[q + 1] * 3, C = idx[q + 2] * 3;   // todo triângulo virado para cima
+            if ((pos[B + 2] - pos[A + 2]) * (pos[C] - pos[A]) - (pos[B] - pos[A]) * (pos[C + 2] - pos[A + 2]) < 0) { const t = idx[q + 1]; idx[q + 1] = idx[q + 2]; idx[q + 2] = t; } }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+          for (const k in extra) g.setAttribute(k, new THREE.Float32BufferAttribute(extra[k].a, extra[k].n));
+          g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere(); return g; };
+        // ---- praia ----
+        // fileiras: borda de fora enterrada na grama (b+1,2) ... praia larga e plana ... linha d'água ... embaixo do mar
+        const BROWS = [b => b + 1.2, b => b, b => b - 2, b => b - 5, b => b - 9, b => b - 13, b => b - 18, b => b - 24, b => b - 32, b => b - 45, b => b - 60,
+          () => 40, () => 28, () => 20, () => 14, () => 10, () => 7, () => 4.5, () => 2.5, () => 1, () => 0, () => -1.5, () => -4, () => -8];
+        const beachG = grid(BROWS, (r, l, pos, ex) => { const bw = SEA.bwAt(l), e = r(bw), [x, z] = SEA.at(l, e);
+          const h = beachH(x, z, { e, l, bw }, nearMouth(l) ? riverEdge(x, z) : undefined);
+          pos.push(x, h, z); (ex.uv = ex.uv || { a: [], n: 2 }).a.push(x / 3.5, z / 3.5); });
+        const beachM = bankM.clone(); beachM.polygonOffset = true; beachM.polygonOffsetFactor = -1; beachM.polygonOffsetUnits = -2;
+        SEA.beachH = beachH; SEA.nearMouth = nearMouth; SEA.riverEdge = riverEdge; SEA.lats = lats;   // a faixa de grama da transição (mais abaixo) segue a areia
+        const beach = new THREE.Mesh(beachG, beachM); beach.receiveShadow = true; beach.userData.noOutline = true; add(beach);
+        // ---- água do mar (mesmo material do rio: reflexo, ondas, cor) ----
+        // cor do vértice: r = beira (1 na areia; no canal da foz segue a largura do rio, para emendar com a água do rio),
+        // g - r = quão fundo/aberto é o mar, b - r = 2 (marca "é mar": marola e espuma)
+        const SROWS = [-3, 0, 0.6, 1.5, 3, 5, 8, 12, 18, 26, 36, 50, 70, 100, 140, 200, 280, 400, 560, 800, 1100, 1500, 2000, 2700];
+        const seaG = grid(SROWS, (d, l, pos, ex) => { const [x, z] = SEA.at(l, -d), shore = d <= 0 ? 1 : 1 - sm(0, 60, d), rf = nearMouth(l) ? riverFrac(x, z) : 9;
+          const edge = Math.min(shore, rf < 1 ? rf : 1), deep = sm(20, 450, d);
+          pos.push(x, WATER_Y, z); (ex.color = ex.color || { a: [], n: 3 }).a.push(edge, edge + deep, edge + 2); (ex.flow = ex.flow || { a: [], n: 2 }).a.push(-D.x * 0.25, -D.z * 0.25); });
+        const sea = waterMesh(seaG); sea.renderOrder = 1; sea.frustumCulled = false; add(sea);
+        console.info('[mar] praia e mar criados:', NC, 'colunas; foz com', (hwC * 2).toFixed(0), 'm de largura');
+      });
       // ---- barreiras de corrida (guarda-corpo das pontes e muro azul/amarelo): mesmo desenho para as duas ----
       // Faixa contínua com topo arredondado, amostrada a cada 1/4 de bloco: acompanha o chão/rampa sem degraus e
       // a base fica enterrada (nunca flutua). Cores lisas alternadas por bloco (estilo cartoon), topo mais claro e
@@ -1669,6 +1832,7 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         return { R, rmax: Math.max(...tab) }; }
       const pondEdge = (p, x, z) => Math.hypot(x - p.x, z - p.z) - p.R(Math.atan2(z - p.z, x - p.x));
       function tryPond(x, z, r) { const sh = pondShape(r);
+        if (SEA && SEA.e(x, z) < sh.rmax + SEA.BW + 80) return false;                  // laguinho não nasce perto do mar
         if (tr.shortcuts.length && shortcutDist(x, z) < sh.rmax + 14) return false;   // lago não nasce no atalho
         if (tr.vert) for (let k = 0; k <= 8; k++) { const a = k * 0.785, rr = k === 8 ? 0 : sh.rmax + 12; if (natH(x + Math.cos(a) * rr, z + Math.sin(a) * rr) > 0.5) return false; }   // laguinho só na parte plana
         if (nearTrack({ x, z }, sh.rmax + W + 10) || nearRiver(x, z, sh.rmax + 32) || Math.hypot(x - F.x, z - F.z) < sh.rmax + 40 || inMountain(x, z, sh.rmax + 8)) return false;
@@ -1712,7 +1876,8 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         waterU.value = t; GfxFX.windU.value = t;
         mist.forEach((m, i) => { m.material.opacity = 0.1 + 0.05 * Math.sin(t * 2 + i * 2); m.scale.setScalar(12 + 3 * Math.sin(t * 1.5 + i)); });
       });
-      const okSpot = (x, z, m) => !ponds.some(p => pondEdge(p, x, z) < m) && bridges.every(b => Math.hypot(x - S[b].x, z - S[b].z) > 40) && !nearRiver(x, z, 14) && Math.hypot(x - F.x, z - F.z) > 45 && !inMountain(x, z, m + 4) && Math.hypot(x - S[si].x, z - S[si].z) > 22 && !(tr.shortcuts.length && shortcutDist(x, z) < m + 3);
+      const okSpot = (x, z, m) => !ponds.some(p => pondEdge(p, x, z) < m) && bridges.every(b => Math.hypot(x - S[b].x, z - S[b].z) > 40) && !nearRiver(x, z, 14) && Math.hypot(x - F.x, z - F.z) > 45 && !inMountain(x, z, m + 4) && Math.hypot(x - S[si].x, z - S[si].z) > 22 && !(tr.shortcuts.length && shortcutDist(x, z) < m + 3)
+        && !(SEA && SEA.e(x, z) < SEA.BW + 100 + m);   // praia + campo aberto até o mar: sem árvores nem enfeites (vista livre)
       // ---- malha do terreno com relevo (só quando a pista tem elev) ----
       waterDist = (x, z) => { let d = riverDist(x, z) - RHW; for (const q of ponds) d = Math.min(d, pondEdge(q, x, z)); return d; };
       // ---- terreno: bacia de areia dos lagos e do rio ----
@@ -1721,7 +1886,10 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
       // faixa de grama ficavam acima dele -> linha de areia e degrau.
       const bankH = (e, g0) => e >= 10.4 ? -1e9 : e >= 10 ? g0 - 0.2 * (e - 10) : e >= 1.2 ? g0 + (0.85 - g0) * (u => u * u * (3 - 2 * u))((10 - e) / 8.8) : BANKP(e);
       const bank = (x, z) => { const g0 = bankBase(x, z); let h = -1e9; for (const q of ponds) h = Math.max(h, bankH(Math.hypot(x - q.x, z - q.z) - q.R(Math.atan2(z - q.z, x - q.x)), g0));
-        let md = 1e9, mk = 0; for (let k = 0; k < rpts.length; k++) { const d = Math.hypot(rpts[k].x - x, rpts[k].z - z); if (d < md) { md = d; mk = k; } } return Math.max(h, bankH(md - rHW[mk], g0)); };
+        let md = 1e9, mk = 0; for (let k = 0; k < rpts.length; k++) { const d = Math.hypot(rpts[k].x - x, rpts[k].z - z); if (d < md) { md = d; mk = k; } }
+        const eR = md - rHW[mk]; let rb = bankH(eR, g0);
+        if (SEA) { const q = SEA.info(x, z); if (q.e < q.bw + 25) { rb = q.e < q.bw - 2 ? -1e9 : seaBlendBank(rb, x, z, eR); h = Math.max(h, beachH(x, z, q, eR)); } }   // praia do mar
+        return Math.max(h, rb); };
       // altura do chão fora do asfalto: relevo + bacia de areia; perto da pista (dist/u) segue exatamente a beira do asfalto
       const terrain = (x, z, dist, u) => { let g = gH(x, z); if (tr.vert && dist !== undefined && u !== undefined) { const w = sm(W + 5, W + 40, dist); if (w < 1) g = lerp(elevAt(u) - drop(dist), g, w); } return Math.max(g, bank(x, z)); };
       if (tr.vert) tr.heightAt = (x, z) => terrain(x, z);
@@ -1754,11 +1922,11 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
             .replace('#include <color_fragment>', `#include <color_fragment>
               diffuseColor.rgb *= mix(vec3(1.0), vec3(1.1, 1.03, 0.78), smoothstep(0.15, 0.62, bE)) * mix(1.0, 0.86, smoothstep(0.3, 0.66, bE));   // mais seca e com sombra de terra perto da areia`); });
         const COLS = 10, D0 = 10, D1 = 1.0;   // cobre a parte de fora da margem (que começa no chão a 10 m da água)
-        const band = (rows, at) => { const pos = [], uv = [], col = [], nor = [], ab = [], idx = [];
+        const band = (rows, at) => { const pos = [], uv = [], col = [], nor = [], ab = [], idx = [], zone = [];
           for (let k = 0; k <= rows; k++) for (let c = 0; c <= COLS; c++) { const f = c / COLS, dd = D0 + (D1 - D0) * f, [x, z, nx, nz] = at(k, dd), g0 = bankBase(x, z), h = bankH(dd, g0) + 0.01 + 0.02 * f;   // segue a areia, que parte do chão de verdade: na borda de fora fica rente à grama
-            pos.push(x, h, z); const t = grassUV(x, z); uv.push(t[0], t[1]); col.push(...gcol(x, z)); ab.push(f);
+            pos.push(x, h, z); const t = grassUV(x, z); uv.push(t[0], t[1]); col.push(...gcol(x, z)); ab.push(f); zone.push(!!SEA && (q => q.e < q.bw + 25)(SEA.info(x, z)));
             const d2 = Math.min(dd + 0.1, 10), sl = (bankH(dd - 0.1, g0) - bankH(d2, g0)) / (d2 - dd + 0.1), l = Math.hypot(sl, 1); nor.push(nx * sl / l, 1 / l, nz * sl / l); }   // normal da curva da margem (na borda de fora: reta, igual à grama do chão)
-          for (let k = 0; k < rows; k++) for (let c = 0; c < COLS; c++) { const a = k * (COLS + 1) + c, d = a + COLS + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+          for (let k = 0; k < rows; k++) for (let c = 0; c < COLS; c++) { const a = k * (COLS + 1) + c, d = a + COLS + 1; if (zone[a] || zone[a + 1] || zone[d] || zone[d + 1]) continue; idx.push(a, d, a + 1, a + 1, d, d + 1); }
           // todo triângulo virado para CIMA: num lado do rio a ordem dos vértices sai espelhada e a face de trás aparecia
           // (o Lambert ilumina a face de trás com a normal invertida -> faixa verde-escura)
           for (let q = 0; q < idx.length; q += 3) { const A = idx[q] * 3, B = idx[q + 1] * 3, Cc = idx[q + 2] * 3;
@@ -1770,6 +1938,24 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         // rio (os dois lados): (x, z) na distância dd além da beira d'água e a direção para fora (a rampa sobe em direção à água)
         [1, -1].forEach(sg => band(RM, (k, dd) => { const p = rpts[k], t = rtan[k], hw = rHW[k]; return [p.x + t.z * sg * (hw + dd), p.z - t.x * sg * (hw + dd), t.z * sg, -t.x * sg]; }));
         ponds.forEach(q => band(PNA, (k, dd) => { const a = (k % PNA) / PNA * 6.2832, R = q.R(a); return [q.x + Math.cos(a) * (R + dd), q.z + Math.sin(a) * (R + dd), Math.cos(a), Math.sin(a)]; }));
+        // ---- praia do mar: mesma faixa de grama, mais larga (34 m), por cima da parte de fora da areia ----
+        // aB = 0 na borda de fora (grama inteira, emenda com o chão) -> 1 lá dentro: a grama vai ficando rala, seca e em
+        // manchas, a areia aparece aos poucos (antes: linha reta grama/areia)
+        if (SEA && SEA.lats) { const LS = SEA.lats, NCs = LS.length, ER = [3, 1.2, 0, -2, -5, -9, -13, -18, -24, -32, -38], SC = ER.length - 1, SW = 34, pos = [], uv = [], col = [], nor = [], ab = [], idx = [], skip = [];
+          LS.forEach(l => { const bw = SEA.bwAt(l), mouth = SEA.nearMouth(l);
+            // fileiras nas MESMAS distâncias da areia (b, b-2, b-5...): as duas malhas dobram nos mesmos pontos e a areia
+            // nunca fura a grama; fora da praia (b+3, b+1,2) a faixa fica rente ao chão, cobrindo a borda enterrada da areia
+            for (let c = 0; c <= SC; c++) { const e = bw + ER[c], f = Math.max(0, Math.min(1.15, -ER[c] / SW)), [x, z] = SEA.at(l, e), eR = mouth ? SEA.riverEdge(x, z) : 99;
+              const h = e > bw ? bankBase(x, z) + 0.03 : SEA.beachH(x, z, { e, l, bw }, eR < 15 ? eR : undefined) + 0.01 + 0.02 * Math.min(1, f);
+              pos.push(x, h, z); const t = grassUV(x, z); uv.push(t[0], t[1]); col.push(...gcol(x, z)); ab.push(f); nor.push(0, 1, 0); skip.push(eR < 14); } });
+          for (let i = 0; i < NCs - 1; i++) for (let c = 0; c < SC; c++) { const a = i * (SC + 1) + c, b = a + SC + 1;
+            if (skip[a] || skip[a + 1] || skip[b] || skip[b + 1]) continue; idx.push(a, b, a + 1, a + 1, b, b + 1); }   // nada de grama no canal do rio
+          for (let q = 0; q < idx.length; q += 3) { const A = idx[q] * 3, B = idx[q + 1] * 3, Cc = idx[q + 2] * 3;
+            const ux = pos[B] - pos[A], uz = pos[B + 2] - pos[A + 2], vx = pos[Cc] - pos[A], vz = pos[Cc + 2] - pos[A + 2];
+            if (uz * vx - ux * vz < 0) { const t = idx[q + 1]; idx[q + 1] = idx[q + 2]; idx[q + 2] = t; } }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+          g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aB', new THREE.Float32BufferAttribute(ab, 1)); g.setIndex(idx);
+          g.computeBoundingSphere(); const m = new THREE.Mesh(g, ovM); m.receiveShadow = true; m.userData.noOutline = true; m.userData.dynamic = true; m.frustumCulled = false; add(m); }
       });                // mesmo mapeamento do chão grande (sem emenda)
       const nearBridge = i => bridges.some(b => { const d = Math.abs(((i - b) % N + N + N / 2) % N - N / 2); return d <= BR.END + 2; });
       // alturas EXATAS das malhas de grama desenhadas (grade + faixas da beira), para a física, os enfeites e os atalhos
@@ -2174,8 +2360,9 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
               for (let j = 0; j < nR; j++) rocks.push({ x: q.x + (rnd() - 0.5) * 1.2, z: q.z + (rnd() - 0.5) * 1.2, y: q.y, s: 0.18 + rnd() * 0.45, r: rnd() * 6.28, c: [0x8d8781, 0x7a736c, 0xa39b90, 0x6c6863][rnd() * 4 | 0] }); } }
             if (rnd() < 0.55 * LIFEK) { const q = edgePt(k, sd * (EW * 0.86 + rnd() * 3.5)); if (q) {
               for (let j = 0; j < 4; j++) tufts.push({ x: q.x + (rnd() - 0.5) * 1.6, z: q.z + (rnd() - 0.5) * 1.6, y: q.y, s: 0.6 + rnd() * 0.7, r: rnd() * 6.28, c: rnd() < 0.5 ? 0x4f8a30 : 0x6a9a3a });
-              if (rnd() < 0.7) { const pal = [0xff5a8a, 0xffd23f, 0xffffff, 0xb56cff, 0xff8a3d, 0x6ac8ff][rnd() * 6 | 0];
-                for (let j = 0; j < 3 + (rnd() * 4 | 0); j++) flowers.push({ x: q.x + (rnd() - 0.5) * 1.8, z: q.z + (rnd() - 0.5) * 1.8, y: q.y, s: 0.8 + rnd() * 0.6, h: 0.35 + rnd() * 0.35, c: pal }); } } }
+              // flores (haste + pétalas) removidas: de longe as hastes viravam "pauzinhos" brancos espetados na terra.
+              // O sorteio continua igual (mesmos números consumidos), então pedras, tufos e cogumelos ficam nos mesmos lugares.
+              if (rnd() < 0.7) { rnd(); for (let j = 0; j < 3 + (rnd() * 4 | 0); j++) { rnd(); rnd(); rnd(); rnd(); } } } }
             if (rnd() < 0.04) { const q = edgePt(k, sd * (hw + 1.0 + rnd() * 1.5)); if (q) for (let j = 0; j < 2 + (rnd() * 3 | 0); j++) shrooms.push({ x: q.x + (rnd() - 0.5) * 0.9, z: q.z + (rnd() - 0.5) * 0.9, y: q.y, s: 0.6 + rnd() * 0.8 }); } });
           inst(LIFE.rockG, LIFE.rockM, rocks, (d, q) => { d.position.set(q.x, q.y + q.s * 0.25, q.z); d.rotation.set(q.r, q.r * 1.7, q.r * 0.6); d.scale.set(q.s * 1.3, q.s * 0.7, q.s); }, true);
           inst(LIFE.tuftG, LIFE.tuftM, tufts, (d, q) => { d.position.set(q.x, q.y - 0.05, q.z); d.rotation.set((q.r % 0.3) - 0.15, q.r, 0); d.scale.set(q.s, q.s * 1.1, q.s); });
@@ -2245,7 +2432,7 @@ console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à no
         console.info('[atalho] ' + tr.shortcuts.length + ' atalho(s): ' + tr.shortcuts.map(sc => sc.i + '→' + sc.j).join(', '));
       }
       const waterTest = p => { if (bridges.some(b => { const dx = p.x - S[b].x, dz = p.z - S[b].z; return Math.abs(dx * T[b].x + dz * T[b].z) < 30 && Math.abs(dx * T[b].z - dz * T[b].x) < W + 2.1; })) return false;
-        return ponds.some(q => pondEdge(q, p.x, p.z) < 0) || nearRiver(p.x, p.z, RHW - 0.5); };
+        return ponds.some(q => pondEdge(q, p.x, p.z) < 0) || nearRiver(p.x, p.z, RHW - 0.5) || (!!SEA && SEA.e(p.x, p.z) < 0); };
       buildShortcuts();
       tr.dustColor = 0xc9a878;
       return { terrain: tr.vert ? (x, z, dist, u) => visGround(x, z, u === undefined ? undefined : Math.floor(u)) : terrain, waterTest };   // física = chão desenhado

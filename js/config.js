@@ -25,7 +25,15 @@ window.CFG = {
   // acabamento da imagem na corrida (js/postfx.js), sempre no estilo cartoon. POSTFX: false desliga tudo.
   // AO = sombra de contato nos cantos; INK = contorno leve; BLOOM = brilho nas luzes; SAT = saturação (1 = original); CONTRAST; VIGNETTE = cantos da tela
   // SCATTER = luz do sol na névoa (0 desliga); RAYS = raios de sol (0 desliga); SHARPEN = nitidez depois do FXAA (0 desliga)
-  GFX: { POSTFX: true, AO: 0.45, INK: 0.25, BLOOM: 0.12, SAT: 1.04, CONTRAST: 0.1, VIGNETTE: 0.08, SCATTER: 1, RAYS: 0.25, SHARPEN: 0.3 },
+  // DOF = força da profundidade de campo (0 desliga; 1 = lente abaixo; 2 = o dobro do desfoque)
+  // DOF_LENS = lente virtual da profundidade de campo (js/postfx.js). Desfoque do fundo distante ~ FOCAL_MM² / FSTOP:
+  //   FSTOP: abertura f/N (menor = mais desfoque; 1.8 forte, 2.8 cinematográfico, 4 suave, 5.6 quase nada)
+  //   FOCAL_MM: distância focal da lente virtual (85 = retrato/cinema; não muda o enquadramento, só o desfoque)
+  //   SENSOR_MM: altura do sensor (24 = full frame); FOCUS_RANGE: metros nítidos atrás do kart antes de começar a desfocar
+  //   MAX_PX: desfoque máximo em px (numa tela de 1080 de altura); SAMPLES: amostras do disco (16 = leve, 32 = bonito, 48 = máximo)
+  //   AF_SPEED: velocidade do autofoco (o foco "anda" suave até o kart); DEBUG: true pinta de laranja o quanto cada ponto desfoca
+  GFX: { POSTFX: true, AO: 0.45, INK: 0.25, BLOOM: 0.12, SAT: 1.04, CONTRAST: 0.1, VIGNETTE: 0.08, SCATTER: 1, RAYS: 0.25, SHARPEN: 0.3, DOF: 1,
+    DOF_LENS: { FSTOP: 4, FOCAL_MM: 85, SENSOR_MM: 24, FOCUS_RANGE: 250, MAX_PX: 8, SAMPLES: 32, AF_SPEED: 4, DEBUG: false } },
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)

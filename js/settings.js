@@ -11,12 +11,12 @@
   // MASSINHA: o mínimo possível para PC/celular fraco (meia resolução, sem sombra, sem pós-efeito, sem reflexo,
   // texturas viram cor lisa, pouca coisa no cenário, visão curta). ULTRA: o máximo (sombra 4096, cenário mais cheio).
   const PRESETS = {
-    auto:     { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048' },
-    massinha: { res: '0.5',  shadows: 'off',    outlines: false, scenery: 'min',    particles: 'min',    view: 'veryNear', postfx: 'off',    water: 'off',  detail: 'low',    textures: 'flat', fpsCap: '60', texRes: '512' },
-    low:      { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near',     postfx: 'simple', water: 'low',  detail: 'low',    textures: 'full', fpsCap: '60', texRes: '1024' },
-    medium:   { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium',   postfx: 'simple', water: 'low',  detail: 'medium', textures: 'full', fpsCap: '0', texRes: '1024' },
-    high:     { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048' },
-    ultra:    { res: '2',    shadows: 'ultra',  outlines: true,  scenery: 'ultra',  particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: 'max' }
+    auto:     { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048', dof: true },
+    massinha: { res: '0.5',  shadows: 'off',    outlines: false, scenery: 'min',    particles: 'min',    view: 'veryNear', postfx: 'off',    water: 'off',  detail: 'low',    textures: 'flat', fpsCap: '60', texRes: '512', dof: false },
+    low:      { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near',     postfx: 'simple', water: 'low',  detail: 'low',    textures: 'full', fpsCap: '60', texRes: '1024', dof: false },
+    medium:   { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium',   postfx: 'simple', water: 'low',  detail: 'medium', textures: 'full', fpsCap: '0', texRes: '1024', dof: false },
+    high:     { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048', dof: true },
+    ultra:    { res: '2',    shadows: 'ultra',  outlines: true,  scenery: 'ultra',  particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: 'max', dof: true }
   };
   const DEF = { vol: { master: 80, engine: 70, sfx: 80, ui: 60, amb: 50 },
     gfx: Object.assign({ preset: 'auto', speedFx: true, shake: true, fps: false }, PRESETS.auto) };
@@ -25,7 +25,7 @@
   const VIEW = { veryNear: 0.45, near: 0.62, medium: 0.82, far: 1 };
   const PARTS = { min: 0.15, low: 0.45, normal: 1 };
   // opções que fazem a predefinição virar "Personalizada" quando mexidas
-  const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap', 'texRes'];
+  const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap', 'texRes', 'dof'];
 
   const Settings = {
     s: null,
@@ -59,7 +59,8 @@
       const pf = window.__kart && __kart.postFX;
       if (pf && pf.opts) { if (!pf.base) pf.base = Object.assign({}, pf.opts);
         Object.assign(pf.opts, pf.base);
-        if (g.postfx === 'simple') Object.assign(pf.opts, { ao: 0, bloom: 0, rays: 0, scatter: 0 }); }
+        if (g.postfx === 'simple') Object.assign(pf.opts, { ao: 0, bloom: 0, rays: 0, scatter: 0, dof: 0 });
+        if (g.dof === false) pf.opts.dof = 0; }
       // sombras: tamanho do mapa e liga/desliga (muda os shaders -> materiais precisam recompilar)
       const sz = SHADOW[g.shadows], R = window.__kart && __kart.renderer;
       CFG.PERF.SHADOW_MAP = sz || 512;
@@ -135,6 +136,7 @@
         opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']]) +
         opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Completo: sombra de contato, brilho e raios de sol. Simples: só cor e antisserrilhado') +
         opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo total']], 'O reflexo redesenha a cena: desligar ganha muito FPS perto do rio') +
+        tog('dof', 'Desfoque de distância', 'O que está longe do kart fica levemente desfocado. Só com o pós-efeito Completo') +
         tog('outlines', 'Contornos de desenho', 'Traço escuro em volta dos karts e objetos') +
         opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Montanhas, terreno, névoa da cachoeira e enfeites. Vale na próxima corrida') +
         opt('textures', 'Texturas', [['flat', 'Massinha (cor lisa)'], ['full', 'Detalhadas']], 'Vale na próxima corrida') +

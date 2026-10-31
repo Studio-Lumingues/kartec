@@ -563,10 +563,12 @@
           glow.scale.setScalar(S * 2.6); glow.renderOrder = 0; m.add(glow);
           glassB.renderOrder = 1; q.renderOrder = 2; glass.renderOrder = 3; frame.renderOrder = 4; frame.scale.setScalar(1.004); q.scale.setScalar(S * 0.8);   // trás -> "?" -> frente -> moldura
           const spin = new THREE.Group(); spin.add(glassB, glass, frame); m.add(spin, q); [glass, glassB, frame].forEach(o => { o.userData.noOutline = true; });
+          if (window.PostFX) [glass, glassB, frame].forEach(o => o.layers.enable(PostFX.SHARP_LAYER));   // caixa nunca desfoca (profundidade de campo: postfx.js)
           const shd = new THREE.Mesh(this.shGeo, this.shMat); shd.position.set(p.x, h + 0.06, p.z); g.add(shd);
           m.position.set(p.x, h + C.BOX_FLOAT, p.z); m.userData = { y0: h + C.BOX_FLOAT, ph: r * 1.7 + c * 0.9, hue: (r * 0.21 + c * 0.25) % 1, respawn: 0, spin, q, shd, gm, glw, glow }; spin.rotation.y = c * 0.6; g.add(m); this.boxes.push(m);
         }
       });
+      if (window.PostFX) PostFX.sharpN = this.boxes.length;   // liga a máscara de "sempre nítido" do postfx.js
     },
     // ---------- caixa estilhaçando: cacos de vidro voando, girando, quicando no chão e sumindo ----------
     shatter(b) {
@@ -613,7 +615,7 @@
       [this.boxGeo, this.glowGeo, this.glassMat, this.frameMat, this.qMat, this.shGeo, this.shMat].concat(this.boxMats || []).forEach(o => o && o.dispose()); this.boxMats = []; this.glowGeo = null; (this.shards || []).forEach(sh => sh.m.material.dispose()); this.shards = []; (this.shardGeos || []).forEach(g => g.dispose()); this.shardGeos = null;
       this.bananas.forEach(o => o.mesh.parent && o.mesh.parent.remove(o.mesh));
       spinning.forEach(k => { clearGhosts(k); setSpin(k, 0); k.spinT = 0; }); spinning.clear(); if (window.Smoke) Smoke.clear();
-      this.group = null; this.boxes = []; this.bananas = []; this.on = false; this.scene = null;
+      this.group = null; this.boxes = []; this.bananas = []; this.on = false; this.scene = null; if (window.PostFX) PostFX.sharpN = 0;
       if (slot) slot.classList.remove('on', 'has');
     },
 
