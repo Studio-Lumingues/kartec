@@ -68,6 +68,8 @@
     const geo = mesh.geometry; if (!mesh.matrixWorld.equals(new THREE.Matrix4())) geo.applyMatrix4(mesh.matrixWorld);
     if (!geo.attributes.normal) geo.computeVertexNormals();
     geo.computeBoundingBox(); const bb = geo.boundingBox, size = bb.getSize(new THREE.Vector3()), mid = bb.getCenter(new THREE.Vector3());
+    // a mesma malha também vai para o pórtico de largada da pista (tracks.js escuta o evento 'kartec-logo')
+    L3.geo = geo; L3.bb = bb.clone(); L3.layers = C.LAYERS.slice(); try { dispatchEvent(new Event('kartec-logo')); } catch (e) { }
 
     const U = {
       uZ: { value: new THREE.Vector2(C.LAYERS[0], C.LAYERS[1]) }, uY: { value: new THREE.Vector2(bb.max.y - 0.04, bb.min.y + 0.06) },

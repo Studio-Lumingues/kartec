@@ -14,9 +14,19 @@
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;   // PCF simples: bem mais leve que o Soft
   document.body.prepend(renderer.domElement);
+  // névoa esférica: usa a distância real até a câmera (e não só a profundidade da tela), então virar a câmera não
+  // revela nem esconde nada nas laterais — o "muro" de névoa fica sempre à mesma distância, como no Minecraft
+  THREE.ShaderChunk.fog_vertex = THREE.ShaderChunk.fog_vertex.replace('fogDepth = - mvPosition.z;', 'fogDepth = length( mvPosition.xyz );');
+  // sombras: na borda da área coberta pelo mapa de sombra elas desaparecem num degradê, em vez de surgir/cortar de repente
+  (function () { const C = THREE.ShaderChunk, k = 'shadowmap_pars_fragment', src = C[k] || '', i = src.indexOf('float getShadow('), j = src.indexOf('return shadow;', i);
+    if (i >= 0 && j > i) C[k] = src.slice(0, j) + 'vec2 shE = abs( shadowCoord.xy * 2.0 - 1.0 ); shadow = mix( shadow, 1.0, smoothstep( 0.62, 0.97, max( shE.x, shE.y ) ) );\n\t\t' + src.slice(j); })();
   TX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
-  const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
+  const CAMC = Object.assign({ FOV: 53, DIST: 13.5, HEIGHT: 6.5, TILT: 3 }, CFG.CAMERA || {});   // câmera "lente tele" (config.js)
+  const camera = new THREE.PerspectiveCamera(CAMC.FOV, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
+  // acabamento da imagem da corrida (contorno de tinta, brilho, cor, FXAA): js/postfx.js; CFG.GFX ajusta; modo leve desliga
+  const G0 = CFG.GFX || {};
+  const postFX = window.PostFX && G0.POSTFX !== false ? PostFX.create(renderer, { ao: G0.AO, ink: G0.INK, bloom: G0.BLOOM, sat: G0.SAT, con: G0.CONTRAST, vig: G0.VIGNETTE, scatter: G0.SCATTER, rays: G0.RAYS, sharpen: G0.SHARPEN }) : null;
 
   // ---------------- contornos dos personagens/karts: roxo escuro -> preto ----------------
   // Os contornos (toon) são malhas "de costas" com cor escura. Procura nas cenas ativas, de tempos em tempos, materiais de
@@ -40,6 +50,13 @@
   function inkFixTick(dt) {
     if ((_inkT -= dt) > 0) return; _inkT = 1;
     try { inkFix(Game.scene); if (window.Showroom) inkFix(Showroom.scene); if (window.Intro) inkFix(Intro.scene); if (window.Podium) inkFix(Podium.scene); } catch (e) { }
+  }
+
+  // ---------------- atravessar a cortina d'água da cachoeira: a tela fica branca por um instante ----------------
+  function waterFlash() {
+    let v = document.getElementById('waterFlash');
+    if (!v) { v = document.createElement('div'); v.id = 'waterFlash'; v.style.cssText = 'position:fixed;inset:0;z-index:5;pointer-events:none;opacity:0;background:radial-gradient(circle,rgba(235,248,255,.92),rgba(190,228,255,.78));transition:opacity .35s ease-out'; document.body.appendChild(v); }
+    v.style.transition = 'none'; v.style.opacity = '1'; void v.offsetWidth; v.style.transition = 'opacity .35s ease-out'; v.style.opacity = '0';
   }
 
   // ---------------- tela preta para voltar ao menu principal ----------------
@@ -216,27 +233,47 @@
   function dnMix(arr, e, out) { if (e <= -0.2) return out.copy(arr[0]); if (e < 0.05) return out.copy(arr[0]).lerp(arr[1], sm((e + 0.2) / 0.25)); return out.copy(arr[1]).lerp(arr[2], sm((e - 0.05) / 0.3)); }
   const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _c3 = new THREE.Color(), _c4 = new THREE.Color(), TUN_LIGHT = new THREE.Color(0xffe6bf);
 
+  const _sL = new THREE.Vector3(), _sF = new THREE.Vector3(), _sC = new THREE.Vector3(), _sR = new THREE.Vector3(), _sU = new THREE.Vector3();
   const Env = {
     dayT: 0.35, nightF: 0, SUNDIR: new THREE.Vector3(0.4, 0.7, 0.3).normalize(),
     build(scene, def) {
       this.scene = scene; this.def = def; this.dayT = def.time;
       this.baseFogFar = def.fogFar || 820; this.fogFar = this.baseFogFar * (window.Settings ? Settings.viewMul() : 1);   // distância de visão (configurações)
-      scene.fog = new THREE.Fog(0xdbe9f8, 130, this.fogFar); scene.background = new THREE.Color(0xdbe9f8);
+      const FG = CFG.FOG || {}; this.fogNearK = FG.NEAR_K || 0.4;
+      scene.fog = new THREE.Fog(0xdbe9f8, this.fogFar * this.fogNearK, this.fogFar); scene.background = new THREE.Color(0xdbe9f8);
+      // tudo além da névoa nem é processado: o plano de corte da câmera fica logo depois dela (o céu é desenhado dentro desse raio)
+      camera.far = Math.min(CFG.CAMERA_FAR || 2300, Math.max(this.fogFar + 700, 1600)); camera.updateProjectionMatrix();   // folga: montanhas grandes não são cortadas pelo plano de corte
+      const SK = this.skyK = Math.min(1, camera.far * 0.85 / 1400);
       this.hemi = new THREE.HemisphereLight(0xcfe8ff, 0x6a9a4a, 0.8); scene.add(this.hemi);
       const sun = this.sun = new THREE.DirectionalLight(0xffe2b0, 0.95); scene.add(sun, sun.target);
       const SB = CFG.PERF.SHADOW_BOX; sun.castShadow = true; sun.shadow.mapSize.set(CFG.PERF.SHADOW_MAP, CFG.PERF.SHADOW_MAP);
-      Object.assign(sun.shadow.camera, { left: -SB, right: SB, top: SB, bottom: -SB, near: 10, far: 420 }); sun.shadow.bias = -0.0005; sun.shadow.normalBias = 0.05;
-      // céu (gradiente repintado conforme a hora)
-      const skyC = TX.cvs(4, 256); this.skyT = new THREE.CanvasTexture(skyC);
-      this.sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 24, 12), new THREE.MeshBasicMaterial({ map: this.skyT, side: THREE.BackSide, fog: false, depthWrite: false }));
-      this.sky.renderOrder = -2; scene.add(this.sky);
+      Object.assign(sun.shadow.camera, { left: -SB, right: SB, top: SB, bottom: -SB, near: 10, far: 480 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; sun.shadow.radius = 1.6;   // borda um pouco mais macia
+      // céu em shader (antes: gradiente pintado num canvas 4x256, com faixas visíveis e sem reagir ao sol).
+      // Mesmas cores e mesmas alturas do gradiente antigo, só que contínuo por pixel; perto do sol o céu clareia e esquenta
+      // (dispersão), com um halo largo no horizonte. O postfx.js aplica a MESMA conta na névoa, então o horizonte casa.
+      this.skyU = { uTop: { value: new THREE.Color() }, uMid: { value: new THREE.Color() }, uHor: { value: new THREE.Color() },
+        uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color(0, 0, 0) } };
+      this.sky = new THREE.Mesh(new THREE.SphereGeometry(1400, 48, 24), new THREE.ShaderMaterial({ uniforms: this.skyU, side: THREE.BackSide, fog: false, depthWrite: false,
+        vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+        fragmentShader: `uniform vec3 uTop; uniform vec3 uMid; uniform vec3 uHor; uniform vec3 uSun; uniform vec3 uSunCol; varying vec3 vDir;
+          void main(){
+            vec3 d = normalize(vDir); float el = asin(clamp(d.y, -1.0, 1.0)) / 1.5708, e = max(el, 0.0);
+            vec3 col = mix(uHor, uMid, smoothstep(0.0, 0.12, e));
+            col = mix(col, mix(uMid, uTop, 0.5), smoothstep(0.12, 0.4, e));
+            col = mix(col, uTop, smoothstep(0.4, 1.0, e));
+            float mu = max(dot(d, uSun), 0.0);
+            col += uSunCol * (pow(mu, 5.0) * 0.28 * (1.0 - smoothstep(0.0, 0.45, e)) + pow(mu, 48.0) * 0.25);
+            col += (fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))) - 0.5) / 255.0;   // sem faixas no degradê
+            gl_FragColor = vec4(col, 1.0);
+          }` }));
+      this.sky.renderOrder = -2; this.sky.scale.setScalar(SK); scene.add(this.sky);
       // estrelas, lua, sol
       const pos = []; for (let i = 0; i < 1100; i++) { const u = Math.random() * 6.2832, y = 0.04 + Math.random() * 0.96, r = Math.sqrt(1 - y * y); pos.push(Math.cos(u) * r * 1250, y * 1250, Math.sin(u) * r * 1250); }
       const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-      this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); this.stars.frustumCulled = false; this.stars.renderOrder = -1; scene.add(this.stars);
-      this.moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(TX.canvas('moon')), transparent: true, fog: false, depthWrite: false })); this.moon.scale.setScalar(70); scene.add(this.moon);
+      this.stars = new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xffffff, size: 2, sizeAttenuation: false, transparent: true, opacity: 0, fog: false, depthWrite: false })); this.stars.frustumCulled = false; this.stars.renderOrder = -1; this.stars.scale.setScalar(SK); scene.add(this.stars);
+      this.moon = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(TX.canvas('moon')), transparent: true, fog: false, depthWrite: false })); this.moon.scale.setScalar(70 * SK); scene.add(this.moon);
       const glow = (c, s, o) => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: c, blending: THREE.AdditiveBlending, depthWrite: false, fog: false, transparent: true, opacity: o })); p.scale.setScalar(s); scene.add(p); return p; };
-      this.sunGlow = glow(0xffe6a0, 380, 0.8); this.sunCore = glow(0xffffff, 110, 1); this.moonGlow = glow(0x9db4ff, 260, 0.35);
+      this.sunGlow = glow(0xffe6a0, 380 * SK, 0.8); this.sunCore = glow(0xffffff, 110 * SK, 1); this.moonGlow = glow(0x9db4ff, 260 * SK, 0.35);
       // cordilheira distante (anel com silhueta pintada em canvas)
       const mc = TX.cvs(1024, 128), mg = mc.getContext('2d');
       const tone = ['#8fb4d8', '#5a86b4'];
@@ -244,29 +281,77 @@
         for (let x = 0; x <= 1024; x += 8) { const t = x / 1024 * Math.PI * 2; const y = 128 * base - 34 * Math.abs(Math.sin(t * n / 2 + k)) - 14 * Math.sin(t * n * 1.7 + k * 3); mg.lineTo(x, y); } mg.lineTo(1024, 128); mg.closePath(); mg.fill(); });
       const mt = new THREE.CanvasTexture(mc); mt.wrapS = THREE.RepeatWrapping; mt.repeat.x = 2;
       this.mountains = new THREE.Mesh(new THREE.CylinderGeometry(1150, 1150, 160, 48, 1, true), new THREE.MeshBasicMaterial({ map: mt, transparent: true, side: THREE.BackSide, fog: false, depthWrite: false }));
-      this.mountains.renderOrder = -1; scene.add(this.mountains);
+      this.mountains.renderOrder = -1; this.mountains.visible = false;   // cordilheira pintada (silhuetas azuis chapadas) desligada: as montanhas 3D da pista já fazem o fundo scene.add(this.mountains);
       // nuvens
-      this.cloudM = new THREE.SpriteMaterial({ map: (() => { const c = TX.cvs(128, 64), g = c.getContext('2d'); [[40, 40, 26], [70, 30, 30], [96, 42, 22], [60, 46, 24]].forEach(([x, y, r]) => { const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 64); }); return new THREE.CanvasTexture(c); })(), transparent: true, fog: false, depthWrite: false, opacity: 0.9 });
-      this.clouds = []; for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(this.cloudM); const a = Math.random() * 6.28, r = 500 + Math.random() * 500; s.position.set(Math.cos(a) * r, 140 + Math.random() * 120, Math.sin(a) * r); s.scale.set(160 + Math.random() * 120, 70, 1); scene.add(s); this.clouds.push(s); }
+      // nuvens volumétricas: cúmulos numa camada de ~240 m de espessura a partir de ~300 m acima da câmera. Cada pixel do céu
+      // atravessa a camada em 6 passos (raymarch), soma a densidade e calcula quanta luz do sol chega (sombra própria):
+      // topo branco, base cinza, borda prateada contra o sol. O vento leva a camada e o desenho das nuvens se transforma devagar.
+      this.cloudM = { color: new THREE.Color(1, 1, 1) }; this.cloudOff = new THREE.Vector2(Math.random() * 5000, Math.random() * 5000); this.cloudT = Math.random() * 100;
+      this.cloudU = { uCam: { value: new THREE.Vector3() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() }, uLit: { value: new THREE.Color() },
+        uShade: { value: new THREE.Color() }, uFog: { value: new THREE.Color() }, uOff: { value: this.cloudOff }, uT: { value: 0 }, uCover: { value: 0.53 }, uThick: { value: 240 }, uR: { value: 2200 } };
+      const cg = new THREE.PlaneGeometry(5200, 5200, 1, 1); cg.rotateX(Math.PI / 2);
+      this.cloudLayer = new THREE.Mesh(cg, new THREE.ShaderMaterial({ uniforms: this.cloudU, transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide,
+        vertexShader: 'varying vec3 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }',
+        fragmentShader: `uniform vec3 uCam; uniform vec3 uSun; uniform vec3 uSunCol; uniform vec3 uLit; uniform vec3 uShade; uniform vec3 uFog; uniform vec2 uOff; uniform float uT; uniform float uCover; uniform float uThick; uniform float uR; varying vec3 vW;
+          float hs(vec2 p){ vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
+          float vn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+            return mix(mix(hs(i), hs(i + vec2(1.0, 0.0)), u.x), mix(hs(i + vec2(0.0, 1.0)), hs(i + vec2(1.0, 1.0)), u.x), u.y); }
+          const mat2 RM = mat2(1.6, 1.2, -1.2, 1.6);
+          // cada oitava anda num ritmo diferente: as bordas "fervem" e o formato muda com o tempo
+          float fbm(vec2 p, int n){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { if (i >= n) break; s += a * vn(p + uT * vec2(0.021, -0.013) * float(i + 1)); p = RM * p; a *= 0.5; } return s; }
+          float big(vec2 xz){ return fbm((xz + uOff) * 0.0007 + 7.3, 3); }
+          float dens(vec2 xz, float h, float B){ float d = B * 0.58 + fbm((xz + uOff) * 0.0028, 5) * 0.42;
+            float th = uCover + 0.16 * h * h + 0.05 * (1.0 - smoothstep(0.0, 0.12, h));       // base reta, topo arredondado
+            return clamp((d - th) * 9.0, 0.0, 1.0); }
+          void main(){
+            vec3 v = normalize(vW - uCam); float dist = length(vW.xz - uCam.xz);
+            if (v.y < 0.03 || dist > uR) discard;
+            float B0 = big(vW.xz); if (B0 * 0.6 + 0.4 < uCover - 0.02) discard;                 // céu limpo aqui: nem marcha
+            float y0 = vW.y, t0 = (y0 - uCam.y) / v.y, L = min(uThick / v.y, 650.0), st = L / 7.0;
+            float jit = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+            float T = 1.0; vec3 acc = vec3(0.0);
+            for (int i = 0; i < 7; i++) {
+              vec3 p = uCam + v * (t0 + (float(i) + jit) * st); float h = clamp((p.y - y0) / uThick, 0.0, 1.0);
+              float B = big(p.xz), dn = dens(p.xz, h, B);
+              if (dn > 0.002) {
+                vec3 lp = p + uSun * 70.0; float hl = clamp((lp.y - y0) / uThick, 0.0, 1.0);
+                float dl = clamp((big(lp.xz) * 0.6 + 0.25 - uCover - 0.16 * hl * hl) * 5.0, 0.0, 1.0);   // quanto de nuvem há na direção do sol
+                float sunT = exp(-dl * 1.6), amb = mix(0.8, 1.0, h);
+                vec3 c = mix(uShade, uLit, clamp(sunT * 0.7 + h * 0.45, 0.0, 1.0)) * amb + uSunCol * sunT * 0.1;
+                float a = 1.0 - exp(-dn * st * 0.045);
+                acc += T * a * c; T *= 1.0 - a; if (T < 0.03) break;
+              }
+            }
+            float al = 1.0 - T; if (al < 0.004) discard;
+            vec3 col = acc / al;
+            col += uSunCol * pow(max(dot(v, uSun), 0.0), 6.0) * 0.45 * (1.0 - al * 0.5);     // borda prateada contra o sol
+            col = mix(col, uFog, smoothstep(uR * 0.25, uR * 0.95, dist) * 0.85);
+            gl_FragColor = vec4(col, al * (1.0 - smoothstep(uR * 0.6, uR, dist)));
+          }` }));
+      this.cloudLayer.renderOrder = -1.5; this.cloudLayer.frustumCulled = false; scene.add(this.cloudLayer);
       this.paintT = 0; this.occ = []; this.flOcc = 1; this.flT = 0; this.flVis = 0;
     },
-    paintSky() {
-      const c = this.skyT.image, g = c.getContext('2d'), r = g.createLinearGradient(0, 0, 0, 256);
-      r.addColorStop(0, '#' + _c1.getHexString()); r.addColorStop(0.3, '#' + _c1.clone().lerp(_c2, 0.5).getHexString()); r.addColorStop(0.44, '#' + _c2.getHexString());
-      r.addColorStop(0.5, '#' + _c3.getHexString()); r.addColorStop(1, '#' + _c3.getHexString()); g.fillStyle = r; g.fillRect(0, 0, 4, 256); this.skyT.needsUpdate = true;
-    },
+    paintSky() { const U = this.skyU; U.uTop.value.copy(_c1); U.uMid.value.copy(_c2); U.uHor.value.copy(_c3); },   // céu em shader: só atualiza as cores
     step(dt, focus, track, karts) {
       const a0 = this.dayT * 6.2832, e0 = -Math.cos(a0);
       this.dayT = (this.dayT + dt / 240 * (e0 < -0.15 ? 2 : 1)) % 1;            // 4 min por dia; a noite passa 2x mais rápido
       const a = this.dayT * 6.2832; this.SUNDIR.set(Math.sin(a) * 0.85, -Math.cos(a), 0.45).normalize();
       const e = this.SUNDIR.y; this.nightF = sm((0.08 - e) / 0.28);
       dnMix(DN.top, e, _c1); dnMix(DN.mid, e, _c2); dnMix(DN.hor, e, _c3);
-      this.paintT -= dt; if (this.paintT <= 0) { this.paintSky(); this.paintT = 0.15; }
+      this.paintSky();
       this.scene.fog.color.copy(_c3); this.scene.background.copy(_c3);
       const sunI = 0.95 * sm((e + 0.02) / 0.32), moonI = 0.32 * sm((-e - 0.02) / 0.25), sun = this.sun;
-      sun.target.position.copy(focus);
-      if (sunI >= moonI) { sun.position.copy(focus).addScaledVector(this.SUNDIR, 200); sun.intensity = sunI; dnMix(DN.sun, e, sun.color); }
-      else { sun.position.copy(focus).addScaledVector(this.SUNDIR, -200); sun.intensity = moonI; sun.color.set(0x9db4ff); }
+      // área de sombra: centrada um pouco À FRENTE da câmera (é onde se olha) e presa à grade de texels do mapa de sombra,
+      // para as bordas das sombras não tremerem enquanto o kart anda
+      { const SB = CFG.PERF.SHADOW_BOX, Ld = _sL.copy(this.SUNDIR); if (sunI < moonI) Ld.negate();
+        _sF.set(0, 0, -1).applyQuaternion(camera.quaternion); _sF.y = 0; if (_sF.lengthSq() < 1e-4) _sF.set(0, 0, 1); _sF.normalize();
+        const c = _sC.copy(focus).addScaledVector(_sF, SB * 0.4);
+        _sR.set(0, 1, 0).cross(Ld); if (_sR.lengthSq() < 1e-6) _sR.set(1, 0, 0); _sR.normalize(); _sU.copy(Ld).cross(_sR);
+        const tx = 2 * SB / CFG.PERF.SHADOW_MAP, a = Math.round(c.dot(_sR) / tx) * tx, b = Math.round(c.dot(_sU) / tx) * tx, z = c.dot(Ld);
+        c.copy(_sR).multiplyScalar(a).addScaledVector(_sU, b).addScaledVector(Ld, z);
+        sun.target.position.copy(c); sun.position.copy(c).addScaledVector(Ld, 220); }
+      if (sunI >= moonI) { sun.intensity = sunI; dnMix(DN.sun, e, sun.color); }
+      else { sun.intensity = moonI; sun.color.set(0x9db4ff); }
       // dentro do túnel a luz do céu cai (suave nas bocas) e os faróis acendem
       const P0 = window.Game && Game.player, shade = track && track.shadeAt && P0 ? track.shadeAt(focus, P0.idx) : 0; this.shade = shade;
       sun.intensity *= 1 - 0.6 * shade;
@@ -282,10 +367,16 @@
       this.sky.position.copy(cp); this.stars.position.copy(cp); this.stars.material.opacity = this.nightF * 0.95; this.stars.rotation.y = this.dayT * 1.2;
       this.mountains.position.set(cp.x * 0.9, 60, cp.z * 0.9);
       const sv = sm((e + 0.12) / 0.2); this.sunGlow.material.opacity = 0.8 * sv; this.sunCore.material.opacity = sv; dnMix(DN.sun, e, this.sunGlow.material.color);
-      this.sunGlow.position.copy(cp).addScaledVector(this.SUNDIR, 1300); this.sunCore.position.copy(this.sunGlow.position);
-      this.moon.position.copy(cp).addScaledVector(this.SUNDIR, -1250); this.moonGlow.position.copy(this.moon.position);
+      this.sunGlow.position.copy(cp).addScaledVector(this.SUNDIR, 1300 * this.skyK); this.sunCore.position.copy(this.sunGlow.position);
+      // dispersão do sol (céu + névoa do postfx) e raios de sol: some à noite e dentro do túnel
+      { const k = sv * (1 - this.nightF * 0.85) * (1 - (this.shade || 0)); this.skyU.uSun.value.copy(this.SUNDIR); this.skyU.uSunCol.value.copy(this.sunGlow.material.color).multiplyScalar(k);
+        if (postFX) { const S = postFX.sky; S.dir.copy(this.SUNDIR); S.col.copy(this.skyU.uSunCol.value); S.fogN = this.scene.fog.near; S.fogF = this.scene.fog.far; } }
+      this.moon.position.copy(cp).addScaledVector(this.SUNDIR, -1250 * this.skyK); this.moonGlow.position.copy(this.moon.position);
       const mv = sm((-e + 0.12) / 0.2); this.moon.material.opacity = mv; this.moonGlow.material.opacity = 0.35 * mv;
-      this.clouds.forEach((s, i) => { s.position.x += dt * (3 + i % 3); if (s.position.x - cp.x > 1000) s.position.x -= 2000; });
+      { const U = this.cloudU; this.cloudOff.x += dt * 18; this.cloudOff.y += dt * 7; this.cloudT += dt; U.uT.value = this.cloudT;   // vento + nuvens se transformando
+        this.cloudLayer.position.set(cp.x, cp.y + 300, cp.z); U.uR.value = Math.min(2200, Math.sqrt(Math.max(1e4, camera.far * camera.far * 0.9 - 540 * 540))); U.uCam.value.copy(cp); U.uSun.value.copy(this.SUNDIR);
+        U.uLit.value.copy(this.cloudM.color); U.uShade.value.copy(this.cloudM.color).multiplyScalar(0.74).lerp(this.hemi.color, 0.25);
+        U.uSunCol.value.copy(this.sunGlow.material.color).multiplyScalar(sv); U.uFog.value.copy(this.scene.fog.color); }
       // luzes da pista e janelas acendem à noite
       if (track) {
         track.lamps.forEach(h => { const k = h.userData.lampScale || 1, o = h.userData.lampOpacity || 1; h.material.opacity = (0.3 + 0.7 * this.nightF) * o; h.scale.setScalar(k * (9 + 10 * this.nightF)); });   // halos do túnel usam escala reduzida
@@ -434,9 +525,11 @@
     },
     onKartEvent(ev, isPlayer) {
       if (ev === 'bump' && isPlayer) this.cam.shake = Math.min(0.6, this.cam.shake + 0.35);
+      if (ev === 'land' && isPlayer) { const L = (CFG.CAMERA && CFG.CAMERA.FX && CFG.CAMERA.FX.LAND !== undefined) ? CFG.CAMERA.FX.LAND : 1; this.cam.dipV = (this.cam.dipV || 0) - 7 * L; }   // câmera afunda ao cair
       if (!isPlayer) return;
       const S = UI.Sfx;
       if (ev === 'boost' || ev === 'miniTurbo') S.boost();
+      else if (ev === 'curtain') waterFlash();
       else if (ev === 'bump') S.bump(); else if (ev === 'land') S.land(); else if (ev === 'driftStart') S.drift(); else if (ev === 'coin') S.coin();
       else if (ev === 'lap' && this.state === 'race') {
         const l = this.player.lap;
@@ -472,6 +565,7 @@
       });
     },
     startRace(trackIdx) {
+      const td = CFG.TRACKS[trackIdx]; if (td && td.laps && !this.online) CFG.LAPS = td.laps;   // Vale da Cascata: 1 volta (~7 min)
       this.curTrack = trackIdx; this.load(trackIdx);
       UI.screen('race'); this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
       this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
@@ -756,8 +850,9 @@
       if (dot < -0.3 && Math.abs(k.speed) > 5) { this.wrongT += dt; if (this.wrongT > 1.2) { UI.Sfx.wrong(); this.wrongT = -1.5; } } else this.wrongT = Math.min(0, this.wrongT + dt);
     },
     orbitCam() {
-      const P = this.player, c = this.cam, d = 17;
-      camera.position.set(P.pos.x - Math.sin(c.ang) * d, P.pos.y + 6.5, P.pos.z - Math.cos(c.ang) * d); camera.lookAt(P.pos.x, P.pos.y + 1.5, P.pos.z);
+      const P = this.player, c = this.cam, d = 17 * CAMC.DIST / 12.5;   // volta da chegada: mesma proporção da lente tele
+      camera.position.set(P.pos.x - Math.sin(c.ang) * d, P.pos.y + 6.5 * CAMC.HEIGHT / 5.6, P.pos.z - Math.cos(c.ang) * d); camera.lookAt(P.pos.x, P.pos.y + 1.5, P.pos.z);
+      if (camera.fov !== CAMC.FOV) { camera.fov = CAMC.FOV; camera.updateProjectionMatrix(); }
     },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
@@ -769,20 +864,38 @@
       // C segurado: câmera vira 180° na hora (à frente do kart, olhando para trás); soltou, volta na hora
       if (Input.keys.look && !UI.modal && (this.state === 'race' || this.state === 'countdown')) { this.lookBackCam(dt); return; }
       if (!c.drag && !(PL.locked() && performance.now() - (c.lookT || 0) < 2500)) { c.yaw *= Math.max(0, 1 - 2 * dt); c.pitch *= Math.max(0, 1 - 2 * dt); }
-      const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55 + c.pitch * 8) * c.zoom;   // câmera desce um pouco na velocidade
-      const tx = P.pos.x - Math.sin(a) * dist, tz = P.pos.z - Math.cos(a) * dist; let ty = Math.max(P.pos.y + h, 1.5);
+      const spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), a = c.ang + c.yaw, dist = CAMC.DIST * c.zoom, h = (CAMC.HEIGHT * (1 - spN * 0.1) + c.pitch * 8 * CAMC.HEIGHT / 5.6) * c.zoom;   // câmera desce um pouco na velocidade
+      // ---- jogos de câmera (CFG.CAMERA.FX) ----
+      // convenção: ang crescendo = virando para a ESQUERDA; no drift para a esquerda o bico aponta mais à esquerda que o movimento (slip > 0)
+      const CF = Object.assign({ ROLL: 1, SWING: 1.4, LAND: 1, AIR: 1 }, CAMC.FX || {}), live = this.state === 'race' && !P.finished;
+      { const yr = c.prevAng === undefined ? 0 : Math.max(-3, Math.min(3, wrapA(c.ang - c.prevAng) / Math.max(dt, 1e-3))); c.prevAng = c.ang;
+        const slip = live && P.drifting ? Math.max(-1, Math.min(1, wrapA(P.ang - P.mvAng) / 0.35)) : 0;
+        c.driftS = (c.driftS || 0) + (slip - (c.driftS || 0)) * Math.min(1, 3.5 * dt);           // lado do drift, suavizado
+        const rollT = live ? Math.max(-0.11, Math.min(0.11, yr * 0.022 * spN + c.driftS * 0.06)) * CF.ROLL : 0;
+        c.roll = (c.roll || 0) + (rollT - (c.roll || 0)) * Math.min(1, 4 * dt); }
+      // no drift a câmera abre para o lado de fora da curva: aparece a lateral do kart derrapando
+      const sw = c.driftS * CF.SWING, rx = -Math.cos(c.ang) * sw, rz = Math.sin(c.ang) * sw;
+      const tx = P.pos.x - Math.sin(a) * dist + rx, tz = P.pos.z - Math.cos(a) * dist + rz; let ty = Math.max(P.pos.y + h, 1.5);
       const tr = this.track, ceil = tr.ceilingAt ? Math.min(tr.ceilingAt({ x: tx, z: tz }, P.idx), tr.ceilingAt(camera.position, P.idx)) : Infinity;   // túnel: câmera não passa do teto
+      // câmera mais longe: no alto de uma subida o chão atrás do kart pode ficar acima dela -> nunca abaixo do chão + 1,5 m
+      if (tr.groundAt) { const gnd = tr.groundAt({ x: tx, y: ty, z: tz }, P.idx, a); if (gnd && isFinite(gnd.h)) ty = Math.max(ty, gnd.h + 1.5); }
       ty = Math.min(ty, ceil);
-      const k = Math.min(1, 8 * dt); camera.position.x += (tx - camera.position.x) * k; camera.position.z += (tz - camera.position.z) * k; camera.position.y += (ty - camera.position.y) * k;
+      const k = Math.min(1, 8 * dt), ky = P.air && live ? Math.min(1, 8 * dt / (1 + 2 * CF.AIR)) : k;   // no ar a câmera sobe mais devagar (flutua)
+      camera.position.x += (tx - camera.position.x) * k; camera.position.z += (tz - camera.position.z) * k; camera.position.y += (ty - camera.position.y) * ky;
+      // afundada da aterrissagem: mola (o impulso vem do evento 'land' em onKartEvent)
+      c.dipV = (c.dipV || 0) + (-90 * (c.dipY || 0) - 11 * (c.dipV || 0)) * dt; c.dipY = (c.dipY || 0) + c.dipV * dt; c.dipY = Math.max(-1.2, Math.min(0.6, c.dipY));
+      if (Math.abs(c.dipY) > 1e-4) camera.position.y += c.dipY;
       if (c.lookBack) { c.lookBack = false; camera.position.set(tx, ty, tz); }      // acabou de soltar o C: volta direto, sem deslizar
       if ((this.state === 'countdown' && this.cd.t < 0.05) || this.state === 'waiting') camera.position.set(tx, ty, tz);
       camera.position.y = Math.min(camera.position.y, ceil);
       camera.lookAt(P.pos.x + Math.sin(c.ang) * 4, P.pos.y + 2, P.pos.z + Math.cos(c.ang) * 4);
+      if (CAMC.TILT) camera.rotateX(-CAMC.TILT * Math.PI / 180);                           // inclinada um pouco para baixo
+      if (Math.abs(c.roll) > 1e-4) camera.rotateZ(c.roll);                                  // inclinação para dentro da curva / do drift
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
       // tremidinha fina acima de 75% da velocidade (sensação de velocidade, sem enjoar)
       if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
-      const fov = this.speedFov(P);   // a câmera não se afasta: quem dá a sensação de velocidade é o FOV (turbo = 45% maior, mais o da velocidade)
-      camera.fov += (fov - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // FOV original
+      const fov = this.speedFov(P);   // FOV fixo da lente tele (não abre mais com a velocidade nem com o turbo)
+      if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
       // zoom do turbo: entra com "soco" (mola rápida) e volta suave (mola amortecida); 10% = câmera 10% mais perto
       const B = this.boost;
       if (B) { const k = B.zT > 1 ? 260 : 40, d = B.zT > 1 ? 20 : 12.6;
@@ -793,23 +906,24 @@
           c.zoomOff = look.sub(camera.position).multiplyScalar(1 - 1 / z);
           camera.position.add(c.zoomOff);
         } }
-      this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
+      this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0); this.scene.fog.near = this.scene.fog.far * Env.fogNearK;
     },
     // FOV da velocidade (o mesmo na câmera normal e na visão traseira)
-    speedFov(P) { return (P.boostT > 0 ? 60 * 1.45 : 60) + Math.min(16, Math.abs(P.speed) * 0.2 / (CFG.SPEED_MULT || 1)); },
+    speedFov(P) { return CAMC.FOV; },   // antes: 60 + até 16 com a velocidade, x1,45 no turbo (o "FOV puxado para trás")
     // visão traseira: mesma altura, distância, FOV de velocidade, tremidinha e névoa do turbo da câmera normal,
     // só que na frente do kart olhando para trás (não perde a sensação de velocidade)
     lookBackCam(dt) {
       const P = this.player, c = this.cam; c.lookBack = true;
-      const a = P.ang, spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), dist = 12.5 * c.zoom, h = (5.6 - spN * 0.55) * c.zoom;
+      const a = P.ang, spN = Math.min(1.3, Math.abs(P.speed) / CFG.PHYS.MAX), dist = CAMC.DIST * c.zoom, h = CAMC.HEIGHT * (1 - spN * 0.1) * c.zoom;
       const tx = P.pos.x + Math.sin(a) * dist, tz = P.pos.z + Math.cos(a) * dist, tr = this.track;
       const ceil = tr.ceilingAt ? tr.ceilingAt({ x: tx, z: tz }, P.idx) : Infinity;
       camera.position.set(tx, Math.min(Math.max(P.pos.y + h, 1.5), ceil), tz);
       camera.lookAt(P.pos.x - Math.sin(a) * 4, P.pos.y + 2, P.pos.z - Math.cos(a) * 4);
+      if (CAMC.TILT) camera.rotateX(-CAMC.TILT * Math.PI / 180);
       if (c.shake > 0.01) { camera.position.x += (Math.random() - 0.5) * c.shake; camera.position.y += (Math.random() - 0.5) * c.shake; c.shake *= Math.max(0, 1 - 6 * dt); }
       if (spN > 0.75 && !P.air && (!window.Settings || Settings.g.shake)) { const v = (spN - 0.75) * 0.09; camera.position.y += (Math.random() - 0.5) * v; camera.position.x += (Math.random() - 0.5) * v * 0.6; }
-      camera.fov += (this.speedFov(P) - camera.fov) * Math.min(1, 4 * dt); camera.updateProjectionMatrix();   // mesmo FOV de velocidade da câmera normal
-      this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0);
+      if (camera.fov !== this.speedFov(P)) { camera.fov = this.speedFov(P); camera.updateProjectionMatrix(); }   // mesmo FOV fixo da câmera normal
+      this.scene.fog.far = Env.fogFar - (P.boostT > 0 ? 80 : 0); this.scene.fog.near = this.scene.fog.far * Env.fogNearK;
     },
     // modo leve: esconde os contornos (metade dos triângulos dos karts e pilotos) na cena atual e nas próximas
     lite: false,
@@ -820,7 +934,7 @@
     cullTrack() {
       const ms = this.mergeStats && this.mergeStats.meshes; if (!ms) return;
       const now = performance.now(); if (now - (this._cullT || 0) < 250) return; this._cullT = now;
-      const cp = camera.position, lim = (this.scene.fog ? this.scene.fog.far : 1500) + 60;
+      const cp = camera.position, lim = (this.scene.fog ? this.scene.fog.far : 1500) + 150;
       for (const m of ms) {
         const bs = m.geometry.boundingSphere; if (!bs) continue;
         const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, mt = m.material;
@@ -835,7 +949,7 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) { this.cullTrack(); renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+      else if (this.scene) { this.cullTrack(); if (postFX && postFX.ok && !this.lite) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
       if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
     },
     // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa

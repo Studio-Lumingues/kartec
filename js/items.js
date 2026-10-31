@@ -295,7 +295,7 @@
     const st = def.startIdx != null ? def.startIdx : (tr.startIdx || 0);
     mark(st, Math.round(N * 0.05)); (def.bridges || []).forEach(b => mark(b, 22)); (def.pads || []).forEach(p => mark(p[0], 8)); (def.ramps || []).forEach(p => mark(p[0], 14));
     const curv = i => { const a = T[(i - 4 + N) % N], b = T[(i + 4) % N]; return Math.abs(Math.atan2(Math.sin(Math.atan2(b.x, b.z) - Math.atan2(a.x, a.z)), Math.cos(Math.atan2(b.x, b.z) - Math.atan2(a.x, a.z)))) / 8; };
-    const out = [], R = C.ROW_COUNT, win = Math.round(N / R * 0.3);
+    const out = [], R = def.itemRows || C.ROW_COUNT, win = Math.round(N / R * 0.3);
     for (let k = 0; k < R; k++) {
       const base = st + Math.round((k + 0.55) / R * N); let pick = -1, best = 1e9;
       for (let o = -win; o <= win; o++) { const i = ((base + o) % N + N) % N; if (busy[i]) continue; const sc = curv(i) * 400 + Math.abs(o) * 0.05; if (sc < best) { best = sc; pick = i; } }

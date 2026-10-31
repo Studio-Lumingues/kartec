@@ -28,13 +28,16 @@
       const busy = new Uint8Array(N), mark = (c, r) => { for (let d = -r; d <= r; d++) busy[((c + d) % N + N) % N] = 1; };
       mark(def.startIdx, 30); (def.bridges || []).forEach(b => mark(b, 22));
       (def.pads || []).forEach(p => mark(p[0], 4)); (def.ramps || []).forEach(p => mark(p[0], 8));
+      (tr.busy || []).forEach(([a, b]) => { for (let i = a; i <= b; i++) busy[((i % N) + N) % N] = 1; });   // pontes e túnel (Vale)
+      // trecho com o muro azul e amarelo (lado esquerdo, -1): sem postinhos/pneus/cones enfiados dentro dele
+      const inWall = (i, sd) => def.wall && sd < 0 && (() => { const a = def.wall[0] - 3, b = def.wall[1] + 3, j = ((i % N) + N) % N; return a <= b ? j >= a && j <= b : j >= a || j <= b; })();
       const off = W + 4.5, ground = (p, i) => (tr.groundAt ? tr.groundAt(p, i, 0).h : tr.roadBase);
       const tires = [], cones = [], balloons = [];
       let cool = 0;
       for (let i = 0; i < N; i++) {
         if (cool > 0) { cool--; continue; }
         if (busy[i] || curv[i] < 0.012) continue;
-        const out = -inside[i];
+        const out = -inside[i]; if (inWall(i, out)) continue;
         // parede de pneus no ápice + 3 cones antes da curva
         for (let k = -2; k <= 2; k++) { const j = (i + k * 2 + N) % N, p = tr.side(j, out * off, 0); p.y = ground(p, j); tires.push({ p, ang: Math.atan2(T[j].x, T[j].z) }); }
         for (let k = 1; k <= 3; k++) { const j = (i - 6 - k * 3 + N) % N; if (busy[j]) continue; const p = tr.side(j, out * (W + 1.6), 0); p.y = ground(p, j); cones.push(p); }
@@ -44,8 +47,8 @@
       // perto da câmera que "passa voando" -> dá muito mais sensação de velocidade, a custo de 1 chamada de desenho
       const posts = [];
       for (let i = 0; i < N; i += Math.max(2, Math.round(13 / (tr.length / N)))) [-1, 1].forEach(sd => {
-        if (busy[i] || curv[i] >= 0.012) return; const p = tr.side(i, sd * (W + 6), 0); p.y = ground(p, i); posts.push(p); tr.obstacles.push({ x: p.x, z: p.z, r: 0.3 }); });   // só nas retas, além do acostamento
-      for (let k = -3; k <= 3; k++) [-1, 1].forEach(sd => { const j = (def.startIdx + k * 4 + N) % N, p = tr.side(j, sd * (W + 3.2), 0); p.y = ground(p, j); balloons.push(p); });
+        if (busy[i] || curv[i] >= 0.012 || inWall(i, sd)) return; const p = tr.side(i, sd * (W + 6), 0); p.y = ground(p, i); posts.push(p); tr.obstacles.push({ x: p.x, z: p.z, r: 0.3 }); });   // só nas retas, além do acostamento
+      // (balões da largada removidos)
 
       const d = new THREE.Object3D(), group = new THREE.Group(); group.userData.dynamic = true; root.add(group);
       // pilha = 3 pneus de cores diferentes
