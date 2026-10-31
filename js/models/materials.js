@@ -6,6 +6,7 @@
 //   pelas coordenadas do próprio kart (lateral = projeção em X, capô/teto = projeção em Y).
 //   Trocar a cor do adesivo é só mudar um uniform (instantâneo); trocar a estampa repinta um canvas.
 // * Borracha fofa com gomos desenhados, plásticos brilhantes, "prata de brinquedo" e neon.
+// * glbPaint: pintura dos veículos 3D (.glb): troca o vermelho da textura pela cor do jogador + adesivos.
 // =====================================================================================
 (function () {
   let treadTex = null, knobTex = null;
@@ -39,6 +40,7 @@
     '  vec3 m = dMask(uvS, vec2(0.0, 0.5), vec2(1.0, 0.5)) * wS + dMask(uvT, vec2(0.0, 0.0), vec2(0.5, 0.5)) * wT;',
     '  if (uNumSide.w > 0.5) { float sg = vDecalP.x > 0.0 ? -1.0 : 1.0; vec2 q = vec2(sg * (vDecalP.z - uNumSide.x) / uNumSide.z + 0.5, (vDecalP.y - uNumSide.y) / uNumSide.z + 0.5); m = max(m, dMask(q, vec2(0.5, 0.0), vec2(0.5, 0.5)) * wS); }',
     '  if (uNumTop.w > 0.5) { vec2 q = vec2(-(vDecalP.x - uNumTop.x) / uNumTop.z + 0.5, (vDecalP.z - uNumTop.y) / uNumTop.z + 0.5); m = max(m, dMask(q, vec2(0.5, 0.0), vec2(0.5, 0.5)) * wT); }',
+    '  m *= dMaskW;',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0), clamp(m.g, 0.0, 1.0));',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, uDecalColor, clamp(m.r, 0.0, 1.0));',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, uInk, clamp(m.b, 0.0, 1.0));',
@@ -73,7 +75,37 @@
       const m = Toon.mat({ color }, { gloss: 0.85, rim: 0.35, sat: 0, key: 'paint', hook: sh => {
         Object.assign(sh.uniforms, u);
         sh.vertexShader = DECAL_VS_HEAD + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvDecalP = position; vDecalN = normal;');
-        sh.fragmentShader = DECAL_FS_HEAD + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + DECAL_FS_BODY);
+        sh.fragmentShader = DECAL_FS_HEAD + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\nfloat dMaskW = 1.0;\n' + DECAL_FS_BODY);
+      } });
+      m.userData.unique = true; m.userData.decalUniforms = u;
+      return m;
+    },
+    // ---------- veículos 3D (.glb) ----------
+    // A textura do modelo já vem pintada (lataria VERMELHA, pneus pretos, metal cinza). O shader troca só o
+    // vermelho pela cor escolhida, preservando o sombreado desenhado na textura, e aplica os adesivos (Livery)
+    // apenas sobre a lataria (onde era vermelho). decal = Livery.build(...); decal.on = false -> sem adesivos
+    // (usado nas rodas e no volante). opts.ref = vermelho "cheio" da textura; opts.gamma suaviza o sombreado.
+    glbPaint(map, color, decal, opts) {
+      opts = opts || {};
+      const u = {
+        uPaint: { value: new THREE.Color(color) }, uRef: { value: opts.ref || 0.9 }, uGamma: { value: opts.gamma || 0.75 },
+        uDecal: { value: decal.texture }, uDecalColor: { value: new THREE.Color(decal.color) }, uInk: { value: new THREE.Color(Toon.INK) }, uDecalOn: { value: decal.on ? 1 : 0 },
+        uSide: { value: new THREE.Vector4().fromArray(decal.side) }, uTop: { value: new THREE.Vector4().fromArray(decal.top) },
+        uNumSide: { value: new THREE.Vector4(0, 0, 1, 0) }, uNumTop: { value: new THREE.Vector4(0, 0, 1, 0) }
+      };
+      const head = 'uniform vec3 uPaint; uniform float uRef; uniform float uGamma;\n' + DECAL_FS_HEAD;
+      const body = [
+        'vec3 gTex = diffuseColor.rgb;',
+        'float gMx = max(gTex.g, gTex.b);',
+        // quanto este texel é "vermelho da lataria" (0..1)
+        'float dMaskW = smoothstep(0.5, 0.7, 1.0 - gMx / max(gTex.r, 1e-3)) * smoothstep(0.06, 0.16, gTex.r);',
+        'vec3 gPaint = uPaint * pow(clamp(gTex.r / uRef, 0.0, 1.25), uGamma) + vec3(min(gTex.g, gTex.b)) * 0.35;',
+        'diffuseColor.rgb = mix(gTex, gPaint, dMaskW);'
+      ].join('\n');
+      const m = Toon.mat({ color: 0xffffff, map }, { gloss: opts.gloss !== undefined ? opts.gloss : 0.6, rim: 0.3, sat: 0, key: 'glbpaint', hook: sh => {
+        Object.assign(sh.uniforms, u);
+        sh.vertexShader = DECAL_VS_HEAD + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvDecalP = position; vDecalN = normal;');
+        sh.fragmentShader = head + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + body + '\n' + DECAL_FS_BODY);
       } });
       m.userData.unique = true; m.userData.decalUniforms = u;
       return m;

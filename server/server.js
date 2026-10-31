@@ -90,6 +90,7 @@ function cleanSpec(s) {
   const str = (v, d) => (typeof v === 'string' && /^[a-z0-9_-]{1,16}$/i.test(v)) ? v : d;
   const col = (v, d) => (typeof v === 'string' && HEX.test(v)) ? v : d;
   return { model: str(s.model, 'gt'), color: col(s.color, '#e8302a'), decal: str(s.decal, 'none'), decalColor: col(s.decalColor, '#ffc928'),
+    pilot: ['menino', 'menina'].includes(s.pilot) ? s.pilot : 'menino',
     number: Math.max(0, Math.min(99, s.number | 0)), suit: col(s.suit, '#e8302a'), helmet: col(s.helmet, '#e8302a'), skin: col(s.skin, '#f2b48a'), accessory: str(s.accessory, 'none') };
 }
 function hashPass(pass, salt) { return crypto.scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 }); }

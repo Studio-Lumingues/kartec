@@ -1,7 +1,7 @@
 // =====================================================================================
 // custom.js — estado da personalização (o "spec" do kart do jogador) + registro de atributos
 //
-// spec = { model, color, decal, decalColor, suit, helmet, skin }
+// spec = { model, color, decal, decalColor, pilot, suit, helmet, skin }
 // SLOTS descreve cada atributo editável na Garagem: em qual aba aparece, que tipo de controle usa
 // e como é aplicado no modelo 3D. O modelo (kart/moto) é escolhido pelo carrossel da Garagem, sem aba.
 // Para adicionar um atributo novo de cor no futuro:
@@ -31,6 +31,10 @@
       apply: (m, v) => m.setDecal(v) },
     { id: 'decalColor', tab: 'decals', label: 'Cor do adesivo', type: 'color', custom: true, options: () => swatches(CFG.DECAL_COLORS),
       apply: (m, v) => m.setDecalColor(v) },
+    // personagem (Menino / Menina): botões no topo da aba Piloto; trocar reconstrói só o piloto
+    { id: 'pilot', tab: 'pilot', label: 'Personagem', type: 'char',
+      options: () => Pilot.chars.map(c => ({ value: c.id, name: c.name })),
+      apply: (m, v) => m.setPilot({ pilot: v }) },
     { id: 'suit', tab: 'pilot', label: 'Macacão', type: 'color', custom: true, options: () => swatches(CFG.SUIT_COLORS),
       apply: (m, v) => m.setPilot({ suit: v }) },
     { id: 'helmet', tab: 'pilot', label: 'Capacete', type: 'color', custom: true, options: () => swatches(CFG.SUIT_COLORS.concat(['#ffc928'])),
@@ -50,6 +54,8 @@
       if (!valid(this.spec.model)) { this.spec.model = valid(CFG.DEFAULT_SPEC.model) ? CFG.DEFAULT_SPEC.model : KartModels.list()[0].id; this.save(); }
       // número e acessório saíram do jogo: some com o que estiver salvo de versões antigas
       if ('number' in this.spec || 'accessory' in this.spec) { delete this.spec.number; delete this.spec.accessory; this.save(); }
+      // personagem salvo que não existe (ou spec de antes dos personagens): volta para o padrão
+      if (!Pilot.chars.some(c => c.id === this.spec.pilot)) { this.spec.pilot = CFG.DEFAULT_SPEC.pilot; this.save(); }
       return this.spec;
     },
     save() { try { localStorage.setItem(KEY(), JSON.stringify(this.spec)); } catch (e) { } },
@@ -71,7 +77,7 @@
       const pats = Livery.patterns.map(p => p.id).filter(id => id !== 'none');
       const pick = a => a[Math.floor(Math.random() * a.length)];
       const decalColor = pick(CFG.DECAL_COLORS.filter(c => c.toLowerCase() !== colorHex.toLowerCase()));
-      return { model: pick(models), color: colorHex, decal: pick(pats), decalColor,
+      return { model: pick(models), color: colorHex, decal: pick(pats), decalColor, pilot: pick(Pilot.chars.map(c => c.id)),
         suit: colorHex, helmet: decalColor, skin: pick(CFG.SKIN_TONES) };
     }
   };

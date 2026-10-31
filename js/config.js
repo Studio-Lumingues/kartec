@@ -21,11 +21,7 @@ window.CFG = {
   FONT_DISPLAY: '"Titan One", "Fredoka", "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif',   // gordinha e cartunesca (embutida no style.css)
   FONT_UI: '"Nunito", "Trebuchet MS", Verdana, sans-serif',
   // desempenho: resolução adaptativa (baixa sozinha se o quadro passar de ~20 ms)
-  PERF: { DPR_MAX: 1.5, DPR_MIN: 0.7, SHADOW_MAP: 2048, SHADOW_BOX: 95 },
-  // acabamento da imagem na corrida (js/postfx.js), sempre no estilo cartoon. POSTFX: false desliga tudo.
-  // AO = sombra de contato nos cantos; INK = contorno leve; BLOOM = brilho nas luzes; SAT = saturação (1 = original); CONTRAST; VIGNETTE = cantos da tela
-  // SCATTER = luz do sol na névoa (0 desliga); RAYS = raios de sol (0 desliga); SHARPEN = nitidez depois do FXAA (0 desliga)
-  GFX: { POSTFX: true, AO: 0.45, INK: 0.25, BLOOM: 0.12, SAT: 1.04, CONTRAST: 0.1, VIGNETTE: 0.08, SCATTER: 1, RAYS: 0.25, SHARPEN: 0.3 },
+  PERF: { DPR_MAX: 1.5, DPR_MIN: 0.7, SHADOW_MAP: 1024, SHADOW_BOX: 45 },
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.
   // Exemplo: 'wss://super-kartec.onrender.com/ws'  (https:// também é aceito; o /ws é acrescentado sozinho)
@@ -57,18 +53,6 @@ window.CFG = {
   COINS_ON: false,              // sistema de moedas mantido no código, desligado por enquanto
   // preenchimento de cenário (scenery.js): densidade relativa e alcance do horizonte
   FILL: { DENSITY: 1, LITE_DENSITY: 0.45, CHUNK: 300, CULL_EVERY: 0.25 },
-  // névoa estilo Minecraft: um "muro" de névoa redondo em volta da câmera, na cor do horizonte. Ela começa em NEAR_K x fogFar
-  // (fogFar fica em cada pista) e fecha em fogFar; o que está além não é desenhado (o mapa é dividido em blocos de 120 m).
-  // Para enxergar mais longe: aumente o fogFar da pista (custa desempenho) ou use a distância de visão nas configurações.
-  FOG: { NEAR_K: 0.55 },
-  // câmera da corrida estilo "lente tele": mais longe do kart e com FOV fechado (pouca distorção nas bordas,
-  // fundo "puxado" para perto, kart grande na tela). O FOV é fixo: não abre mais com a velocidade nem com o turbo.
-  // FOV em graus (o antigo era 60, chegando a ~100 no turbo); DIST/HEIGHT em metros atrás/acima do kart (antigos: 12,5 / 5,6).
-  CAMERA: { FOV: 53, DIST: 13.5, HEIGHT: 6.5, TILT: 3,   // TILT = graus a mais olhando para baixo
-    // jogos de câmera (0 desliga cada um): ROLL = inclina para dentro da curva e mais ainda no drift (1 = ~2° na curva, ~5° no drift);
-    // SWING = metros que a câmera abre para o lado de fora no drift (mostra a lateral do kart); LAND = afundada ao cair de um salto;
-    // AIR = quanto a câmera "flutua" (atrasa na altura) com o kart no ar
-    FX: { ROLL: 1, SWING: 1.4, LAND: 1, AIR: 1 } },
   CAMERA_FAR: 2300,             // plano de corte distante (a névoa de cada pista esconde o que vem antes dele)
 
   // ---------- grid de largada para 8 karts ----------
@@ -88,11 +72,7 @@ window.CFG = {
   // freio e giro (o giro acompanha para as curvas continuarem com o mesmo traçado). O velocímetro NÃO muda:
   // o fator de km/h é dividido pelo mesmo número, então continua mostrando ~135 km/h na máxima e 203 no turbo.
   // Os valores abaixo em PHYS são os de base (1x); a conta é feita no fim deste arquivo.
-  SPEED_MULT: 1.8,              // era 1.5; +20% para todos os veículos
-  // TURN_MULT: quanto o giro do volante acompanha a velocidade. Com o giro subindo junto com a velocidade (1,8x) o kart
-  // ficava "nervoso", indo demais para os lados; fica no valor de antes (1,5x) e a direção volta a ser firme.
-  // Menor = direção mais pesada; igual ao SPEED_MULT = curvas com o mesmo raio de antes.
-  TURN_MULT: 1.5,
+  SPEED_MULT: 1.5,
 
   // ---------- física do kart (unidades: metros e segundos; valores de base, antes do SPEED_MULT) ----------
   PHYS: {
@@ -106,10 +86,7 @@ window.CFG = {
     DRIFT_R_IN: 40,   // raio do drift segurando para dentro da curva (m)
     DRIFT_R_MID: 66,  // raio do drift sem direcional
     DRIFT_R_OUT: 126, // raio do drift segurando para fora
-    KART_RADIUS: 1.9, // raio de colisão entre karts
-    // relevo (só nas pistas com elev): SLOPE_TOP = quanto a rampa muda a velocidade máxima (12% de subida -> -19%);
-    // SLOPE_ACC = "gravidade" que freia na subida e empurra na descida (m/s² por 100% de inclinação)
-    SLOPE_TOP: 1.6, SLOPE_ACC: 26
+    KART_RADIUS: 1.9  // raio de colisão entre karts
   },
 
   // ---------- inteligência artificial ----------
@@ -125,8 +102,9 @@ window.CFG = {
 
   // ---------- personalização: estado inicial (corBase, modeloKart, decalque, corDecalque, piloto) ----------
   // Números na lataria e acessórios do piloto foram removidos do jogo.
+  // pilot: personagem ('menino' | 'menina', modelos em js/models/entidades/)
   DEFAULT_SPEC: { model: 'gt', color: '#e8302a', decal: 'flames', decalColor: '#ffc928',
-                  suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
+                  pilot: 'menino', suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
 
   // ---------- cores disponíveis para o kart ----------
   KART_COLORS: [
@@ -146,47 +124,34 @@ window.CFG = {
   SKIN_TONES: ['#f6cfae', '#f2b48a', '#d99a6c', '#b87a4e', '#8a5634', '#5e3a22'],
 
   // ---------- pistas ----------
-  // Cidade Brasileira e Praia foram removidas. Índice 0 = Circuito Clássico (igual ao das salas online).
+  // Cidade Brasileira e Praia foram removidas: só o Circuito Clássico (índice 0, igual ao das salas online).
+  // Curvas extras (2026): chicanas em "S" nas retas longas; cada S é curva/contracurva/curva com o mesmo
+  // rumo de entrada e saída, então o circuito continua fechando exatamente.
   // segs: traçado em "tartaruga": ['S', comprimento] = reta, ['L'|'R', raio, graus] = curva (esq./dir.).
   // As listas já fecham o circuito (ponto final = inicial). O construtor amostra a cada 14 m e centraliza.
   // N: nós por volta (espaçamento de ~3,5 a 4,3 m, igual à versão anterior: física, IA e adereços continuam calibrados).
-  // elev: [nó, altura] (opcional). startIdx: nó da linha de chegada. pads: [nó, deslocamento lateral].
-  // ramps: [nó, deslocamento lateral, largura (0 = pista inteira), comprimento, altura]. No ar, apertar o drift = manobra (turbo ao pousar). time: hora inicial (0=meia-noite, .5=meio-dia).
+  // startIdx: nó da linha de chegada. pads: [nó, deslocamento lateral].
+  // ramps: [nó, deslocamento lateral, largura, comprimento, altura]. time: hora inicial (0=meia-noite, .5=meio-dia).
   TRACKS: [
     {
       id: 'classic', name: 'Circuito Clássico',
-      desc: 'Onze curvas para segurar o drift, subidas, descidas e cristas, rio com duas pontes e cachoeira.',
-      W: 20, N: 870, startIdx: 45, time: 0.34,
-      // rework 2026: sem chicanas em zigue-zague; 11 curvas (2 grampos, 1 dupla, varridas longas) ligadas por retas
-      segs: [['S',308.1],['L',140,97],['S',197.6],['L',80,78],['S',195.2],['R',110,98],['S',195.5],['L',60,144],['S',48.3],['R',115,101],['S',130.4],['L',85,100],['S',54.0],['L',110,76],['S',119.5],['R',90,94],['S',117.5],['L',65,167],['S',188.1],['R',130,97],['S',201.5],['L',100,88],['S',94.0]],
-      // relevo: [nó, altura em m]. Plano na reta dos boxes e nas duas pontes; cristas nos nós ~185, ~520, ~695 e ~790
-      elev: [[0,0.0],[72,0.0],[100,4.5],[130,13.5],[165,22.5],[185,23.2],[200,21.0],[240,6.0],[265,3.0],[290,4.5],[330,9],[350,9],[366,5.5],[380,0.8],[386,0.0],[414,0.0],[428,2.2],[456,9.0],[490,18.0],[520,27.0],[540,25.5],[565,18.0],[600,7.5],[625,3.0],[650,6.0],[670,9.0],[695,13.5],[712,10.5],[740,6.0],[766,4.5],[790,10.5],[812,7.5],[832,0.8],[840,0.0]],
-      bridges: [400, 864],
-      pads: [[140,5],[220,-6],[310,0],[445,0],[552,6],[690,-6],[785,0]],
-      // rampas de salto (largura 0 = pista inteira): em retas que sobem, o pouso cai ainda na reta
-      ramps: [[132, 0, 0, 14, 1.7], [430, 0, 0, 14, 1.7], [768, 0, 0, 14, 1.7]],
-      wall: [200, 240],
-      // atalhos de terra batida: [nó de entrada, nó de saída, lado (-1/+1), quanto o caminho entra no miolo da curva (m)].
-      // Na terra o kart anda a ~90% da velocidade: compensa (~1 s) sem quebrar a corrida. Os bots seguem pela pista.
-      shortcuts: [[630, 700, -1, 78], [454, 530, -1, 86], [300, 370, -1, 86]],
-      sky: { fog: 0xdbe9f8 }, fogFar: 1500   // distância de visão: a névoa fecha aqui e nada além dela é desenhado (CFG.FOG)
+      desc: 'Curvas longas para segurar o drift, rio com duas pontes, cachoeira e laguinhos.',
+      W: 20, N: 870, startIdx: 41, time: 0.34,
+      segs: [['S',250],['R',70,48],['L',70,96],['R',70,48],['S',15.9],['L',170.0,90],['S',106.2],['L',138.0,75],['S',42.5],['R',148.8,75],['S',8],['L',55,30],['R',55,60],['L',55,30],['S',9.5],['L',191.2,120],['S',278],['R',46,30],['L',46,60],['R',46,30],['S',5.0],['R',138.0,60],['S',42.5],['L',159.5,150],['S',15],['R',60,45],['L',60,90],['R',60,45],['S',30.3],['L',60,45],['R',60,90],['L',60,45],['S',37.2],['L',212.5,60],['S',219.0]],
+      bridges: [468, 836],
+      pads: [[108,0],[310,7],[386,-7],[530,0],[605,7],[715,-6],[793,-7]],
+      ramps: [],
+      wall: [143, 262],
+      sky: { fog: 0xdbe9f8 }, fogFar: 1500   // névoa mais longe: as montanhas do horizonte aparecem em camadas
     }
   ]
 };
-
-// a fada da largada fica presa à câmera (CFG.FAIRY.POS, calibrada para FOV 60): com o FOV fechado da lente tele ela
-// cairia fora da tela. Afastando só o z na mesma proporção, ela aparece no mesmo lugar e do mesmo tamanho de antes.
-(function () {
-  const C = window.CFG, F = C.FAIRY, fov = (C.CAMERA && C.CAMERA.FOV) || 60;
-  if (!F || F.POS_BASE) return; F.POS_BASE = F.POS.slice();
-  F.POS[2] = F.POS_BASE[2] * Math.tan(30 * Math.PI / 180) / Math.tan(fov * Math.PI / 360);
-})();
 
 // aplica o SPEED_MULT (uma vez só). PHYS.BASE guarda os valores originais.
 (function () {
   const C = window.CFG, P = C.PHYS, m = Math.max(0.1, +C.SPEED_MULT || 1);
   if (P.BASE) return;
-  P.BASE = { MAX: P.MAX, MAXREV: P.MAXREV, ACC: P.ACC, BRAKE: P.BRAKE, TURN: P.TURN, KMH: P.KMH, SLOPE_ACC: P.SLOPE_ACC };
-  P.MAX *= m; P.MAXREV *= m; P.ACC *= m; P.BRAKE *= m; P.TURN *= Math.max(0.1, +C.TURN_MULT || m); P.SLOPE_ACC *= m;
+  P.BASE = { MAX: P.MAX, MAXREV: P.MAXREV, ACC: P.ACC, BRAKE: P.BRAKE, TURN: P.TURN, KMH: P.KMH };
+  P.MAX *= m; P.MAXREV *= m; P.ACC *= m; P.BRAKE *= m; P.TURN *= m;
   P.KMH /= m;          // velocímetro igual: (velocidade x m) x (KMH / m) = mesmo número na tela
 })();

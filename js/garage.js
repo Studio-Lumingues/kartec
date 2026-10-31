@@ -6,6 +6,7 @@
 //    lado e o próximo entra pelo outro. A placa com o nome desliza junto, no mesmo sentido.
 //  * DOCA: barra baixa no pé da tela com as abas (Custom.tabs) e UMA fileira de cores por vez.
 //    Abas com mais de um atributo (Piloto: macacão, capacete, pele) ganham chips para escolher qual pintar.
+//    Atributos do tipo 'char' (Piloto: Menino / Menina) viram uma fileira de botões no topo da aba.
 //    Abas marcadas com soon: true (Adesivos) aparecem desativadas com o selo "Em breve".
 // Nada é escrito "na mão": abas e cores vêm de Custom.tabs / Custom.slots. Cada mudança vai para
 // Custom.set(); a vitrine 3D escuta e atualiza o veículo na hora.
@@ -84,7 +85,17 @@
     renderBody() {
       const body = $('garageBody'), slots = Custom.slots.filter(s => s.tab === this.tab && s.type === 'color');
       body.innerHTML = ''; body.classList.remove('swap'); void body.offsetWidth; body.classList.add('swap');
-      if (!slots.length) return;
+      // personagem (Menino / Menina)
+      Custom.slots.filter(s => s.tab === this.tab && s.type === 'char').forEach(s => {
+        const row = el('div', 'gParts gChars'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', s.label);
+        s.options().forEach(o => {
+          const c = el('button', 'gPart gChar', o.name); c.type = 'button'; c.setAttribute('role', 'radio'); c.dataset.char = o.value; c.dataset.slot2 = s.id;
+          c.addEventListener('click', () => { Custom.set(s.id, o.value); this.blip(820); });
+          row.appendChild(c);
+        });
+        body.appendChild(row);
+      });
+      if (!slots.length) { this.syncSwatches(); return; }
       // chips (só quando a aba tem mais de um atributo de cor)
       if (slots.length > 1) {
         const row = el('div', 'gParts'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', 'Parte para pintar');
@@ -113,10 +124,11 @@
     },
     // marca a cor atual (e a parte escolhida)
     syncSwatches() {
+      document.querySelectorAll('#garageBody .gChar').forEach(c => { const on = Custom.spec[c.dataset.slot2] === c.dataset.char; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
       const id = this.part[this.tab]; if (!id) return; const v = String(Custom.spec[id] || '').toLowerCase();
       let match = false;
       document.querySelectorAll('#garageBody .gSwatch[data-v]').forEach(b => { const on = b.dataset.v.toLowerCase() === v; match = match || on; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
-      document.querySelectorAll('#garageBody .gPart').forEach(c => { const on = c.dataset.slot === id; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      document.querySelectorAll('#garageBody .gPart:not(.gChar)').forEach(c => { const on = c.dataset.slot === id; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
       if (this._custom) { this._custom.inp.value = v || '#ffffff'; this._custom.lab.classList.toggle('on', !match && !!v); this._custom.lab.style.setProperty('--c', !match && v ? v : 'transparent'); }
     },
     blip(f) { try { UI.Sfx.tone(f, 0, 0.05, 'triangle', 0.05); } catch (e) { } },
