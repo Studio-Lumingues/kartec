@@ -5,7 +5,7 @@
 //    cenário do tema 'classic' (grama, rio com pontes, cachoeira, lagos). As pistas Cidade e Praia foram
 //    removidas. Devolve o objeto "track" usado pela física e pela IA.
 // =====================================================================================
-console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer material)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
+console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
 (function () {
   // ===================================================================================
   // GfxFX — melhorias gráficas compartilhadas (usadas aqui e no scenery.js)
@@ -126,6 +126,11 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
     const GS = Math.ceil((EXT + (def.fogFar || 820) + 400) * 2 / 100) * 100, RAD = Math.max(L.bbox.x1 - L.bbox.x0, L.bbox.z1 - L.bbox.z0) / 2;
     let seed = 7 + def.id.length * 13; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
     const tr = { def, N, W, S, T, length: L.length, startIdx: def.startIdx, roadBase: 0.1, lamps: [], nightMats: [], animated: [], obstacles: [], ponds: [], minimap: [], blockers: [], dustColor: 0xc9a878 };
+    // ---------- qualidade gráfica (configurações) ----------
+    // detail: geometria/enfeites desta pista (vale ao carregar); water: reflexo e refração da água (vale na hora)
+    const QS = () => (window.Settings && Settings.q) ? Settings.q() : { water: 'high', detail: 'high' };
+    const DET = QS().detail, LO = DET === 'low', MID = DET === 'medium', LIFEK = LO ? 0.4 : MID ? 0.7 : 1;
+    tr.disposers = []; tr.dispose = () => { tr.disposers.forEach(f => { try { f(); } catch (e) { } }); tr.disposers = []; };   // chamado pelo main.js ao trocar de pista
     const side = tr.side = (i, o, y) => { i = ((i % N) + N) % N; return V3(S[i].x + T[i].z * o, y, S[i].z - T[i].x * o); };
     // pontes: elevação suave da pista (aceita índice fracionário)
     const bridges = def.bridges || [];
@@ -286,7 +291,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       return L(L(L(vh3(i, j, k), vh3(i + 1, j, k), fx), L(vh3(i, j + 1, k), vh3(i + 1, j + 1, k), fx), fy), L(L(vh3(i, j, k + 1), vh3(i + 1, j, k + 1), fx), L(vh3(i, j + 1, k + 1), vh3(i + 1, j + 1, k + 1), fx), fy), fz); };
     function mountainMat() {
       const m = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 6, specular: 0x161616 });
-      m.userData.unique = true; m.customProgramCacheKey = () => 'mountain-proc';
+      m.userData.unique = true; m.customProgramCacheKey = () => 'mountain-proc' + (LO ? '-lite' : '');
       m.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vMW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         sh.fragmentShader = `varying vec3 vMW;
@@ -303,12 +308,15 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
             // estratos ondulados, rachaduras, líquen, cascalho, grama com manchas secas e neve que assenta nas partes planas.
             // O detalhe fino some com a distância (sem chuvisco/serrilhado nas montanhas do fundo).
             vec3 P = vMW; float dist = length(cameraPosition - P);
-            float fd = 1.0 - smoothstep(60.0, 420.0, dist), fm = 1.0 - smoothstep(350.0, 1600.0, dist);
+            float fd = ${LO ? '0.0' : '1.0 - smoothstep(60.0, 420.0, dist)'}, fm = 1.0 - smoothstep(350.0, 1600.0, dist);
             vec3 wn0 = inverseTransformDirection(normal, viewMatrix);
-            float e = 0.5;
-            float b0 = mBump(P, fd), bx = mBump(P + vec3(e, 0.0, 0.0), fd), by = mBump(P + vec3(0.0, e, 0.0), fd), bz = mBump(P + vec3(0.0, 0.0, e), fd);
-            vec3 gw = vec3(bx - b0, by - b0, bz - b0) / e; gw -= dot(gw, wn0) * wn0;
-            vec3 wn = normalize(wn0 - gw * 0.35 * fd);   // só perto da câmera; de longe a luz segue a forma real da montanha
+            vec3 wn = wn0;
+            if (fd > 0.001) {   // relevo fino só perto da câmera (de longe, nem calcula: economiza 4 ruídos por pixel)
+              float e = 0.5;
+              float b0 = mBump(P, fd), bx = mBump(P + vec3(e, 0.0, 0.0), fd), by = mBump(P + vec3(0.0, e, 0.0), fd), bz = mBump(P + vec3(0.0, 0.0, e), fd);
+              vec3 gw = vec3(bx - b0, by - b0, bz - b0) / e; gw -= dot(gw, wn0) * wn0;
+              wn = normalize(wn0 - gw * 0.35 * fd);
+            }
             normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
             float up = wn.y, hr = vColor.r, tall = vColor.g, dome = vColor.b;
             float n1 = mfbm(P * 0.011), n2 = mfbm(P * 0.047 + 7.0), n3 = mix(0.5, mn3(P * 0.42), fd);
@@ -340,7 +348,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
     }
     // chão grande com variação de cor por vértice (esconde a repetição do ladrilho)
     function groundPlane(texName, tile, tint, y) {
-      const t = TX.get(texName, GS / tile, GS / tile), g = new THREE.PlaneGeometry(GS, GS, 200, 200), p = g.attributes.position, c = [];
+      const t = TX.get(texName, GS / tile, GS / tile), g = new THREE.PlaneGeometry(GS, GS, LO ? 48 : MID ? 100 : 200, LO ? 48 : MID ? 100 : 200), p = g.attributes.position, c = [];
       for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = -p.getY(i);
         const m = 0.9 + 0.06 * Math.sin(x * 0.013 + 1.3) * Math.cos(z * 0.011) + 0.05 * Math.sin(x * 0.034 + z * 0.029) + 0.03 * Math.sin(x * 0.071 - z * 0.064 + 2);
         const h = Math.sin(x * 0.009 - z * 0.012 + 0.7) * 0.5 + 0.5; c.push(m * (1 + tint * h), m, m * (1 - tint * 1.4 * h)); }
@@ -366,7 +374,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
     // ---------- pista: asfalto, faixas, zebras ----------
     const notBridge = i => bump(i) > 0.02 || bump((i + 1) % N) > 0.02;
     const asphaltTint = [1, 1, 1.02];
-    strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: true, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
+    strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: LO ? null : { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: !LO, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
     [-1, 1].forEach(s => strip(s * (W - 0.85), s * (W - 0.4), 0.06, { map: TX.get('paint'), uSpan: 0.2, vLen: 3, po: -2 }));
     strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
     strip(W, W + 1.8, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4 }); strip(-W - 1.8, -W, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true });
@@ -753,7 +761,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       // ---- cordilheira em volta do mapa (profundidade): picos low-poly com grama na base, pedra e neve no topo ----
       { const mm = mountainMat();
         const peak = (x, z, rx, h, rz, k) => {
-          const g = new THREE.ConeGeometry(1, 1, 112, 48); g.translate(0, 0.5, 0); const p = g.attributes.position, col = [];
+          const g = new THREE.ConeGeometry(1, 1, LO ? 36 : MID ? 64 : 112, LO ? 14 : MID ? 26 : 48); g.translate(0, 0.5, 0); const p = g.attributes.position, col = [];
           for (let i = 0; i < p.count; i++) { const px = p.getX(i), py = p.getY(i), pz = p.getZ(i), a = Math.atan2(pz, px);
             // contorno com cristas e grotas (vários "vincos" descendo do pico) + irregularidade na altura
             const rr = py < 0.999 ? 1 + 0.2 * Math.sin(a * 3 + k) + 0.1 * Math.sin(a * 7 + k * 2) + 0.06 * Math.sin(py * 13 + a * 5)
@@ -785,7 +793,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       const WC = Object.assign({ REFLECT: true, RES: 0.5, DEEP: '#0fc9c2', SHALLOW: '#52f8e8', REFL: 0.9, DEPTH: 1.4, ABSORB: [0.5, 0.085, 0.08], BED: '#e9d7aa', LILIES: true }, CFG.WATER || {});
       const WATER_Y = 0.45, waterU = { value: 0 }, waterMeshes = [];
       const reflRT = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
-      reflRT.texture.generateMipmaps = false;
+      reflRT.texture.generateMipmaps = false; tr.disposers.push(() => reflRT.dispose());
       const wUni = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { tRefl: { value: null }, uTexMat: { value: new THREE.Matrix4() }, uRefl: { value: 0 },
         uDeep: { value: new THREE.Color(WC.DEEP) }, uShallow: { value: new THREE.Color(WC.SHALLOW) }, uSunDir: { value: new THREE.Vector3(0.45, 0.8, 0.35).normalize() } }]);
       wUni.uT = waterU; wUni.tRefl.value = reflRT.texture;
@@ -794,7 +802,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
         float wNoise(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
           return mix(mix(wHash(i), wHash(i + vec2(1.0, 0.0)), f.x), mix(wHash(i + vec2(0.0, 1.0)), wHash(i + vec2(1.0, 1.0)), f.x), f.y); }`;
       wUni.uSunCol = { value: new THREE.Color(1, 0.96, 0.88) }; wUni.uHasRT = { value: 0 }; wUni.uRefl.value = WC.REFL;
-      wUni.uSky = { value: new THREE.Color(0xbfe4ff) };   // sem textura ainda: reflete só a cor do céu (esta linha estava dentro do comentário acima e a água quebrava)
+      wUni.uSky = { value: new THREE.Color(0xbfe4ff) }; wUni.uLite = { value: 0 };   // uLite: água simples (sem cáustica nem ondinhas finas)   // sem textura ainda: reflete só a cor do céu (esta linha estava dentro do comentário acima e a água quebrava)
       const waterM = new THREE.ShaderMaterial({ uniforms: wUni, vertexColors: true, transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
         extensions: { derivatives: true },
         vertexShader: `uniform float uT; attribute vec2 flow; varying vec3 vW; varying float vEdge; varying vec2 vFlow;
@@ -806,7 +814,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
             #include <fog_vertex>
           }`,
         fragmentShader: `uniform float uT; uniform sampler2D tRefl; uniform mat4 uTexMat; uniform float uRefl; uniform vec3 uDeep; uniform vec3 uShallow;
-          uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uSky; uniform float uHasRT; uniform float uDepth; uniform vec3 uAbsorb; uniform vec3 uBed; uniform float uSRGB;
+          uniform vec3 uSunDir; uniform vec3 uSunCol; uniform vec3 uSky; uniform float uHasRT; uniform float uLite; uniform float uDepth; uniform vec3 uAbsorb; uniform vec3 uBed; uniform float uSRGB;
           vec3 toLin(vec3 c){ return uSRGB > 0.5 ? pow(max(c, 0.0), vec3(2.2)) : c; }
           vec3 toOut(vec3 c){ return uSRGB > 0.5 ? pow(max(c, 0.0), vec3(1.0 / 2.2)) : c; }
           varying vec3 vW; varying float vEdge; varying vec2 vFlow;
@@ -841,7 +849,8 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
             float t = uT, dist = length(cameraPosition - vW);
             float detail = 1.0 - smoothstep(30.0, 220.0, dist);
             vec2 p = vW.xz - vFlow * t * 0.9;
-            vec2 g = (waves(p, t) + ripple(p, t) * detail) * mix(0.5, 1.0, detail);
+            vec2 rp = uLite > 0.5 ? vec2(0.0) : ripple(p, t);
+            vec2 g = (waves(p, t) + rp * detail) * mix(0.5, 1.0, detail);
             vec3 N = normalize(vec3(-g.x * 1.4, 1.0, -g.y * 1.4));
             vec3 V = normalize(cameraPosition - vW);
             // REFRAÇÃO: o raio entra na água, entorta (índice 1,33) e acerta o fundo; profundidade maior no meio, rasa na beira
@@ -851,7 +860,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
             vec2 bxz = vW.xz + Rr.xz * path;
             vec3 under = bed(bxz, detail);
             // cáustica no fundo (mexe com o tempo; perde força com a profundidade e com a distância)
-            float ca = caustic(bxz + g * 4.0, t * 0.55 + 23.0) * 0.8 + caustic(bxz * 1.37 + 3.1, t * 0.43 + 11.0) * 0.5;
+            float ca = uLite > 0.5 ? 0.3 : caustic(bxz + g * 4.0, t * 0.55 + 23.0) * 0.8 + caustic(bxz * 1.37 + 3.1, t * 0.43 + 11.0) * 0.5;
             float sunUp = clamp(uSunDir.y * 1.3, 0.25, 1.0);
             under *= 0.82 + uSunCol * ca * 1.35 * sunUp * mix(0.35, 1.0, detail) * exp(-depth * 0.25);
             // absorção: o vermelho some primeiro -> turquesa; espalhamento soma a cor da água no fundo
@@ -878,8 +887,11 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       const BIAS = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
       function reflect(renderer, scene, camera) {
         if (!WC.REFLECT || refl.busy || !camera.isPerspectiveCamera || scene.overrideMaterial) return;   // passadas de profundidade/normal do pós-efeito: ignora
+        const wq = QS().water;
+        if (wq === 'off') { wUni.uHasRT.value = 0; refl.key = ''; return; }   // sem reflexo: não redesenha a cena (o maior custo da água)
         const m = camera.matrixWorld.elements, key = waterU.value + '|' + camera.uuid + '|' + m[8] + m[9] + m[10] + m[12] + m[13] + m[14];
         if (key === refl.key) return; refl.key = key;
+        refl.n = (refl.n || 0) + 1; if (wq === 'low' && refl.n % 2) return;   // água baixa: reflexo atualiza a cada 2 quadros
         _cp.setFromMatrixPosition(camera.matrixWorld); if (_cp.y < WATER_Y + 0.05) return;
         _rp.set(_cp.x, WATER_Y, _cp.z);
         _vw.subVectors(_rp, _cp).reflect(_up).negate().add(_rp);                                  // câmera espelhada
@@ -893,7 +905,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
         _clip.set(_pl.normal.x, _pl.normal.y, _pl.normal.z, _pl.constant); const P = vc.projectionMatrix.elements;
         _q.set((Math.sign(_clip.x) + P[8]) / P[0], (Math.sign(_clip.y) + P[9]) / P[5], -1, (1 + P[10]) / P[14]);
         _clip.multiplyScalar(2 / _clip.dot(_q)); P[2] = _clip.x; P[6] = _clip.y; P[10] = _clip.z + 1; P[14] = _clip.w;
-        renderer.getDrawingBufferSize(_sz); const w = Math.max(16, Math.floor(_sz.x * WC.RES)), h = Math.max(16, Math.floor(_sz.y * WC.RES));
+        renderer.getDrawingBufferSize(_sz); const rs = wq === 'low' ? Math.min(WC.RES, 0.25) : WC.RES, w = Math.max(16, Math.floor(_sz.x * rs)), h = Math.max(16, Math.floor(_sz.y * rs));
         if (reflRT.width !== w || reflRT.height !== h) reflRT.setSize(w, h);
         { const cur = renderer.getRenderTarget(); reflRT.texture.encoding = cur ? cur.texture.encoding : renderer.outputEncoding; }   // mesmo espaço de cor da passada principal
         const prevRT = renderer.getRenderTarget(), prevXr = renderer.xr.enabled, prevSh = renderer.shadowMap.autoUpdate;
@@ -912,7 +924,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
         if (sunL) { wUni.uSunDir.value.subVectors(sunL.position, sunL.target.position).normalize(); wUni.uSunCol.value.copy(sunL.color).multiplyScalar(Math.min(1.4, sunL.intensity * 1.1)); }
         if (scene.fog && scene.fog.color) wUni.uSky.value.copy(scene.fog.color); };
       const waterMesh = g => { const o = new THREE.Mesh(g, waterM); o.userData.noOutline = true;
-        o.onBeforeRender = (r, sc, cam) => { if (!sc.overrideMaterial) syncSun(sc); const rtg = r.getRenderTarget();
+        o.onBeforeRender = (r, sc, cam) => { if (!sc.overrideMaterial) syncSun(sc); wUni.uLite.value = QS().water === 'high' ? 0 : 1; const rtg = r.getRenderTarget();
           wUni.uSRGB.value = (rtg ? rtg.texture.encoding : r.outputEncoding) === THREE.sRGBEncoding ? 1 : 0; reflect(r, sc, cam); }; waterMeshes.push(o); return o; };
       const bankM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('sand')), side: THREE.DoubleSide }), bedM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('pebble')), side: THREE.DoubleSide });
       const dcol = e => new THREE.Color(e, e, e);                                         // cor de vértice da água = quanto perto da margem (o shader pinta)
@@ -1046,7 +1058,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
           const d = z - f, cliff = behind * (1 - THREE.MathUtils.smoothstep(d, 0, 0.9));                   // face quase vertical
           const talus = Math.min(behind, 9) * (1 - THREE.MathUtils.smoothstep(d, 0, 11)) * THREE.MathUtils.smoothstep(Math.abs(x), 13, 20);   // pedras no pé (fora do poço)
           return Math.max(cliff, talus); };
-        { const X0 = -82, X1 = 82, Z0 = -112, Z1 = 26, CS = 1.0, nx = Math.ceil((X1 - X0) / CS), nz = Math.ceil((Z1 - Z0) / CS), pos = [], col = [], idx = [];
+        { const X0 = -82, X1 = 82, Z0 = -112, Z1 = 26, CS = LO ? 2.0 : MID ? 1.4 : 1.0, nx = Math.ceil((X1 - X0) / CS), nz = Math.ceil((Z1 - Z0) / CS), pos = [], col = [], idx = [];
           for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = X0 + i * CS, z = Z0 + j * CS + zf(x), h = hillH(x, z);   // linhas da malha seguem a curva da face: sem degraus/listras verticais no penhasco
             pos.push(x, h > 0.05 ? h - 1.2 : -2.5, z); col.push(Math.min(1, h / HM), 0, 1); }
           for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
@@ -1074,7 +1086,9 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
         // (4) espuma/aeração que cresce na queda e fica densa no pé.
         const grab = { tex: null, w: 0, h: 0, key: '', ok: true, v: new THREE.Vector2(), o: new THREE.Vector2() };
         const grabU = { tGrab: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uHasGrab: { value: 0 } };
+        tr.disposers.push(() => { if (grab.tex) grab.tex.dispose(); });
         const doGrab = (renderer, scene, camera) => {
+          if (QS().water !== 'high') { grabU.uHasGrab.value = 0; return; }   // água média/baixa: sem cópia da tela (usa a pedra molhada)
           if (!grab.ok || scene.overrideMaterial || refl.busy) return;
           const key = waterU.value + '|' + camera.uuid; if (key === grab.key) return; grab.key = key;
           const rt = renderer.getRenderTarget();
@@ -1269,8 +1283,8 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
           return { sp, low, life: low ? 8 + rnd() * 4 : 5 + rnd() * 3, ph: rnd(), x0: (rnd() - 0.5) * (low ? FW * 1.3 : FW * 0.95), z0: fogZ + (rnd() - 0.5) * 3,
             vx: (rnd() - 0.5) * (low ? 7 : 5), vy: low ? 0.4 + rnd() * 0.6 : 3 + rnd() * 3, vz: low ? 3 + rnd() * 3 : 1.5 + rnd() * 2.5, s0: low ? 6 : 3, s1: low ? 26 + rnd() * 8 : 15 + rnd() * 8,
             rot: (rnd() - 0.5) * 0.5, a: low ? 0.3 : 0.38, seed: rnd() * 100 }; };
-        for (let k = 0; k < 64; k++) puffs.push(mkPuff(false));                                      // névoa que sobe do impacto
-        for (let k = 0; k < 22; k++) puffs.push(mkPuff(true));                                       // névoa rasteira, colada na água
+        for (let k = 0; k < (LO ? 16 : MID ? 36 : 64); k++) puffs.push(mkPuff(false));                                      // névoa que sobe do impacto
+        for (let k = 0; k < (LO ? 6 : MID ? 12 : 22); k++) puffs.push(mkPuff(true));                                       // névoa rasteira, colada na água
         const _pv = new THREE.Vector3();
         tr.animated.push(t => { for (const q of puffs) {
           const age = ((t / q.life + q.ph) % 1), tau = age * q.life, k = 0.45, dr = (1 - Math.exp(-k * tau)) / k;   // arrasto: desacelera
@@ -1281,7 +1295,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
           q.sp.material.rotation = q.seed + tau * q.rot;
           q.sp.userData.op = q.a * Math.pow(Math.sin(Math.PI * age), 0.9); q.sp.material.opacity = q.sp.userData.op; } });
         // respingos: gotículas (pontos) que saltam do impacto em parábola e caem de volta
-        { const ND = 220, pos = new Float32Array(ND * 3), D = Array.from({ length: ND }, () => ({ ph: rnd(), life: 0.9 + rnd() * 0.9, x: (rnd() - 0.5) * FW * 0.95, z: fogZ - 0.6 + (rnd() - 0.5) * 2.5,
+        { const ND = LO ? 60 : MID ? 130 : 220, pos = new Float32Array(ND * 3), D = Array.from({ length: ND }, () => ({ ph: rnd(), life: 0.9 + rnd() * 0.9, x: (rnd() - 0.5) * FW * 0.95, z: fogZ - 0.6 + (rnd() - 0.5) * 2.5,
             vx: (rnd() - 0.5) * 7, vy: 4 + rnd() * 7, vz: 0.5 + rnd() * 6 }));
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
           const dc = TX.cvs(32, 32), dg = dc.getContext('2d'), gr = dg.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.45, 'rgba(240,255,255,0.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); dg.fillStyle = gr; dg.fillRect(0, 0, 32, 32);
@@ -1313,7 +1327,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       // domos de pedra com relevo irregular; cor de vértice esverdeada nas partes mais altas/planas
       const mountM = mountainMat();
       MOUNTS.forEach((M, k) => {
-        const g = new THREE.SphereGeometry(1, 64, 28, 0, Math.PI * 2, 0, Math.PI / 2), p = g.attributes.position, col = [];
+        const g = new THREE.SphereGeometry(1, LO ? 28 : MID ? 44 : 64, LO ? 12 : MID ? 20 : 28, 0, Math.PI * 2, 0, Math.PI / 2), p = g.attributes.position, col = [];
         for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i), a = Math.atan2(z, x);
           const n = 1 + (y < 0.999 ? 0.07 * Math.sin(a * 5 + k) * Math.sin(y * 7) + 0.05 * Math.sin(a * 11 + y * 9 + k * 2) : 0);
           p.setXYZ(i, x * n, y * (1 + 0.06 * Math.sin(a * 3 + k)), z * n);
@@ -1399,7 +1413,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       const nearBridge = i => bridges.some(b => { const d = Math.abs(((i - b) % N + N + N / 2) % N - N / 2); return d <= BR.END + 2; });
       if (tr.vert) {
         const terrM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true }));
-        { const pad = 420, x0 = L.bbox.x0 - pad, x1 = L.bbox.x1 + pad, z0 = L.bbox.z0 - pad, z1 = L.bbox.z1 + pad, CELL = 12;
+        { const pad = 420, x0 = L.bbox.x0 - pad, x1 = L.bbox.x1 + pad, z0 = L.bbox.z0 - pad, z1 = L.bbox.z1 + pad, CELL = LO ? 20 : MID ? 15 : 12;
           const nx = Math.ceil((x1 - x0) / CELL), nz = Math.ceil((z1 - z0) / CELL), pos = new Float32Array((nx + 1) * (nz + 1) * 3), uv = new Float32Array((nx + 1) * (nz + 1) * 2), col = new Float32Array(pos.length), idx = [];
           for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = x0 + i * CELL, z = z0 + j * CELL, k = j * (nx + 1) + i, r = roadInfo(x, z);
             let h = gH(x, z, r);
@@ -1495,7 +1509,7 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
       plants('round', lists.round, 0x4fae3a); plants('round', lists.dark, 0x2f8a35); plants('pine', lists.pine, 0x2a7a3a); plants('round', lists.autumn, 0xe8892f); plants('bush', lists.bush, 0x3f9e2c);
       // ---- tufos de grama ----
       { const tuftG = new THREE.ConeGeometry(0.3, 1.5, 4); tuftG.translate(0, 0.75, 0); const dm = new THREE.Object3D();
-        [0x45782c, 0x5f8e3c].forEach(col => /* tufos no mesmo tom da grama */ { const cnt = 1600, im = new THREE.InstancedMesh(tuftG, GfxFX.foliage(new THREE.MeshLambertMaterial({ color: col, flatShading: true }), { amp: 0.14, h0: 0.0, freq: 1.9, ao: [0.55, 0.0, 1.4] }), cnt); let n = 0;
+        [0x45782c, 0x5f8e3c].forEach(col => /* tufos no mesmo tom da grama */ { const cnt = LO ? 400 : MID ? 900 : 1600, im = new THREE.InstancedMesh(tuftG, GfxFX.foliage(new THREE.MeshLambertMaterial({ color: col, flatShading: true }), { amp: 0.14, h0: 0.0, freq: 1.9, ao: [0.55, 0.0, 1.4] }), cnt); let n = 0;
           for (let t = 0; n < cnt && t < cnt * 8; t++) { let x, z; if (rnd() < 0.6) { const q = side(Math.floor(rnd() * N), (rnd() > 0.5 ? 1 : -1) * (W + 5.5 + rnd() * 30), 0); x = q.x; z = q.z; } else { x = (rnd() - 0.5) * 800; z = (rnd() - 0.5) * 800; }
             if (nearTrack({ x, z }, W + 5) || !okSpot(x, z, 2)) continue;
             for (let k = 0; k < 3 && n < cnt; k++) { { const tx = x + (rnd() - 0.5) * 1.4, tz = z + (rnd() - 0.5) * 1.4; dm.position.set(tx, gy(tx, tz) - 0.05, tz); }; dm.rotation.set((rnd() - 0.5) * 0.3, rnd() * 6.28, (rnd() - 0.5) * 0.3); dm.scale.set(0.7 + rnd() * 0.8, 0.6 + rnd(), 0.7 + rnd() * 0.8); dm.updateMatrix(); im.setMatrixAt(n++, dm.matrix); } }
@@ -1608,9 +1622,9 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
           // pedras: grupinhos irregulares na beira, algumas meio enterradas
           const rocks = [], flowers = [], tufts = [], shrooms = [];
           for (let k = 2; k < n - 2; k++) [-1, 1].forEach(sd => {
-            if (rnd() < 0.22) { const q = edgePt(k, sd * (hw + 0.6 + rnd() * 2.6)); if (q) { const nR = 1 + (rnd() * 3 | 0);
+            if (rnd() < 0.22 * LIFEK) { const q = edgePt(k, sd * (hw + 0.6 + rnd() * 2.6)); if (q) { const nR = 1 + (rnd() * 3 | 0);
               for (let j = 0; j < nR; j++) rocks.push({ x: q.x + (rnd() - 0.5) * 1.2, z: q.z + (rnd() - 0.5) * 1.2, y: q.y, s: 0.18 + rnd() * 0.45, r: rnd() * 6.28, c: [0x8d8781, 0x7a736c, 0xa39b90, 0x6c6863][rnd() * 4 | 0] }); } }
-            if (rnd() < 0.55) { const q = edgePt(k, sd * (EW * 0.86 + rnd() * 3.5)); if (q) {
+            if (rnd() < 0.55 * LIFEK) { const q = edgePt(k, sd * (EW * 0.86 + rnd() * 3.5)); if (q) {
               for (let j = 0; j < 4; j++) tufts.push({ x: q.x + (rnd() - 0.5) * 1.6, z: q.z + (rnd() - 0.5) * 1.6, y: q.y, s: 0.6 + rnd() * 0.7, r: rnd() * 6.28, c: rnd() < 0.5 ? 0x4f8a30 : 0x6a9a3a });
               if (rnd() < 0.7) { const pal = [0xff5a8a, 0xffd23f, 0xffffff, 0xb56cff, 0xff8a3d, 0x6ac8ff][rnd() * 6 | 0];
                 for (let j = 0; j < 3 + (rnd() * 4 | 0); j++) flowers.push({ x: q.x + (rnd() - 0.5) * 1.8, z: q.z + (rnd() - 0.5) * 1.8, y: q.y, s: 0.8 + rnd() * 0.6, h: 0.35 + rnd() * 0.35, c: pal }); } } }
@@ -1635,8 +1649,8 @@ console.info('%c[tracks.js] versão miolo-livre-3 (asfalto compila em qualquer m
               const dx = q.tz * toPath, dz = -q.tx * toPath; grp.rotation.y = Math.atan2(-dz, dx); grp.position.set(q.x, q.y, q.z); add(grp);
               const gl = glowSpr(0xffb35a, 3.2, 0.9); gl.position.set(q.x + dx * 0.68, q.y + 2.06, q.z + dz * 0.68); LIFE.flick.push(gl);
               tr.obstacles.push({ x: q.x, z: q.z, r: 0.22 }); }); }
-          // vaga-lumes (à noite) e borboletas (de dia) voando sobre o atalho
-          { const NFF = 46, ffBase = [], fpos = new Float32Array(NFF * 3);
+          // vaga-lumes (à noite) e borboletas (de dia) voando sobre o atalho (fora no detalhe baixo)
+          if (!LO) { const NFF = 46, ffBase = [], fpos = new Float32Array(NFF * 3);
             for (let j = 0; j < NFF; j++) { const k = 2 + (rnd() * (n - 4) | 0), [tx, tz] = frameAt(k), o = (rnd() - 0.5) * (EW * 2 + 6);
               ffBase.push({ x: P[k].x + tz * o, z: P[k].z - tx * o, y: sc.h[k] + 0.5 + rnd() * 2.2, ph: rnd() * 6.28, sp: 0.4 + rnd() * 0.7 }); }
             const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.BufferAttribute(fpos, 3));

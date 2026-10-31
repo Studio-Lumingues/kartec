@@ -10,7 +10,9 @@
   const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
 
   // ---------------- renderizador e câmera ----------------
-  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  // sem MSAA na tela quando o pós-efeito está ligado: a cena é desenhada numa textura e o FXAA faz o antisserrilhado;
+  // o MSAA da tela só recebia o quadro final e gastava ~4x a memória da tela à toa (dezenas a centenas de MB em telas grandes)
+  const renderer = new THREE.WebGLRenderer({ antialias: (CFG.GFX || {}).POSTFX === false, powerPreference: 'high-performance' });
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;   // PCF simples: bem mais leve que o Soft
   document.body.prepend(renderer.domElement);
@@ -501,6 +503,7 @@
       if (window.Items) Items.dispose();                              // tira caixas/itens da cena antes de limpar geometrias
       (this.karts || []).forEach(k => k && !k._handedOff && k.m.pilot && k.m.pilot.dispose());
       if (this.fill) { this.fill.dispose(); this.fill = null; }
+      if (this.track && this.track.dispose) this.track.dispose();      // texturas de reflexo/refração da água da pista (render targets)
       const keep = new Set([Fx.glowTex(), Fx.softTex(), Fx.puffTex(), Fx.starTex(), Toon.gradient()].concat(window.Smoke ? Smoke.textures() : []));   // texturas da fumaça são reaproveitadas entre corridas
       if (this.player) this.player.m.group.traverse(o => { if (o.material && o.material.map) keep.add(o.material.map); if (o.material && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); });
       (this.rivals || []).forEach(b => b.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); }));
@@ -949,7 +952,7 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) { this.cullTrack(); if (postFX && postFX.ok && !this.lite) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+      else if (this.scene) { this.cullTrack(); if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
       if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
     },
     // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa
@@ -1267,7 +1270,7 @@
   // resolução adaptativa: mede o tempo médio de quadro e ajusta o pixelRatio entre DPR_MIN e DPR_MAX.
   // Só reage a lentidão SEGUIDA (2 janelas de 2 s) e ignora travadinhas isoladas e o tempo com a aba escondida;
   // quando o aparelho volta a dar conta, a resolução sobe de novo (e o modo leve sai sozinho).
-  let last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0, slowWin = 0, fastWin = 0, liteOffAt = -1e9;
+  let lastDraw = 0, last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0, slowWin = 0, fastWin = 0, liteOffAt = -1e9;
   renderer.setPixelRatio(dpr);
   const resetPerf = () => { last = performance.now(); acc = 0; cnt = 0; slowWin = 0; fastWin = 0; };
   document.addEventListener('visibilitychange', resetPerf);   // trocar de aba/voltar não conta como "jogo lento"
@@ -1275,13 +1278,18 @@
   window.addEventListener('blur', resetPerf);
   const safe = (name, fn) => { try { fn(); } catch (e) { if (errs++ < 20) console.error('[' + name + ']', e); } };
   function loop(now) {
-    try { inkFixTick(1 / 60); } catch (e) { }
     requestAnimationFrame(loop);
+    // limite de FPS (configurações): pula este quadro se ainda não deu o tempo
+    const cap = window.Settings ? Settings.fpsCap() : 0;
+    if (cap && now - lastDraw < 1000 / cap - 1.5) return;
+    lastDraw = now;
+    try { inkFixTick(1 / 60); } catch (e) { }
     const raw = Math.max(0, (now - last) / 1000) || 0, dt = Math.min(0.05, raw); last = now;
     // quadros muito longos (aba escondida, travada de carregamento) não entram na média; os demais valem no máximo 50 ms
     if (Game.scene && !document.hidden && raw < 0.25) { acc += Math.min(raw, 0.05); cnt++;
       if (acc > 2) { const avg = acc / cnt * 1000; acc = 0; cnt = 0;
-        slowWin = avg > 24 ? slowWin + 1 : 0; fastWin = avg < 17.5 ? fastWin + 1 : 0;
+        const bud = cap ? Math.max(16.7, 1000 / cap) : 16.7;   // com limite de FPS, "lento" é em relação ao limite
+        slowWin = avg > bud * 1.44 ? slowWin + 1 : 0; fastWin = avg < bud * 1.05 ? fastWin + 1 : 0;
         const fixed = window.Settings ? Settings.fixedDpr() : 0;   // resolução escolhida nas configurações (0 = automática)
         const auto = !window.Settings || Settings.autoPerf();
         const maxD = Math.min(window.Settings ? Settings.dprMax() : CFG.PERF.DPR_MAX, devicePixelRatio);
@@ -1289,11 +1297,11 @@
         let target = dpr;
         if (fixed) target = fixed;
         else if (slowWin >= 2 && !atMin) { target = Math.max(CFG.PERF.DPR_MIN, dpr - 0.15); slowWin = 1; }
-        else if (avg < 18.5 && dpr < maxD) target = Math.min(maxD, dpr + 0.1);
+        else if (avg < bud * 1.1 && dpr < maxD) target = Math.min(maxD, dpr + 0.1);
         if (Math.abs(target - dpr) > 0.01) { dpr = target; renderer.setPixelRatio(dpr); }
         if (!fixed && auto) {
           // aparelho muito fraco: já na resolução mínima e ainda lento por 6 s seguidos -> sem contornos de tinta
-          if (atMin && avg > 26 && slowWin >= 3 && !Game.lite && now - liteOffAt > 60000) Game.setLite(true);
+          if (atMin && avg > bud * 1.56 && slowWin >= 3 && !Game.lite && now - liteOffAt > 60000) Game.setLite(true);
           // voltou a render rápido por 6 s seguidos: contornos de volta
           else if (Game.lite && fastWin >= 3 && dpr >= Math.min(maxD, 1.0)) { Game.setLite(false); liteOffAt = now; fastWin = 0; }
         } } }
@@ -1353,5 +1361,5 @@
     grayHudNumbers(el);
     new MutationObserver(list => list.forEach(r => { r.addedNodes.forEach(n => { if (n.nodeType === 1) grayHudNumbers(n); }); if (r.target !== el) grayHudNumbers(r.target.nodeType === 1 ? r.target : null); })).observe(el, { childList: true, subtree: true });
   });
-  window.__kart = { Game, Env, Showroom, Intro, renderer, camera, boot };
+  window.__kart = { Game, Env, Showroom, Intro, renderer, camera, boot, postFX };
 })();

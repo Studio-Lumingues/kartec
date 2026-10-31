@@ -326,9 +326,19 @@
       }
       return canvases[name];
     },
+    // MASSINHA (configurações): superfícies viram cor lisa (a média da textura num canvas 4x4). Fica com cara de massinha,
+    // quase não usa memória de vídeo e é o mais leve possível. Só os pisos e materiais; faixas, placas, zebras e partículas ficam.
+    flat: false,
+    FLAT: { grass: 1, asphalt: 1, sand: 1, pebble: 1, rock: 1, leaf: 1, bark: 1, concrete: 1, wood: 1 },
+    flatCanvas(name) { const k = name + ':flat';
+      if (!canvases[k]) { const src = this.canvas(name), c = cvs(4, 4), g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+        g.drawImage(src, 0, 0, src.width, src.height, 0, 0, 4, 4); const d = g.getImageData(0, 0, 4, 4).data; let r = 0, gg = 0, b = 0;
+        for (let i = 0; i < 64; i += 4) { r += d[i]; gg += d[i + 1]; b += d[i + 2]; } g.fillStyle = 'rgb(' + (r / 16 | 0) + ',' + (gg / 16 | 0) + ',' + (b / 16 | 0) + ')'; g.fillRect(0, 0, 4, 4);
+        canvases[k] = c; }
+      return canvases[k]; },
     // devolve uma textura nova (compartilha o canvas) com repetição própria
     get(name, rx, ry, opts) {
-      const t = new THREE.CanvasTexture(this.canvas(name));
+      const t = new THREE.CanvasTexture(this.flat && this.FLAT[name] ? this.flatCanvas(name) : this.canvas(name));
       t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(rx || 1, ry || 1);
       t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.anisotropy = this.aniso;
       if (opts && opts.clamp) { t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; }

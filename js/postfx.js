@@ -160,8 +160,9 @@
           const prev = renderer.getRenderTarget();
           renderer.setRenderTarget(rtS); renderer.render(scene, camera);
           // brilho: passa-alta em 1/4 da tela, desfoca; depois 1/8 da tela, desfoca de novo (halo mais largo)
-          mBright.uniforms.tSrc.value = rtS.texture; mBright.uniforms.tDep.value = rtS.depthTexture || null; pass(mBright, b1a); blur(b1a, b1b, 2);
-          mBlur.uniforms.tSrc.value = b1a.texture; mBlur.uniforms.uDir.value.set(0, 0); pass(mBlur, b2a); blur(b2a, b2b, 3);
+          // (brilho desligado = pula as 7 passadas do brilho)
+          if (O.bloom > 0.001) { mBright.uniforms.tSrc.value = rtS.texture; mBright.uniforms.tDep.value = rtS.depthTexture || null; pass(mBright, b1a); blur(b1a, b1b, 2);
+            mBlur.uniforms.tSrc.value = b1a.texture; mBlur.uniforms.uDir.value.set(0, 0); pass(mBlur, b2a); blur(b2a, b2b, 3); }
           // raios de sol: só quando o sol está na frente da câmera (e some suave quando ele sai da tela)
           const SK = fx.sky; let rayK = 0;
           if (hasDep && O.rays > 0 && SK.col.r + SK.col.g + SK.col.b > 0.02) {

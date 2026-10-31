@@ -8,17 +8,24 @@
   const $ = id => document.getElementById(id);
   const KEY = () => CFG.STORAGE + ':settings';
   // predefinições de gráficos
+  // MASSINHA: o mínimo possível para PC/celular fraco (meia resolução, sem sombra, sem pós-efeito, sem reflexo,
+  // texturas viram cor lisa, pouca coisa no cenário, visão curta). ULTRA: o máximo (sombra 4096, cenário mais cheio).
   const PRESETS = {
-    auto:   { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far' },
-    low:    { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near' },
-    medium: { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium' },
-    high:   { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far' }
+    auto:     { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' },
+    massinha: { res: '0.5',  shadows: 'off',    outlines: false, scenery: 'min',    particles: 'min',    view: 'veryNear', postfx: 'off',    water: 'off',  detail: 'low',    textures: 'flat', fpsCap: '60' },
+    low:      { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near',     postfx: 'simple', water: 'low',  detail: 'low',    textures: 'full', fpsCap: '60' },
+    medium:   { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium',   postfx: 'simple', water: 'low',  detail: 'medium', textures: 'full', fpsCap: '0' },
+    high:     { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' },
+    ultra:    { res: '2',    shadows: 'ultra',  outlines: true,  scenery: 'ultra',  particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' }
   };
   const DEF = { vol: { master: 80, engine: 70, sfx: 80, ui: 60, amb: 50 },
     gfx: Object.assign({ preset: 'auto', speedFx: true, shake: true, fps: false }, PRESETS.auto) };
-  const SHADOW = { off: 0, low: 512, medium: 1024, high: 2048 };
-  const DENS = { low: 0.35, medium: 0.65, high: 1 };
-  const VIEW = { near: 0.62, medium: 0.82, far: 1 };
+  const SHADOW = { off: 0, low: 512, medium: 1024, high: 2048, ultra: 4096 };
+  const DENS = { min: 0.15, low: 0.35, medium: 0.65, high: 1, ultra: 1.35 };
+  const VIEW = { veryNear: 0.45, near: 0.62, medium: 0.82, far: 1 };
+  const PARTS = { min: 0.15, low: 0.45, normal: 1 };
+  // opções que fazem a predefinição virar "Personalizada" quando mexidas
+  const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap'];
 
   const Settings = {
     s: null,
@@ -35,12 +42,23 @@
     dprMax() { return this.s.gfx.res === 'auto' ? CFG.PERF.DPR_MAX : this.fixedDpr(); },
     sceneryDensity() { return DENS[this.s.gfx.scenery] || 1; },
     viewMul() { return VIEW[this.s.gfx.view] || 1; },
+    // usados pela pista (tracks.js): detalhe da geometria (ao carregar) e qualidade da água (na hora)
+    q() { const g = this.s ? this.s.gfx : DEF.gfx; return { water: g.water || 'high', detail: g.detail || 'high' }; },
+    fpsCap() { return +(this.s && this.s.gfx.fpsCap) || 0; },                   // 0 = sem limite (acompanha a tela)
+    postfxMode() { return (this.s && this.s.gfx.postfx) || 'full'; },
     // ---------- aplicação ----------
     apply() {
       const g = this.s.gfx;
       if (window.Sfx) Sfx.setVolumes(this.s.vol);
       // partículas
-      if (window.Fx) Fx.rate = g.particles === 'low' ? 0.45 : 1;
+      if (window.Fx) Fx.rate = PARTS[g.particles] || 1;
+      // texturas lisas (Massinha): vale para o que for montado depois (próxima pista)
+      if (window.TX) TX.flat = g.textures === 'flat';
+      // pós-efeito: completo, simples (só cor + FXAA, sem sombra de contato, brilho e raios de sol) ou desligado
+      const pf = window.__kart && __kart.postFX;
+      if (pf && pf.opts) { if (!pf.base) pf.base = Object.assign({}, pf.opts);
+        Object.assign(pf.opts, pf.base);
+        if (g.postfx === 'simple') Object.assign(pf.opts, { ao: 0, bloom: 0, rays: 0, scatter: 0 }); }
       // sombras: tamanho do mapa e liga/desliga (muda os shaders -> materiais precisam recompilar)
       const sz = SHADOW[g.shadows], R = window.__kart && __kart.renderer;
       CFG.PERF.SHADOW_MAP = sz || 512;
@@ -109,13 +127,19 @@
       const opt = (id, label, items, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '">' + items.map(([v, t]) => '<button type="button" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>';
       const tog = (id, label, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '"><button type="button" data-v="1">Ligado</button><button type="button" data-v="0">Desligado</button></div></div>';
       $('setGfx').innerHTML =
-        opt('preset', 'Qualidade', [['auto', 'Automática'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['custom', 'Personalizada']], 'Automática ajusta a resolução sozinha para manter o jogo liso') +
-        opt('res', 'Resolução', [['auto', 'Auto'], ['0.75', '75%'], ['1', '100%'], ['1.5', 'Máxima']]) +
-        opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta']]) +
+        opt('preset', 'Qualidade', [['auto', 'Automática'], ['massinha', 'Massinha'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra'], ['custom', 'Personalizada']],
+          'Massinha: o mais leve possível, para PC ou celular fraco. Automática ajusta a resolução sozinha') +
+        opt('res', 'Resolução', [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%'], ['1.5', '150%'], ['2', 'Máxima']], 'O que mais pesa: menor = mais FPS e menos memória') +
+        opt('fpsCap', 'Limite de FPS', [['30', '30'], ['60', '60'], ['0', 'Livre']], 'Limitar esquenta menos e gasta menos bateria') +
+        opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']]) +
+        opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Completo: sombra de contato, brilho e raios de sol. Simples: só cor e antisserrilhado') +
+        opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo total']], 'O reflexo redesenha a cena: desligar ganha muito FPS perto do rio') +
         tog('outlines', 'Contornos de desenho', 'Traço escuro em volta dos karts e objetos') +
-        opt('scenery', 'Cenário', [['low', 'Leve'], ['medium', 'Médio'], ['high', 'Completo']], 'Vale a partir da próxima corrida') +
-        opt('particles', 'Partículas', [['low', 'Poucas'], ['normal', 'Normais']]) +
-        opt('view', 'Distância de visão', [['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
+        opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Montanhas, terreno, névoa da cachoeira e enfeites. Vale na próxima corrida') +
+        opt('textures', 'Texturas', [['flat', 'Massinha (cor lisa)'], ['full', 'Detalhadas']], 'Vale na próxima corrida') +
+        opt('scenery', 'Cenário', [['min', 'Mínimo'], ['low', 'Leve'], ['medium', 'Médio'], ['high', 'Completo'], ['ultra', 'Ultra']], 'Árvores e enfeites até o horizonte. Vale na próxima corrida') +
+        opt('particles', 'Partículas', [['min', 'Mínimas'], ['low', 'Poucas'], ['normal', 'Normais']]) +
+        opt('view', 'Distância de visão', [['veryNear', 'Muito curta'], ['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
         tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS');
       // abas
       $('setTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => this.tab(b.dataset.v)));
@@ -127,7 +151,7 @@
       $('setGfx').querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
         const id = seg.dataset.g, v = b.dataset.v, g = this.s.gfx;
         if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; }
-        else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (['res', 'shadows', 'outlines', 'scenery', 'particles', 'view'].includes(id)) g.preset = 'custom'; }
+        else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (GFX_KEYS.includes(id)) g.preset = 'custom'; }
         this.save(); this.apply(); this.sync(); })));
       $('setReset').addEventListener('click', () => { this.s = JSON.parse(JSON.stringify(DEF)); this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
       $('btnSettings').addEventListener('click', () => this.open());
