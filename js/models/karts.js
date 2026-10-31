@@ -263,7 +263,12 @@
       // anima volante, rodas dianteiras visuais e piloto. st = { steer, speed(0..1), boost, drift, air }
       animate(dt, st) {
         const sr = k.steer; if (sr) { const a = (st.steer || 0) * sr.k; if (sr.axis === 'z') sr.spin.rotation.z = a; else { sr.spin.rotation.y = a; if (sr.fork) sr.fork.rotation.y = a; } }
-        if (pilot) pilot.update(dt, st);
+        // LOD do piloto (m.lod, definido pelo main.js > kartCull): 0 = todo quadro, 1 = a cada 2, 2 = a cada 4, 3 = fora da tela (parado).
+        // O IK de braços e pernas é o que mais pesa por kart; longe ninguém percebe a animação em passos.
+        if (pilot) { const L = this.lod || 0; this._pacc = Math.min(0.25, (this._pacc || 0) + dt);
+          if (L >= 3) return;
+          if (L > 0 && (this._pf = ((this._pf || 0) + 1) % (L === 1 ? 2 : 4)) !== 0) return;
+          pilot.update(this._pacc, st); this._pacc = 0; }
       },
       setNight(nf) { KartMats.setEnvLevel(group, 1 - 0.75 * nf); },
       dispose() { if (pilot) pilot.dispose(); disposeTree(group); }

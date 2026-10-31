@@ -5,7 +5,7 @@
 //    cenário do tema 'classic' (grama, rio com pontes, cachoeira, lagos). As pistas Cidade e Praia foram
 //    removidas. Devolve o objeto "track" usado pela física e pela IA.
 // =====================================================================================
-console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
+console.info('%c[tracks.js] versão agua-antiga-2 (mais escura, sem brilho à noite, sem pedrinhas)', 'color:#0bb;font-weight:bold');   // se esta linha não aparecer no console, o navegador está usando um tracks.js antigo
 (function () {
   // ===================================================================================
   // GfxFX — melhorias gráficas compartilhadas (usadas aqui e no scenery.js)
@@ -14,6 +14,9 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
   //  * foliage(mat, o): vento nas árvores/arbustos/grama + sombreamento de oclusão (base escura, copa clara)
   // Todas as trocas de shader têm customProgramCacheKey próprio (senão o three.js reaproveita o programa errado).
   // ===================================================================================
+  // construtor original do Phong, guardado ANTES de qualquer Toon.during (que troca os materiais da pista por toon de 3 tons).
+  // As montanhas usam este: com o toon, cada ondulação da rocha virava uma faixa escura de borda dura ("cortadinho").
+  const PHONG_ORIG = THREE.MeshPhongMaterial;
   const GfxFX = window.GfxFX = {
     windU: { value: 0 },
     aniso(t, n) { if (t && t.isTexture && t.anisotropy < (n || 8)) { t.anisotropy = n || 8; t.needsUpdate = true; } return t; },
@@ -118,6 +121,109 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
     bush() { const parts = []; [[0, 0.8, 0, 1.2], [0.9, 0.6, 0.3, 0.85], [-0.8, 0.65, -0.2, 0.9]].forEach(a => { const g = new THREE.IcosahedronGeometry(a[3], 1); g.translate(a[0], a[1], a[2]); parts.push({ g, grp: 0 }); }); return mergeParts(parts); }
   };
 
+
+  // ===================================================================================
+  // ARBUSTO (Bush): moita de folhagem com aparência natural, usada na beira da pista (plants) e no cenário (scenery.js)
+  //  * miolo: 9 "tufos" de folhagem irregulares (ruído 3D deforma cada esfera), escuros por dentro e na base;
+  //  * casca de folhas: ~110 cartões com cachos de folhas recortados (alphaTest) espalhados pela superfície, cada um
+  //    virado para fora com inclinação e giro aleatórios -> silhueta rendada, folhas soltas, sem cara de bola de massinha;
+  //  * normais apontando para fora do centro da moita: luz macia e volumosa (cartões não "piscam" com a luz);
+  //  * cor por vértice: verde mais escuro e frio embaixo/dentro, pontas mais claras e amareladas no topo;
+  //  * uma textura só (atlas 512x256: cacho recortado + folhagem densa) e UM material -> 1 chamada de desenho por lote.
+  // ===================================================================================
+  const Bush = (() => {
+    let tex = null, geo = {}, srand = 1;
+    const rr = () => { srand = (srand * 16807) % 2147483647; return srand / 2147483647; };
+    // ruído 3D suave (valor) para deformar os tufos
+    const hh = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+    const vn = (x, y, z) => { const i = Math.floor(x), j = Math.floor(y), k = Math.floor(z); let a = x - i, b = y - j, c = z - k; a = a * a * (3 - 2 * a); b = b * b * (3 - 2 * b); c = c * c * (3 - 2 * c);
+      const L = (p, q, t) => p + (q - p) * t;
+      return L(L(L(hh(i, j, k), hh(i + 1, j, k), a), L(hh(i, j + 1, k), hh(i + 1, j + 1, k), a), b), L(L(hh(i, j, k + 1), hh(i + 1, j, k + 1), a), L(hh(i, j + 1, k + 1), hh(i + 1, j + 1, k + 1), a), b), c); };
+    function texture() {
+      if (tex) return tex; srand = 77;
+      const c = document.createElement('canvas'); c.width = 512; c.height = 256; const g = c.getContext('2d');
+      // folha: elipse pontuda com nervura; tons claros (a cor verde vem do vértice/instância, a textura dá forma e luz)
+      const leaf = (x, y, len, wid, ang, lum) => { g.save(); g.translate(x, y); g.rotate(ang);
+        const gr = g.createLinearGradient(0, -wid, 0, wid); const l1 = Math.round(lum * 255), l0 = Math.round(lum * 0.72 * 255);
+        gr.addColorStop(0, `rgb(${l0},${l1},${l0})`); gr.addColorStop(0.5, `rgb(${l1},${l1},${Math.round(l1 * 0.9)})`); gr.addColorStop(1, `rgb(${Math.round(l0 * 0.85)},${l0},${Math.round(l0 * 0.8)})`);
+        g.fillStyle = gr; g.beginPath(); g.moveTo(0, 0); g.bezierCurveTo(len * 0.3, -wid, len * 0.75, -wid * 0.8, len, 0); g.bezierCurveTo(len * 0.75, wid * 0.8, len * 0.3, wid, 0, 0); g.fill();
+        g.strokeStyle = `rgba(40,60,20,0.35)`; g.lineWidth = Math.max(1, wid * 0.12); g.beginPath(); g.moveTo(len * 0.05, 0); g.lineTo(len * 0.9, 0); g.stroke(); g.restore(); };
+      // esquerda: cacho recortado (fundo transparente); galhinhos + folhas irradiando do centro
+      g.clearRect(0, 0, 256, 256);
+      g.strokeStyle = 'rgba(70,52,30,0.9)'; g.lineCap = 'round';
+      for (let k = 0; k < 7; k++) { const a = k / 7 * 6.283 + rr() * 0.5; g.lineWidth = 3; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + Math.cos(a) * 70, 128 + Math.sin(a) * 70); g.stroke(); }
+      for (let k = 0; k < 64; k++) { const a = rr() * 6.283, d = 18 + Math.sqrt(rr()) * 82, x = 128 + Math.cos(a) * d, y = 128 + Math.sin(a) * d;
+        leaf(x, y, 30 + rr() * 26, 9 + rr() * 6, a + (rr() - 0.5) * 1.2, 0.62 + rr() * 0.38); }
+      // direita: folhagem densa e opaca (miolo da moita), sem buracos
+      g.fillStyle = 'rgb(105,120,90)'; g.fillRect(256, 0, 256, 256);
+      for (let k = 0; k < 420; k++) leaf(256 + rr() * 256, rr() * 256, 18 + rr() * 22, 6 + rr() * 5, rr() * 6.283, 0.45 + rr() * 0.5);
+      tex = new THREE.CanvasTexture(c); tex.anisotropy = 4; tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+      return tex;
+    }
+    // q: 'hi' (beira da pista) ou 'lo' (cenário: menos folhas)
+    function geometry(q) {
+      q = q || 'hi'; if (geo[q]) return geo[q]; srand = 4242;
+      const P = [], Nn = [], U = [], C = [], col = new THREE.Color(), ctr = new THREE.Vector3(0, 0.55, 0);
+      const base = new THREE.Color(0x3f7f2c), dark = new THREE.Color(0x1f4a1c), tip = new THREE.Color(0x8fbf45);
+      const shade = (p, k, out) => { const t = Math.max(0, Math.min(1, p.y / 1.55)), ao = 0.42 + 0.62 * t * t * (3 - 2 * t);
+        out.copy(dark).lerp(base, Math.min(1, 0.25 + 0.95 * t)).lerp(tip, k * t * t).multiplyScalar(ao); return out; };
+      const softN = (p, n) => { const r = p.clone().sub(ctr).normalize(); r.y = r.y * 0.8 + 0.25; return r.normalize().lerp(n, 0.35).normalize(); };
+      // ---- miolo: tufos deformados ----
+      const clumps = [[0, 0.72, 0, 0.82], [0, 1.18, 0.05, 0.55]];
+      for (let k = 0; k < 6; k++) { const a = k / 6 * 6.283 + rr() * 0.6, d = 0.62 + rr() * 0.22; clumps.push([Math.cos(a) * d, 0.48 + rr() * 0.2, Math.sin(a) * d, 0.5 + rr() * 0.18]); }
+      clumps.push([0.35, 1.0, -0.4, 0.45]);
+      clumps.forEach(([cx, cy, cz, r], ci) => {
+        const g0 = new THREE.IcosahedronGeometry(r, q === 'hi' ? 2 : 1), p = g0.attributes.position, v = new THREE.Vector3(), nrm = new THREE.Vector3(), cc0 = new THREE.Vector3(cx, cy, cz);   // icosaedro já vem sem índice
+        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const n1 = vn(v.x * 3.1 + ci * 7, v.y * 3.1, v.z * 3.1), n2 = vn(v.x * 7.3, v.y * 7.3 + ci, v.z * 7.3);
+          v.multiplyScalar(1 + (n1 - 0.5) * 0.42 + (n2 - 0.5) * 0.16); v.y *= 0.82; v.x += cx; v.y += cy; v.z += cz; if (v.y < 0.02) v.y = 0.02 + (v.y - 0.02) * 0.2; p.setXYZ(i, v.x, v.y, v.z); }
+        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); nrm.copy(v).sub(cc0).normalize(); const n = softN(v, nrm);   // normal lisa (sem facetas)
+          P.push(v.x, v.y, v.z); Nn.push(n.x, n.y, n.z);
+          shade(v, 0.2, col).multiplyScalar(0.9); C.push(col.r, col.g, col.b); }   // miolo um pouco mais escuro: profundidade entre as folhas
+        // UV do miolo por triângulo (projeção no eixo dominante, deslocada para caber na metade opaca do atlas): sem esticar
+        for (let t = 0; t < p.count; t += 3) { const q3 = [0, 1, 2].map(j => [p.getX(t + j), p.getY(t + j), p.getZ(t + j)]);
+          const e1 = q3[1].map((x, j) => x - q3[0][j]), e2 = q3[2].map((x, j) => x - q3[0][j]), fn = [Math.abs(e1[1] * e2[2] - e1[2] * e2[1]), Math.abs(e1[2] * e2[0] - e1[0] * e2[2]), Math.abs(e1[0] * e2[1] - e1[1] * e2[0])];
+          const dom = fn[0] > fn[1] && fn[0] > fn[2] ? 0 : fn[1] > fn[2] ? 1 : 2, A = dom === 0 ? [2, 1] : dom === 1 ? [0, 2] : [0, 1], SC = 0.9;
+          const uv = q3.map(v3 => [v3[A[0]] * SC, v3[A[1]] * SC]), mu = Math.floor(Math.min(...uv.map(a => a[0]))), mv = Math.floor(Math.min(...uv.map(a => a[1])));
+          uv.forEach(a => U.push(0.505 + 0.49 * Math.min(1, (a[0] - mu) * 0.5), 0.01 + 0.98 * Math.min(1, (a[1] - mv) * 0.5))); }
+        g0.dispose(); });
+      // ---- casca de folhas: cartões com o cacho recortado ----
+      const NL = q === 'hi' ? 170 : 90, up = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3(), t1 = new THREE.Vector3(), t2 = new THREE.Vector3(), pt = new THREE.Vector3(), cn = [];
+      for (let k = 0; k < NL; k++) {
+        const cl = clumps[(rr() * clumps.length) | 0]; d.set(rr() * 2 - 1, rr() * 1.3 - 0.25, rr() * 2 - 1); if (d.lengthSq() < 0.05) d.set(0, 1, 0); d.normalize();
+        pt.set(cl[0], cl[1], cl[2]).addScaledVector(d, cl[3] * (0.95 + rr() * 0.22)); pt.y *= 0.95; if (pt.y < 0.12) { k--; continue; }
+        const out = pt.clone().sub(ctr).normalize().lerp(d, 0.5).normalize();
+        // plano do cartão: normal ~ para fora, com inclinação e giro aleatórios
+        const nrm = out.clone().add(new THREE.Vector3(rr() - 0.5, rr() - 0.5, rr() - 0.5).multiplyScalar(0.9)).normalize();
+        t1.crossVectors(nrm, Math.abs(nrm.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : up).normalize(); t2.crossVectors(nrm, t1).normalize();
+        const rot = rr() * 6.283, cs = Math.cos(rot), sn = Math.sin(rot), a = t1.clone().multiplyScalar(cs).addScaledVector(t2, sn), b = t1.clone().multiplyScalar(-sn).addScaledVector(t2, cs);
+        const sz = (0.4 + rr() * 0.22) * (q === 'hi' ? 1 : 1.2), c0 = pt.clone().addScaledVector(out, 0.06);
+        const corners = [[-1, -1, 0, 0], [1, -1, 0.5, 0], [1, 1, 0.5, 1], [-1, 1, 0, 1]].map(([sx, sy, u, vv]) => ({ p: c0.clone().addScaledVector(a, sx * sz).addScaledVector(b, sy * sz), u: u * 0.98 + 0.005, v: vv }));
+        const kTip = 0.5 + rr() * 0.6, vary = 0.88 + rr() * 0.24;
+        [0, 1, 2, 0, 2, 3].forEach(i => { const cc = corners[i], n = softN(cc.p, out); P.push(cc.p.x, cc.p.y, cc.p.z); Nn.push(n.x, n.y, n.z); U.push(cc.u, cc.v);
+          shade(cc.p, kTip, col).multiplyScalar(vary); C.push(col.r, col.g, col.b); });
+      }
+      // ---- galhinhos na base (aparecem entre as folhas de baixo) ----
+      for (let k = 0; k < 5; k++) { const a = k / 5 * 6.283 + rr(), g0 = new THREE.CylinderGeometry(0.025, 0.045, 0.55, 5).toNonIndexed(); g0.rotateZ(0.5 + rr() * 0.3); g0.rotateY(a); g0.translate(Math.cos(a) * 0.18, 0.22, -Math.sin(a) * 0.18);
+        const p = g0.attributes.position, nn = g0.attributes.normal; for (let i = 0; i < p.count; i++) { P.push(p.getX(i), p.getY(i), p.getZ(i)); Nn.push(nn.getX(i), nn.getY(i), nn.getZ(i)); U.push(0.75, 0.5); C.push(0.3, 0.22, 0.14); } g0.dispose(); }
+      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(Nn, 3));
+      g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); g.computeBoundingSphere();
+      return (geo[q] = g);
+    }
+    // material da moita (Lambert vira toon quando criado dentro do Toon.during; o recorte das folhas vem do alphaTest)
+    function material(wind) {
+      // Lambert ORIGINAL (fora do toon): luz contínua nas folhas, sem as 3 faixas duras do desenho animado -> mais realista
+      const Lam = (window.Toon && Toon.Lambert) || THREE.MeshLambertMaterial;
+      const m = new Lam({ color: 0xffffff, vertexColors: true, map: texture(), alphaTest: 0.5, side: THREE.DoubleSide }); m.userData.noToon = true;
+      if (wind !== false && window.GfxFX) GfxFX.foliage(m, { amp: 0.06, h0: 0.25, freq: 1.7 });
+      return m;
+    }
+    // sombra com o recorte das folhas (sem quadrados no chão)
+    let depthM = null;
+    const depthMaterial = () => depthM || (depthM = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: texture(), alphaTest: 0.5, side: THREE.DoubleSide }));
+    return { texture, geometry, material, depthMaterial };
+  })();
+  window.Bush = Bush;
+
   // ===================================================================================
   function build(def, scene) {
     const L = layout(def), S = L.S, T = L.T, W = def.W; N = def.N || 500;
@@ -191,8 +297,15 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         const P = sc.pts; for (let k = 0; k < P.length - 1; k++) { const ax = P[k].x, az = P[k].z, bx = P[k + 1].x - ax, bz = P[k + 1].z - az, L2 = bx * bx + bz * bz || 1;
           const t = Math.max(0, Math.min(1, ((x - ax) * bx + (z - az) * bz) / L2)), d = Math.hypot(x - ax - bx * t, z - az - bz * t); if (d < m) { m = d; h = H2[k] + (H2[k + 1] - H2[k]) * t; } } }
       return h; };
+    // altura do chão do atalho (terra + barranco de grama), a mesma grade que é desenhada; null fora dela
+    tr.shortcutGround = (x, z) => { let h = null;
+      for (const sc of tr.shortcuts) { const G = sc.grid; if (!G) continue; const fx = (x - G.x0) / G.cs, fz = (z - G.z0) / G.cs, i = Math.floor(fx), j = Math.floor(fz);
+        if (i < 0 || j < 0 || i >= G.nx || j >= G.nz) continue; const a = j * (G.nx + 1) + i, Y = G.Y, y00 = Y[a], y10 = Y[a + 1], y01 = Y[a + G.nx + 1], y11 = Y[a + G.nx + 2];
+        if (y00 !== y00 || y10 !== y10 || y01 !== y01 || y11 !== y11) continue; const u = fx - i, v = fz - j, y = (y00 * (1 - u) + y10 * u) * (1 - v) + (y01 * (1 - u) + y11 * u) * v;
+        if (h === null || y > h) h = y; }
+      return h; };
     tr.dirtAt = p => tr.shortcuts.length > 0 && shortcutDist(p.x, p.z) < 0.6;           // terra batida: o kart perde pouco (kart.js)
-    tr.clearAt = (x, z) => tr.shortcuts.length > 0 && shortcutDist(x, z) < 7;           // cenário (scenery.js) não nasce em cima do atalho
+    tr.clearAt = (x, z) => tr.shortcuts.length > 0 && (shortcutDist(x, z) < 7 || (tr.shortcutGround(x, z) !== null && tr.shortcutGround(x, z) > (tr.heightAt ? tr.heightAt(x, z) : 0) + 0.35));   // nem enterrado no barranco           // cenário (scenery.js) não nasce em cima do atalho
 
     tr.nearest = (p, hint) => {
       let best = 1e18, bi = hint || 0; const base = bi;
@@ -290,59 +403,77 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy); fz = fz * fz * (3 - 2 * fz); const L = (a, b, t) => a + (b - a) * t;
       return L(L(L(vh3(i, j, k), vh3(i + 1, j, k), fx), L(vh3(i, j + 1, k), vh3(i + 1, j + 1, k), fx), fy), L(L(vh3(i, j, k + 1), vh3(i + 1, j, k + 1), fx), L(vh3(i, j + 1, k + 1), vh3(i + 1, j + 1, k + 1), fx), fy), fz); };
     function mountainMat() {
-      const m = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 6, specular: 0x161616 });
-      m.userData.unique = true; m.customProgramCacheKey = () => 'mountain-proc' + (LO ? '-lite' : '');
+      // iluminação suave (Phong de verdade, fora do toon): a rocha tem relevo contínuo, e os 3 degraus do toon recortavam
+      // cada ondulação em faixas duras quando a câmera chegava perto
+      const m = new PHONG_ORIG({ vertexColors: true, shininess: 4, specular: 0x060606 });   // quase sem brilho: rocha é fosca (o brilho dava cara de massinha)
+      m.userData.unique = true; m.userData.noToon = true; m.customProgramCacheKey = () => 'mountain-proc-v4' + (LO ? '-lite' : '');
+      if (!mountainMat.logged) { mountainMat.logged = true; console.info(m.isMeshToonMaterial ? '[montanhas] ainda em toon (o Toon.during converteu depois): mande o js/toon.js' : '[montanhas] iluminação suave (fora do toon)'); }
       m.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vMW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         sh.fragmentShader = `varying vec3 vMW;
           float mh3(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+          vec3 mh33(vec3 p){ p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.xxy + p.yxx) * p.zyx); }
           float mn3(vec3 p){ vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
             return mix(mix(mix(mh3(i), mh3(i + vec3(1,0,0)), f.x), mix(mh3(i + vec3(0,1,0)), mh3(i + vec3(1,1,0)), f.x), f.y),
                        mix(mix(mh3(i + vec3(0,0,1)), mh3(i + vec3(1,0,1)), f.x), mix(mh3(i + vec3(0,1,1)), mh3(i + vec3(1,1,1)), f.x), f.y), f.z); }
           float mfbm(vec3 p){ return mn3(p) * 0.5 + mn3(p * 2.03 + 1.7) * 0.25 + mn3(p * 4.11 + 3.1) * 0.15 + mn3(p * 8.3 + 5.3) * 0.1; }
-          float mBump(vec3 p, float fd){ return mn3(p * 0.16 + 5.0) * 0.7 + mn3(p * 0.42) * 0.35; }
+          // células (Voronoi 3D): cada célula é uma "placa" de rocha com a face levemente virada para um lado.
+          // devolve F1, F2 e a célula vencedora -> placas facetadas com fendas entre elas (rocha de verdade, sem riscos)
+          void mCell(vec3 p, out float f1, out float f2, out vec3 id){ vec3 i = floor(p), f = fract(p); f1 = 8.0; f2 = 8.0; id = i;
+            for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec3 o = vec3(float(x), float(y), float(z)), c = i + o;
+              vec3 d = o + 0.15 + 0.7 * mh33(c) - f; float q = dot(d, d);
+              if (q < f1) { f2 = f1; f1 = q; id = c; } else if (q < f2) f2 = q; }
+            f1 = sqrt(f1); f2 = sqrt(f2); }
           ` + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
           {
-            // ===== montanha procedural (alta qualidade) =====
-            // relevo fino por gradiente de ruído em espaço de mundo (sem dFdx/dFdy -> acabou o "pixelado" em blocos de 2x2),
-            // estratos ondulados, rachaduras, líquen, cascalho, grama com manchas secas e neve que assenta nas partes planas.
-            // O detalhe fino some com a distância (sem chuvisco/serrilhado nas montanhas do fundo).
+            // ===== montanha procedural: placas de rocha facetadas =====
             vec3 P = vMW; float dist = length(cameraPosition - P);
-            float fd = ${LO ? '0.0' : '1.0 - smoothstep(60.0, 420.0, dist)'}, fm = 1.0 - smoothstep(350.0, 1600.0, dist);
+            float fm = 1.0 - smoothstep(900.0, 2200.0, dist), fd = ${LO ? '0.0' : '1.0 - smoothstep(80.0, 450.0, dist)'};
             vec3 wn0 = inverseTransformDirection(normal, viewMatrix);
-            vec3 wn = wn0;
-            if (fd > 0.001) {   // relevo fino só perto da câmera (de longe, nem calcula: economiza 4 ruídos por pixel)
-              float e = 0.5;
-              float b0 = mBump(P, fd), bx = mBump(P + vec3(e, 0.0, 0.0), fd), by = mBump(P + vec3(0.0, e, 0.0), fd), bz = mBump(P + vec3(0.0, 0.0, e), fd);
-              vec3 gw = vec3(bx - b0, by - b0, bz - b0) / e; gw -= dot(gw, wn0) * wn0;
-              wn = normalize(wn0 - gw * 0.35 * fd);
-            }
-            normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
-            float up = wn.y, hr = vColor.r, tall = vColor.g, dome = vColor.b;
+            float up = wn0.y, hr = vColor.r, tall = vColor.g, dome = vColor.b;
             float n1 = mfbm(P * 0.011), n2 = mfbm(P * 0.047 + 7.0), n3 = mix(0.5, mn3(P * 0.42), fd);
-            // rocha: camadas inclinadas e onduladas + manchas quentes + rachaduras + líquen
-            vec3 rock = mix(vec3(0.47, 0.45, 0.43), vec3(0.58, 0.555, 0.52), clamp(n2 * 0.8 + (n1 - 0.5) * 0.4, 0.0, 1.0));
-            rock = mix(rock, vec3(0.56, 0.5, 0.43), smoothstep(0.58, 0.85, n1) * 0.25);                  // tons mais quentes em manchas
-            rock *= 0.92 + 0.16 * n3;
-            rock = mix(rock, vec3(0.44, 0.5, 0.31), smoothstep(0.63, 0.82, n2) * 0.35 * smoothstep(0.25, 0.7, up));   // líquen
-            // grama: dois verdes + manchas secas; cascalho nas encostas médias
-            vec3 grass = mix(vec3(0.25, 0.39, 0.15), vec3(0.40, 0.52, 0.22), n2);
-            grass = mix(grass, vec3(0.53, 0.5, 0.28), smoothstep(0.62, 0.86, n1) * 0.45) * (0.9 + 0.18 * n3);
-            vec3 scree = vec3(0.56, 0.51, 0.43) * (0.85 + 0.25 * n3);
+            // máscaras (com a normal lisa: sem tremer com as facetas)
             float jag = (n2 - 0.5) * 0.3 + (n3 - 0.5) * 0.12;
             float gU = smoothstep(0.62 - 0.2 * dome, 0.82 - 0.2 * dome, up + jag);
             float gH = 1.0 - smoothstep(0.3 + 0.5 * dome, 0.55 + 0.5 * dome, hr + jag * 0.6);
             float gr = max(gU * gH, 1.0 - smoothstep(0.04, 0.16, hr + jag * 0.3));
-            float sc = smoothstep(0.42, 0.62, up + jag) * (1.0 - gr);
-            vec3 col = mix(rock, scree, sc * 0.55);
-            col = mix(col, grass, gr);
-            // neve: no alto e onde é mais plano; sombra azulada nas partes íngremes
             float sn = tall * smoothstep(0.55, 0.63, hr + (n1 - 0.5) * 0.16 + (up - 0.55) * 0.32 + (n3 - 0.5) * 0.05);
+            float rk = (1.0 - gr) * (1.0 - 0.75 * sn);          // quanto de "rocha exposta" tem no ponto
+            vec3 wn = wn0; float crev = 0.0, tone = 0.5;
+            ${LO ? '' : `{
+              // placas grandes (~22 m), achatadas na vertical (camadas), e placas pequenas (~7 m) só de perto
+              // posição "torcida" por ruído: as placas perdem o formato de ladrilho e viram lascas irregulares;
+              // achatadas na vertical (bem mais largas que altas) -> parecem camadas/saliências de penhasco
+              vec3 wq = vec3(mn3(P * 0.021), mn3(P * 0.021 + 4.3), mn3(P * 0.021 + 8.7)) - 0.5;
+              float a1, a2; vec3 id; mCell(P * vec3(0.03, 0.085, 0.03) + wq * 1.8, a1, a2, id);
+              vec3 r = mh33(id + 17.0) * 2.0 - 1.0; tone = mh3(id + 3.0);
+              wn = normalize(wn0 + (r - dot(r, wn0) * wn0) * 0.42 * rk * fm);
+              // fendas finas e só em parte das bordas (rocha real não tem contorno em toda placa)
+              crev = (1.0 - smoothstep(0.0, mix(0.07, 0.035, fm), a2 - a1)) * smoothstep(0.35, 0.65, mn3(P * 0.035 + 2.0));
+              if (fd > 0.001) { float b1, b2; vec3 id2; mCell(P * vec3(0.11, 0.24, 0.11) + wq * 2.5 + 5.0, b1, b2, id2);
+                vec3 r2 = mh33(id2 + 41.0) * 2.0 - 1.0; wn = normalize(wn + (r2 - dot(r2, wn) * wn) * 0.2 * rk * fd);
+                crev = max(crev, (1.0 - smoothstep(0.0, 0.05, b2 - b1)) * 0.45 * fd * smoothstep(0.4, 0.7, mn3(P * 0.09 + 6.0))); tone = mix(tone, mh3(id2), 0.25 * fd); }
+            }`}
+            normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
+            // rocha: cinza-pedra com variação por placa, camadas suaves, líquen nas partes mais planas
+            vec3 rock = mix(vec3(0.45, 0.43, 0.41), vec3(0.6, 0.575, 0.54), clamp(n2 * 0.7 + (n1 - 0.5) * 0.4 + (tone - 0.5) * 0.22, 0.0, 1.0));
+            rock = mix(rock, vec3(0.58, 0.51, 0.43), smoothstep(0.58, 0.85, n1) * 0.22);
+            rock *= 0.92 + 0.16 * n3;
+            float st = sin(P.y * 0.35 + n1 * 7.0);
+            rock *= 1.0 + 0.05 * st;
+            rock = mix(rock, vec3(0.44, 0.5, 0.31), smoothstep(0.65, 0.84, n2) * 0.3 * smoothstep(0.3, 0.75, up));
+            rock *= 1.0 - 0.35 * crev;                                       // fendas entre as placas
+            vec3 grass = mix(vec3(0.25, 0.39, 0.15), vec3(0.40, 0.52, 0.22), n2);
+            grass = mix(grass, vec3(0.53, 0.5, 0.28), smoothstep(0.62, 0.86, n1) * 0.45) * (0.9 + 0.18 * n3);
+            vec3 scree = vec3(0.56, 0.51, 0.43) * (0.85 + 0.25 * n3);
+            float sc = smoothstep(0.42, 0.62, up + jag) * (1.0 - gr);
+            vec3 col = mix(rock, scree, sc * 0.5);
+            col = mix(col, grass, gr);
             vec3 snow = vec3(0.93, 0.95, 1.0) * (0.93 + 0.07 * n3); snow = mix(snow * vec3(0.82, 0.88, 1.0), snow, smoothstep(0.25, 0.8, up));
+            snow *= 1.0 - 0.18 * crev;
             col = mix(col, snow, sn);
             diffuseColor.rgb = col;
           }`);
-
       };
       return m;
     }
@@ -358,6 +489,12 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
     // instancia uma planta procedural em vários pontos
     function plants(kind, list, leafColor, barkTex, leafTex, opts) {
       if (!list.length) return null;
+      if (kind === 'bush') {   // moita nova (Bush): folhagem recortada, 1 material, sombra com o recorte das folhas
+        const im = new THREE.InstancedMesh(Bush.geometry('hi'), Bush.material(), list.length), d = new THREE.Object3D(), c = new THREE.Color();
+        list.forEach((o, i) => { d.position.set(o.x, (o.y || 0) + 0.1, o.z); d.rotation.set(0, o.r, 0); d.scale.set(o.s * (0.95 + rnd() * 0.2), o.s * (0.85 + rnd() * 0.25), o.s * (0.95 + rnd() * 0.2)); d.updateMatrix(); im.setMatrixAt(i, d.matrix);
+          im.setColorAt(i, c.setHSL(0.24 + rnd() * 0.07, 0.3 + rnd() * 0.2, 0.86 + rnd() * 0.12)); tr.blockers.push({ x: o.x, y: (o.y || 0) + 0.8 * o.s, z: o.z, r: 1.3 * o.s }); });
+        im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.customDepthMaterial = Bush.depthMaterial(); im.userData.noOutline = true; im.frustumCulled = false; return add(im);
+      }
       const geo = PLANTS[kind](1);
       const leafM = new THREE.MeshLambertMaterial({ color: leafColor, map: TX.get(leafTex || 'leaf', 1, 1), flatShading: true, side: THREE.DoubleSide, alphaTest: 0 });
       const barkM = new THREE.MeshLambertMaterial({ color: 0xffffff, map: TX.get(barkTex || 'bark', 1, 1), flatShading: true });
@@ -369,7 +506,85 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       list.forEach((o, i) => { d.position.set(o.x, o.y || 0, o.z); d.rotation.set(0, o.r, 0); d.scale.setScalar(o.s); d.updateMatrix(); im.setMatrixAt(i, d.matrix); tr.blockers.push({ x: o.x, y: (o.y || 0) + bh[0] * o.s, z: o.z, r: bh[1] * o.s }); });
       im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; return add(im);
     }
-    const glowSpr = (col, sc, op) => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: col, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: op })); p.scale.setScalar(sc); return add(p); };
+    // pinheiros detalhados (js/pines.js): 4 modelos numa malha só, cada árvore escolhe o seu pela posição.
+    // 1 chamada de desenho para todos (+ a sombra, que respeita o modelo de cada árvore). k = escala extra.
+    // pinheiros detalhados (js/pines.js) da beira da pista, bosques e morro:
+    //  * menos árvores e maiores: fica ~45% da lista (sorteio estável pela posição);
+    //  * blocos de 800 m com esfera própria: o que está fora da câmera não é desenhado (nem na sombra);
+    //  * bloco perto da câmera (< 250 m): um InstancedMesh por modelo (só os vértices do próprio modelo);
+    //    bloco longe: versão leve com os 4 modelos juntos (1 chamada) e sem sombra. Troca a cada 0,3 s.
+    function pineForest(list, k) {
+      if (!list.length) return null;
+      if (!window.Pines) return plants('pine', list, 0x2a7a3a);
+      k = k || 1;
+      const keep = list.filter(o => { const h = Math.sin(o.x * 7.31 + o.z * 3.17) * 9137.1; return h - Math.floor(h) < 0.45; });
+      const CELL = 800, cells = new Map();
+      keep.forEach(o => { const key = Math.floor(o.x / CELL) + ',' + Math.floor(o.z / CELL); if (!cells.has(key)) cells.set(key, []); cells.get(key).push(o); });
+      const mat = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true })), dm = Pines.depthMaterial(), d = new THREE.Object3D(), groups = [];
+      cells.forEach(L => {
+        let cx = 0, cz = 0; L.forEach(o => { cx += o.x; cz += o.z; }); cx /= L.length; cz /= L.length;
+        const vars = L.map(o => Pines.variantAt(o.x, o.z)), sc = L.map(o => o.s * k);
+        let R = 0; L.forEach((o, i) => { R = Math.max(R, Math.hypot(o.x - cx, o.z - cz) + Pines.HEIGHT[vars[i]] * sc[i]); });
+        const mk = (geo, idx, shadow) => { const im = new THREE.InstancedMesh(geo, mat, idx.length);
+          idx.forEach((i, n) => { const o = L[i]; d.position.set(o.x - cx, o.y || 0, o.z - cz); d.rotation.set(0, o.r, 0); d.scale.setScalar(sc[i]); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
+          im.instanceMatrix.needsUpdate = true; geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 8, 0), R + 10);
+          im.position.set(cx, 0, cz); im.castShadow = shadow; im.receiveShadow = true; im.customDepthMaterial = dm; im.userData.noOutline = true; return add(im); };
+        const hi = [0, 1, 2, 3].map(v => { const idx = []; vars.forEach((x, i) => { if (x === v) idx.push(i); }); return idx.length ? mk(Pines.attach(Pines.single('hi', v), idx.map(() => v)), idx, true) : null; }).filter(Boolean);
+        const lo = mk(Pines.attach(Pines.geometry('lo'), vars), vars.map((_, i) => i), false); lo.visible = false;
+        groups.push({ cx, cz, R, hi, lo });
+        L.forEach((o, i) => { const hh = Pines.HEIGHT[vars[i]] * sc[i]; tr.blockers.push({ x: o.x, y: (o.y || 0) + hh * 0.55, z: o.z, r: hh * 0.3 }); });
+      });
+      let acc = 0;
+      tr.animated.push((t, dt) => { acc -= dt || 0.016; if (acc > 0) return; acc = 0.3;
+        const cam = window.Fx && Fx.cam; if (!cam) return; const e = cam.matrixWorld.elements;
+        for (const G of groups) { const near = Math.hypot(G.cx - e[12], G.cz - e[14]) - G.R < 250; G.hi.forEach(m => { m.visible = near; }); G.lo.visible = !near; } });
+      return groups;
+    }
+    // ---------- SPRITES EM LOTE ----------
+    // Antes cada brilho (poste, lampião, plataforma, rampa) e cada nuvem da cachoeira era um THREE.Sprite = 1 chamada de
+    // desenho cada (~100 por quadro). Agora cada lote desenha TODOS numa chamada só (geometria instanciada). Quem usa
+    // recebe um objeto com a mesma "cara" de um sprite: position, scale, material.color / opacity / rotation, userData,
+    // visible. Os valores são enviados à placa de vídeo uma vez por quadro (tr.animated).
+    // nearFade: some aos poucos quando a câmera chega perto (névoa da cachoeira: entrar nela sem a tela ficar branca).
+    // Mistura normal só serve se todos tiverem a mesma cor (o resultado não depende da ordem); senão use additive.
+    // névoa para efeitos que SOMAM luz (brilhos, cones, poças): a névoa só apaga a luz. O fog_fragment padrão mistura a cor
+    // da névoa, e somado isso vira um borrão azulado no horizonte.
+    const FOG_ADD = '#ifdef USE_FOG\n#ifdef FOG_EXP2\n  float fogFactor = 1.0 - exp(- fogDensity * fogDensity * fogDepth * fogDepth);\n#else\n  float fogFactor = smoothstep(fogNear, fogFar, fogDepth);\n#endif\n  gl_FragColor.rgb *= 1.0 - fogFactor;\n#endif';
+    const makeSpriteBatch = (o) => {
+      const list = [];
+      const spr = (col, sc, op) => { const q = { isBatchSprite: true, position: new THREE.Vector3(), scale: new THREE.Vector3(sc, sc, 1),
+        material: { color: new THREE.Color(col), opacity: op === undefined ? 1 : op, rotation: 0 }, userData: {}, visible: true }; list.push(q); return q; };
+      spr.list = list;
+      spr.finish = () => {
+        if (!list.length || spr.mesh) return; const n = list.length, base = new THREE.PlaneGeometry(1, 1), g = new THREE.InstancedBufferGeometry();
+        g.index = base.index; g.setAttribute('position', base.attributes.position); g.setAttribute('uv', base.attributes.uv); g.instanceCount = n;
+        const aP = new THREE.InstancedBufferAttribute(new Float32Array(n * 3), 3), aS = new THREE.InstancedBufferAttribute(new Float32Array(n * 2), 2),
+          aC = new THREE.InstancedBufferAttribute(new Float32Array(n * 4), 4), aR = new THREE.InstancedBufferAttribute(new Float32Array(n), 1);
+        [aP, aS, aC, aR].forEach(a => a.setUsage(THREE.DynamicDrawUsage));
+        g.setAttribute('iPos', aP); g.setAttribute('iScale', aS); g.setAttribute('iCol', aC); g.setAttribute('iRot', aR);
+        const m = new THREE.ShaderMaterial({ uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { map: { value: o.map }, uNearFade: { value: o.nearFade ? 1 : 0 } }]),
+          vertexShader: ['attribute vec3 iPos; attribute vec2 iScale; attribute vec4 iCol; attribute float iRot;', 'uniform float uNearFade;', 'varying vec2 vUv; varying vec4 vCol;', '#include <fog_pars_vertex>',
+            'void main() {', '  vUv = uv; vCol = iCol;', '  vec4 mvPosition = modelViewMatrix * vec4(iPos, 1.0);',
+            '  vec2 q = position.xy * iScale; float c = cos(iRot), s = sin(iRot); mvPosition.xy += vec2(c * q.x - s * q.y, s * q.x + c * q.y);',
+            '  if (uNearFade > 0.5) { float d = length(mvPosition.xyz) - iScale.x * 0.35, f = clamp((d - 2.0) / 14.0, 0.0, 1.0); vCol.a *= f * f * (3.0 - 2.0 * f); }',
+            '  gl_Position = projectionMatrix * mvPosition;', '  #include <fog_vertex>', '}'].join('\n'),
+          fragmentShader: ['uniform sampler2D map;', 'varying vec2 vUv; varying vec4 vCol;', '#include <fog_pars_fragment>',
+            'void main() {', '  vec4 t = texture2D(map, vUv); gl_FragColor = vec4(vCol.rgb * t.rgb, t.a * vCol.a);', '  if (gl_FragColor.a < 0.002) discard;', o.additive ? FOG_ADD : '  #include <fog_fragment>', '}'].join('\n'),
+          transparent: true, depthWrite: false, fog: true, blending: o.additive ? THREE.AdditiveBlending : THREE.NormalBlending });
+        m.userData.unique = true;
+        const mesh = spr.mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = o.order || 0;
+        mesh.userData.dynamic = true; mesh.userData.noOutline = true; mesh.castShadow = mesh.receiveShadow = false; add(mesh);
+        const up = () => { const P = aP.array, S = aS.array, C = aC.array, R = aR.array;
+          for (let i = 0; i < n; i++) { const q = list[i], on = q.visible !== false;
+            P[i * 3] = q.position.x; P[i * 3 + 1] = q.position.y; P[i * 3 + 2] = q.position.z;
+            S[i * 2] = on ? q.scale.x : 0; S[i * 2 + 1] = on ? q.scale.y : 0;
+            const cc = q.material.color; C[i * 4] = cc.r; C[i * 4 + 1] = cc.g; C[i * 4 + 2] = cc.b; C[i * 4 + 3] = on ? q.material.opacity : 0; R[i] = q.material.rotation || 0; }
+          aP.needsUpdate = aS.needsUpdate = aC.needsUpdate = aR.needsUpdate = true; };
+        up(); mesh.onBeforeRender = up;   // envia o estado mais recente (depois de todas as atualizações do quadro)
+      };
+      return spr;
+    };
+    const glowSpr = makeSpriteBatch({ map: Fx.glowTex(), additive: true, order: 0 });
 
     // ---------- pista: asfalto, faixas, zebras ----------
     const notBridge = i => bump(i) > 0.02 || bump((i + 1) % N) > 0.02;
@@ -378,8 +593,8 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
     [-1, 1].forEach(s => strip(s * (W - 0.85), s * (W - 0.4), 0.06, { map: TX.get('paint'), uSpan: 0.2, vLen: 3, po: -2 }));
     strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
     strip(W, W + 1.8, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4 }); strip(-W - 1.8, -W, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true });
-    strip(W + 1.8, W + 5.2, 0.035, { map: TX.get('dirt'), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
-    strip(-W - 5.2, -W - 1.8, 0.035, { map: TX.get('dirt'), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
+    strip(W + 1.8, W + 5.2, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
+    strip(-W - 5.2, -W - 1.8, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
 
     // ---------- linha de largada + pórtico ----------
     const si = def.startIdx, sAng = Math.atan2(T[si].x, T[si].z);
@@ -695,17 +910,27 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
 
     // ---------- altura do chão para a física ----------
     tr.groundAt = (p, hint, heading) => {
-      const n = tr.nearest(p, hint); let h, exact = false, slope = 0, soft = false;
+      const n = tr.nearest(p, hint); let h, exact = false, slope = 0, soft = false, roll = 0;
       if (n.dist <= W + 1.8) {
         const u = n.i + n.f, b = bump(u); h = tr.roadBase + hAt(u); exact = b > 0.001 || tr.vert;
         const segL = S[n.i].distanceTo(S[(n.i + 1) % N]) || 1, grade = (hAt(u + 0.25) - hAt(u - 0.25)) / (0.5 * segL);
         const tA = Math.atan2(T[n.i].x, T[n.i].z); slope = grade * Math.cos(wrapA((heading || 0) - tA));
       } else { const hs = tr.dirtAt && tr.dirtAt(p) ? tr.shortcutHeight(p.x, p.z) : null;
-        h = hs !== null ? hs : terrain(p.x, p.z, n.dist, n.i + n.f); if (bump(n.i + n.f) > 0.01) soft = true; else if (tr.vert) exact = true; }   // fora da pista ao lado da ponte: descida suave
+        h = hs !== null ? hs : terrain(p.x, p.z, n.dist, n.i + n.f); if (bump(n.i + n.f) > 0.01) soft = true; else if (tr.vert) exact = true;
+        if (tr.shortcuts.length) { const sg = tr.shortcutGround(p.x, p.z); if (sg !== null && (hs !== null || sg > h)) h = sg; }
+        // inclinação do chão fora do asfalto (atalhos, barrancos, grama): mede a altura 0,9 m à frente/atrás e 0,7 m de cada lado
+        // -> o kart empina/abaixa o bico e inclina de lado acompanhando o relevo, como no asfalto (antes andava sempre reto)
+        if (heading !== undefined) { const onDirt = hs !== null, hf = (x, z) => { const q = tr.nearest({ x, z }, n.i);
+            if (q.dist <= W + 1.8) return tr.roadBase + hAt(q.i + q.f); const t = terrain(x, z, q.dist, q.i + q.f), sg = tr.shortcuts.length ? tr.shortcutGround(x, z) : null;
+            return sg === null ? t : onDirt ? sg : Math.max(t, sg); };
+          const fx = Math.sin(heading), fz = Math.cos(heading), F = 0.9, R = 0.7;
+          slope = Math.max(-0.6, Math.min(0.6, (hf(p.x + fx * F, p.z + fz * F) - hf(p.x - fx * F, p.z - fz * F)) / (2 * F)));
+          roll = Math.max(-0.45, Math.min(0.45, Math.atan((hf(p.x + fz * R, p.z - fx * R) - hf(p.x - fz * R, p.z + fx * R)) / (2 * R)))); } }   // na terra: exatamente o chão desenhado   // em cima do barranco/terra do atalho: mesma altura do desenho   // fora da pista ao lado da ponte: descida suave
       // (no atalho a altura é o perfil suavizado do próprio caminho: o kart anda exatamente em cima da terra desenhada)
       const r = rampAt(p);
       if (r && r.h >= h - 0.05) { h = r.h; exact = true; soft = false; slope = r.slope * (Math.sin(heading || 0) * r.fx + Math.cos(heading || 0) * r.fz); }
-      return { h, exact, slope, soft };
+      if (r && r.h >= h - 0.05) roll = 0;
+      return { h, exact, slope, soft, roll };
     };
 
     // ---------- obstáculos sólidos (postes, árvores na calçada...) ----------
@@ -739,6 +964,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
 
     // ---------- atualização por quadro ----------
     tr.update = (dt, t) => tr.animated.forEach(f => f(t, dt));
+    glowSpr.finish();   // brilhos da pista: uma chamada de desenho para todos
     return tr;
 
     // =========================================================================
@@ -752,10 +978,33 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       for (let i = 0; i < N; i += 2) { const s0 = { x: S[i].x, z: S[i].z, h: H[i], i }, k = key(Math.floor(s0.x / CS), Math.floor(s0.z / CS)); if (!cells.has(k)) cells.set(k, []); cells.get(k).push(s0); }
       const roadInfo = (x, z) => { const ci = Math.floor(x / CS), cj = Math.floor(z / CS); let d2m = 1e18, sw = 0, sh = 0, near = null;
         for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) { const l = cells.get(key(ci + a, cj + b)); if (!l) continue;
-          for (const q of l) { const d2 = (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z); if (d2 < d2m) { d2m = d2; near = q; } const w = 1 / ((d2 + 100) * (d2 + 100)); sw += w; sh += w * q.h; } }
-        return near ? { d: Math.sqrt(d2m), h: sh / sw, i: near.i } : { d: 1e9, h: 0, i: -1 }; };
+          for (const q of l) { const d2 = (q.x - x) * (q.x - x) + (q.z - z) * (q.z - z); if (d2 < d2m) { d2m = d2; near = q; }
+            if (d2 >= 178 * 178) continue; const w = (1 - sm(150, 178, Math.sqrt(d2))) / ((d2 + 100) * (d2 + 100)); sw += w; sh += w * q.h; } }
+        // peso com janela suave (some até 178 m; a vizinhança de 7x7 blocos sempre cobre 180 m): antes um nó entrava/saía da
+        // conta de repente ao cruzar a divisa de um bloco de 60 m e o relevo ganhava degraus em linhas retas (eixos x/z)
+        return near ? { d: Math.sqrt(d2m), h: sw > 1e-30 ? sh / sw : near.h, i: near.i } : { d: 1e9, h: 0, i: -1 }; };
       const drop = d => 0.25 * sm(W + 2, W + 40, d);                                    // a beira desce só um pouquinho
-      const natH = (x, z, r) => { if (!tr.vert) return 0; r = r || roadInfo(x, z); return r.d > 1e8 ? 0 : lerp(r.h - drop(r.d), 0, sm(W + 25, W + 130, r.d)); };
+      const natRaw = (x, z) => { const r = roadInfo(x, z); return r.d > 1e8 ? 0 : lerp(r.h - drop(r.d), 0, sm(W + 25, W + 130, r.d)); };
+      // O relevo "cru" depende da distância até o ponto MAIS PRÓXIMO da pista: onde dois trechos da pista ficam à mesma distância
+      // (miolo das curvas, entre duas retas) a superfície fazia uma quina (crista/vale em linha reta) que aparecia como risco
+      // escuro na grama. Ele é amostrado uma vez numa grade de 6 m, borrado (3 passadas de média = gaussiana de ~15 m) e lido
+      // com interpolação bicúbica: colinas arredondadas e contínuas, e a física (tr.heightAt) usa exatamente a mesma superfície.
+      let NG = null;
+      const natGrid = () => { if (NG) return NG;
+        const R = LO ? 10 : 6, rb = LO ? 1 : 2, pad = 330, gx0 = L.bbox.x0 - pad, gz0 = L.bbox.z0 - pad;
+        const nx = Math.ceil((L.bbox.x1 + pad - gx0) / R) + 1, nz = Math.ceil((L.bbox.z1 + pad - gz0) / R) + 1;
+        let A = new Float32Array(nx * nz), B = new Float32Array(nx * nz);
+        for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) A[j * nx + i] = natRaw(gx0 + i * R, gz0 + j * R);
+        const span = 2 * rb + 1;
+        for (let pass = 0; pass < 3; pass++) {
+          for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { let s = 0; for (let d = -rb; d <= rb; d++) s += A[j * nx + Math.min(nx - 1, Math.max(0, i + d))]; B[j * nx + i] = s / span; }
+          for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { let s = 0; for (let d = -rb; d <= rb; d++) s += B[Math.min(nz - 1, Math.max(0, j + d)) * nx + i]; A[j * nx + i] = s / span; } }
+        return (NG = { x0: gx0, z0: gz0, R, nx, nz, A }); };
+      const cr4 = (p0, p1, p2, p3, t) => p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));   // Catmull-Rom (C1)
+      const natH = (x, z) => { if (!tr.vert) return 0; const G = natGrid(), fx = (x - G.x0) / G.R, fz = (z - G.z0) / G.R, i = Math.floor(fx), j = Math.floor(fz);
+        if (i < 1 || j < 1 || i > G.nx - 3 || j > G.nz - 3) return 0;                 // fora da grade: planície (longe da pista)
+        const tx = fx - i, tz = fz - j, A = G.A, row = jj => { const o = jj * G.nx; return cr4(A[o + i - 1], A[o + i], A[o + i + 1], A[o + i + 2], tx); };
+        return Math.max(0, cr4(row(j - 1), row(j), row(j + 1), row(j + 2), tz)); };
       let waterDist = () => 1e9;                                                         // distância até a beira d'água (rio e laguinhos, definida mais abaixo)
       const gH = (x, z, r) => { r = r || roadInfo(x, z); let h = natH(x, z, r); if (h > 0.01) { const wd = waterDist(x, z); if (wd < 45) h *= 1 - (1 - sm(8, 45, wd)) * sm(W + 6, W + 18, r.d); } return h; };
       // ---- cordilheira em volta do mapa (profundidade): picos low-poly com grama na base, pedra e neve no topo ----
@@ -790,7 +1039,10 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       // Reflexo planar: a cena é desenhada de novo por uma câmera espelhada no nível da água (y = WATER_Y), numa
       // textura de meia resolução, uma vez por quadro e só quando alguma água está na tela (onBeforeRender).
       // Ajustes em CFG.WATER (opcional): REFLECT (false desliga o reflexo), RES (resolução do reflexo), DEEP/SHALLOW (cores).
-      const WC = Object.assign({ REFLECT: true, RES: 0.5, DEEP: '#0fc9c2', SHALLOW: '#52f8e8', REFL: 0.9, DEPTH: 1.4, ABSORB: [0.5, 0.085, 0.08], BED: '#e9d7aa', LILIES: true }, CFG.WATER || {});
+      // cores de rio/lago natural (antes era turquesa de piscina, clara demais): fundo de cascalho e sedimento, verde-azulado que
+      // escurece com a profundidade, beira rasa ainda transparente
+      // (água: shader e cores da versão anterior, a pedido: turquesa com refração e cáustica)
+      const WC = Object.assign({ REFLECT: true, RES: 0.5, DEEP: '#0a8a90', SHALLOW: '#38c4bb', REFL: 0.9, DEPTH: 1.6, ABSORB: [0.6, 0.17, 0.15], BED: '#b8a679', LILIES: true }, CFG.WATER || {});
       const WATER_Y = 0.45, waterU = { value: 0 }, waterMeshes = [];
       const reflRT = new THREE.WebGLRenderTarget(2, 2, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat });
       reflRT.texture.generateMipmaps = false; tr.disposers.push(() => reflRT.dispose());
@@ -865,7 +1117,10 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
             under *= 0.82 + uSunCol * ca * 1.35 * sunUp * mix(0.35, 1.0, detail) * exp(-depth * 0.25);
             // absorção: o vermelho some primeiro -> turquesa; espalhamento soma a cor da água no fundo
             vec3 tr = exp(-uAbsorb * path * 1.4);
-            under = (under * tr + toLin(uDeep) * (1.0 - exp(-path * 0.9)) * 0.5) * 1.1;
+            under = (under * tr + toLin(uDeep) * (1.0 - exp(-path * 0.9)) * 0.55) * 0.85;
+            // luz do ambiente: o fundo só aparece claro quando há luz (antes a água tinha brilho próprio e ficava fluorescente à noite)
+            float dayK = clamp(max(dot(uSunCol, vec3(0.3, 0.59, 0.11)) * 0.9, dot(toLin(uSky), vec3(0.3, 0.59, 0.11)) * 1.4), 0.0, 1.0);
+            under *= mix(0.1, 1.0, dayK);
             // reflexo (Fresnel de verdade: quase nada olhando de cima, forte olhando rente)
             vec3 Ns = normalize(mix(vec3(0.0, 1.0, 0.0), N, 0.5)); float NV = max(dot(Ns, V), 0.0);
             float fres = 0.02 + 0.98 * pow(1.0 - NV, 5.0);
@@ -926,10 +1181,35 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       const waterMesh = g => { const o = new THREE.Mesh(g, waterM); o.userData.noOutline = true;
         o.onBeforeRender = (r, sc, cam) => { if (!sc.overrideMaterial) syncSun(sc); wUni.uLite.value = QS().water === 'high' ? 0 : 1; const rtg = r.getRenderTarget();
           wUni.uSRGB.value = (rtg ? rtg.texture.encoding : r.outputEncoding) === THREE.sRGBEncoding ? 1 : 0; reflect(r, sc, cam); }; waterMeshes.push(o); return o; };
-      const bankM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('sand')), side: THREE.DoubleSide }), bedM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('pebble')), side: THREE.DoubleSide });
+      // EMBAIXO D'ÁGUA: a água agora é translúcida e mostra o fundo DE VERDADE (malha funda, pedras e plantas). Estes materiais
+      // escurecem e esverdeiam com a profundidade (a luz que a água absorve) e recebem a rede de luz da cáustica, que se mexe.
+      const uwFX = (m, key) => GfxFX.chain(m, 'uw-' + key, sh => {
+        sh.uniforms.uWT = waterU;
+        sh.vertexShader = 'varying vec3 vUW;\n' + sh.vertexShader.replace('#include <project_vertex>', `#include <project_vertex>
+          { vec4 uwp = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            uwp = instanceMatrix * uwp;
+          #endif
+            vUW = (modelMatrix * uwp).xyz; }`);
+        sh.fragmentShader = 'uniform float uWT;\nvarying vec3 vUW;\n' + sh.fragmentShader.replace('#include <dithering_fragment>', `#include <dithering_fragment>
+          { float dep = ${WATER_Y.toFixed(3)} - vUW.y;
+            if (dep > 0.0) { vec2 q = vUW.xz * 0.55;
+              float c1 = sin(q.x * 2.3 + sin(q.y * 1.9 + uWT * 0.9) * 1.4 + uWT * 0.6), c2 = sin(q.y * 2.1 + sin(q.x * 1.7 - uWT * 0.8) * 1.4 - uWT * 0.5);
+              float ca = pow(1.0 - abs(c1 * c2), 7.0) * (1.0 - smoothstep(0.2, 2.2, dep));   // cáustica: some com a profundidade
+              gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * vec3(0.42, 0.66, 0.7), smoothstep(0.0, 2.0, dep)) + vec3(0.75, 0.95, 0.9) * ca * 0.28; } }`); });
+      const bankM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('sand')), side: THREE.DoubleSide }), bedM = uwFX(new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('pebble')), side: THREE.DoubleSide }), 'bed');
+      // profundidade do fundo pela distância até a beira (e: 0 = meio, 1 = beira): 31 cm na beira, ~1,9 m no meio
+      const bedDepth = e => Math.min(WATER_Y - 0.07, 0.31 + (WC.DEPTH - 0.31) * (1 - (u => u * u * (3 - 2 * u))(Math.max(0, Math.min(1, (e - 0.3) / 0.7)))));  // fundo nunca abaixo do chão (y>=0.07), senão a grama o cobre
+      const afterGrid = [];                                                               // margens de areia: montadas depois da grade da grama (seguem a altura dela)
       const dcol = e => new THREE.Color(e, e, e);                                         // cor de vértice da água = quanto perto da margem (o shader pinta)
       const NV = i => V3(T[i].z, 0, -T[i].x), PV = (i, o) => S[i].clone().addScaledVector(NV(i), o);
-      const bA = bridges[0], bB = bridges[1], RHW = 7, PROF = [[6, 0.03], [1.2, 0.85], [0, 0.85], [-0.4, 0.14]];
+      const bA = bridges[0], bB = bridges[1], RHW = 9, RHW_END = 18; let RDELTA = 34;   // RDELTA (meia-largura da foz = o MAR) é calculado abaixo conforme o espaço livre
+      // perfil da margem de areia (e = distância além da beira d'água): sobe do chão com inclinação ZERO (curva suave, sem
+      // quina) até o topo, fica plano e desce para a água. Antes era uma rampa reta que começava numa quina a 6 m: o
+      // pós-efeito (sombra de contato/contorno) marcava essa quina como um degrau escuro em volta dos lagos e do rio.
+      const BANKP = e => e >= 10 ? 0 : e >= 1.2 ? (u => 0.85 * u * u * (3 - 2 * u))((10 - e) / 8.8) : e >= 0 ? 0.85 : e >= -0.4 ? 0.14 + 0.71 * (e + 0.4) / 0.4 : 0.14;
+      let bankBase = () => 0;                                                            // chão sem areia: a grade da grama (definido quando ela fica pronta)
+      const PROF = [[10.4, -0.08]].concat([9.2, 8.2, 7.2, 6.2, 5.3, 4.4, 3.5, 2.6, 1.9, 1.2, 0, -0.4].map(e => [e, BANKP(e)])), PC = PROF.length;   // a borda de fora da areia fica ENTERRADA (antes ficava rente à grama e as duas "brigavam": risco claro tracejado)
       // ---- rio ----
       const rp = [PV(bB, 74), PV(bB, 64), PV(bB, 45), PV(bB, 0), PV(bB, -45)];
       { const a3 = PV(bA, -45), b3 = rp[4].clone(), dir = a3.clone().sub(b3), len = dir.length(); dir.normalize(); const perp = V3(-dir.z, 0, dir.x);
@@ -937,10 +1217,19 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         const tA = T[bA]; rp.push(a3, PV(bA, 0), PV(bA, 45), PV(bA, 95), PV(bA, 140).addScaledVector(tA, 35), PV(bA, 190).addScaledVector(tA, -30), PV(bA, 240)); }
       const riverC = new THREE.CatmullRomCurve3(rp, false, 'centripetal'), RM = 260, RL = riverC.getLength(), rpts = [], rtan = [];
       for (let k = 0; k <= RM; k++) rpts.push(riverC.getPointAt(k / RM));
+      // largura (meia-largura em m) ao longo do rio: poço da cachoeira (14 m) -> RHW (9 m) -> vai alargando rio abaixo até
+      // RHW_END (18 m: leito de ~36 m) -> foz larga (RDELTA) e fecha
+      const HEAD = 26 / RL, MOUTH = 0.84;
+      // MAR: a foz do rio abre num mar grande. O tamanho cabe no espaço livre: distância da pista (menos largura, areia e folga)
+      { let md = 1e9; for (let k = Math.round(RM * MOUTH); k <= RM; k++) for (let i = 0; i < N; i += 2) md = Math.min(md, Math.hypot(S[i].x - rpts[k].x, S[i].z - rpts[k].z));
+        RDELTA = Math.max(34, Math.min(130, md - W - 26)); console.info('[mar] meia-largura da foz:', RDELTA.toFixed(0), 'm (pista mais próxima a', md.toFixed(0), 'm)'); }
+      const hwf = t => { if (t < HEAD) { const u = t / HEAD; return RHW + (14 - RHW) * (1 - u * u * (3 - 2 * u)); }
+        if (t < MOUTH) { const u = (t - HEAD) / (MOUTH - HEAD); return RHW + (RHW_END - RHW) * (1 - (1 - u) * (1 - u)); }   // alarga rápido no começo e depois estabiliza
+        const u = (t - MOUTH) / (1 - MOUTH); return u < 0.5 ? RHW_END + (RDELTA - RHW_END) * Math.sin(u * Math.PI) : RDELTA * Math.sqrt(Math.max(0, 1 - Math.pow((u - 0.5) / 0.5, 2))); };
       { // suaviza quinas até o raio mínimo ser maior que a bacia (evita a água vazar da areia)
-        const P0 = rpts.map(p => p.clone()), pin = k => k < 3 || k > RM - 2 || bridges.some(b => Math.hypot(P0[k].x - S[b].x, P0[k].z - S[b].z) < 16);
+        const P0 = rpts.map(p => p.clone()), pin = k => k < 3 || k > RM - 2 || bridges.some(b => Math.hypot(P0[k].x - S[b].x, P0[k].z - S[b].z) < 6);
         const curvR = k => { const a = rpts[k - 1], b = rpts[k], c = rpts[k + 1], ar = Math.abs((b.x - a.x) * (c.z - a.z) - (b.z - a.z) * (c.x - a.x)) / 2; return ar > 1e-6 ? a.distanceTo(b) * b.distanceTo(c) * a.distanceTo(c) / (4 * ar) : 1e9; };
-        const hw0 = k => (k / RM < 0.86 ? RHW : 22) + 6;
+        const hw0 = k => hwf(k / RM) + 6;                                                  // largura real + margem de areia (raio x 1,35 já cobre a margem de 10 m)
         for (let it = 0; it < 1500; it++) { let bad = false; const nx = rpts.map(p => p.clone());
           for (let k = 1; k < RM; k++) { if (pin(k)) continue; const need = curvR(k) < hw0(k) * 1.35 || (k > 1 && curvR(k - 1) < hw0(k - 1) * 1.35) || (k < RM - 1 && curvR(k + 1) < hw0(k + 1) * 1.35);
             if (!need && it > 40) continue; bad = bad || need;
@@ -948,8 +1237,6 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
           rpts.splice(0, rpts.length, ...nx); if (!bad && it > 40) break; }
       }
       for (let k = 0; k <= RM; k++) { const a = rpts[Math.max(0, k - 1)], b = rpts[Math.min(RM, k + 1)]; rtan.push(V3(b.x - a.x, 0, b.z - a.z).normalize()); }
-      const HEAD = 26 / RL;                                                               // poço da cachoeira: o rio começa largo (24 m) e afina em 26 m
-      const hwf = t => { if (t < HEAD) { const u = t / HEAD; return RHW + (12 - RHW) * (1 - u * u * (3 - 2 * u)); } if (t < 0.86) return RHW; const u = (t - 0.86) / 0.14; return u < 0.5 ? RHW + (22 - RHW) * Math.sin(u * Math.PI) : 22 * Math.sqrt(Math.max(0, 1 - Math.pow((u - 0.5) / 0.5, 2))); };
       const rHW = rpts.map((_, k) => hwf(k / RM));
       const nearRiver = (x, z, m) => rpts.some((p, k) => Math.hypot(p.x - x, p.z - z) < m + rHW[k] - RHW);
       // atalho que cruzaria o rio é descartado (não dá para passar pela água)
@@ -964,12 +1251,14 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         if (colored) { g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); const fl = []; for (let k = 0; k <= RM; k++) for (let c = 0; c <= cs; c++) fl.push(rtan[k].x, rtan[k].z); g.setAttribute('flow', new THREE.Float32BufferAttribute(fl, 2)); }
         g.setIndex(idx); g.computeVertexNormals(); return g;
       }
-      { const o = new THREE.Mesh(ribbonGeo(t => Math.max(0, hwf(t) - 0.4), 2, false), bedM); o.position.y = 0.14; add(o); }
-      [1, -1].forEach(sg => { const pos = [], uv = [], idx = [];
-        for (let k = 0; k <= RM; k++) { const p = rpts[k], t = rtan[k], hw = rHW[k]; PROF.forEach(([d, h], c) => { pos.push(p.x + t.z * sg * (hw + d), h, p.z - t.x * sg * (hw + d)); uv.push(c * 0.6, k / RM * RL / 3); }); }
-        for (let k = 0; k < RM; k++) for (let c = 0; c < 3; c++) { const a = k * 4 + c, d = a + 4; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+      { const BC = 12, g = ribbonGeo(t => Math.max(0, hwf(t) - 0.15), BC, false), P = g.attributes.position;   // leito em "U": raso na beira, fundo no meio
+        for (let k = 0; k <= RM; k++) for (let c = 0; c <= BC; c++) P.setY(k * (BC + 1) + c, WATER_Y - bedDepth(Math.abs(c / BC * 2 - 1)));
+        g.computeVertexNormals(); const o = new THREE.Mesh(g, bedM); o.receiveShadow = true; o.userData.noOutline = true; add(o); }
+      [1, -1].forEach(sg => afterGrid.push(() => { const pos = [], uv = [], idx = [];
+        for (let k = 0; k <= RM; k++) { const p = rpts[k], t = rtan[k], hw = rHW[k]; PROF.forEach(([d], c) => { const x = p.x + t.z * sg * (hw + d), z = p.z - t.x * sg * (hw + d); pos.push(x, bankH(d, bankBase(x, z)), z); uv.push(x / 3.5, z / 3.5); }); }   // altura relativa ao chão de verdade; UV no mundo
+        for (let k = 0; k < RM; k++) for (let c = 0; c < PC - 1; c++) { const a = k * PC + c, d = a + PC; idx.push(a, d, a + 1, a + 1, d, d + 1); }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
-        const m = new THREE.Mesh(g, bankM); m.receiveShadow = true; add(m); });
+        const m = new THREE.Mesh(g, bankM); m.receiveShadow = true; add(m); }));
       const riverGeo = ribbonGeo(t => Math.max(0, hwf(t) - 0.15), 8, true); riverGeo.translate(0, WATER_Y, 0); add(waterMesh(riverGeo));
       tr.minimap.push({ type: 'river', pts: rpts.map((p, k) => [p.x, p.z, rHW[k]]) });
       // ---- barreiras de corrida (guarda-corpo das pontes e muro azul/amarelo): mesmo desenho para as duas ----
@@ -1027,7 +1316,9 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
             const a = side(i, -W - 1.8, y0), b = side(i + 1, -W - 1.8, y1), c = side(i, W + 1.8, y0), d = side(i + 1, W + 1.8, y1); [a, b, d, a, d, c].forEach(p => pos.push(p.x, p.y, p.z)); }
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); add(new THREE.Mesh(g, conc)); }
         // pilares de pedra apoiando o vão
-        [-3, 3].forEach(di => [-1, 1].forEach(sd => { const i = bi + di, p = side(i, sd * (W * 0.55), 0), h = bump(i) - 1.1;
+        const rk = rpts.reduce((b, p, k) => p.distanceTo(S[bi]) < rpts[b].distanceTo(S[bi]) ? k : b, 0), nodeL = S[bi].distanceTo(S[(bi + 1) % N]);
+        const PD = Math.min(BR.FLAT, Math.max(3, Math.ceil((rHW[rk] + 2.5) / nodeL)));        // pilares na margem, não dentro do rio
+        [-PD, PD].forEach(di => [-1, 1].forEach(sd => { const i = bi + di, p = side(i, sd * (W * 0.55), 0), h = bump(i) - 1.1;
           const pl = new THREE.Mesh(GEO.rbox(2.6, h + 0.6, 2.6, 0.5, 2), pierM); pl.position.set(p.x, (h + 0.6) / 2 - 0.6, p.z); pl.rotation.y = Math.atan2(T[i].x, T[i].z); pl.castShadow = true; add(pl);
           tr.obstacles.push({ x: p.x, z: p.z, r: 1.4, lowOnly: h }); }));
         // guarda-corpo vermelho e branco: em cima da beira do tabuleiro, rente à lateral de concreto (não sobra para fora);
@@ -1051,15 +1342,25 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         const HM = 88, HCX = 0, HCZ = -42, HRX = 74, HRZ = 66;                              // morro: altura máx., centro e raios (local)
         const zf = x => 0.011 * x * x + 1.2 * Math.sin(x * 0.27 + 0.6) + 0.7 * Math.sin(x * 0.61 + 2.0);   // linha da face (côncava + irregular)
         const hn = (x, z) => Math.sin(x * 0.11 + 1.3) * Math.cos(z * 0.09 - 0.4) * 3 + Math.sin(x * 0.27 - z * 0.21) * 1.4 + Math.sin(x * 0.53 + z * 0.47 + 2) * 0.6;
-        const dome = (x, z) => { const e = ((x - HCX) / HRX) ** 2 + ((z - HCZ) / HRZ) ** 2; return e >= 1 ? 0 : HM * Math.pow(1 - e, 0.62) + hn(x, z) * (1 - e); };
+        // pé do morro suave: antes o perfil pow(1-e, 0.62) subia de 0 a ~13 m na primeira célula da malha (inclinação infinita
+        // na borda); cada coluna da grade pegava uma altura diferente e a encosta virava uma "cortina" de dentes verdes/escuros.
+        // O smoothstep faz a encosta nascer do chão com inclinação zero e subir ao longo de várias células.
+        const dome = (x, z) => { const e = ((x - HCX) / HRX) ** 2 + ((z - HCZ) / HRZ) ** 2; if (e >= 1) return 0; const s = 1 - e;
+          return (HM * Math.pow(s, 0.62) + hn(x, z) * s) * THREE.MathUtils.smoothstep(s, 0, 0.45); };
         const chan = (x, z) => 6 * (1 - THREE.MathUtils.smoothstep(Math.abs(x), 5, 9)) * THREE.MathUtils.smoothstep(z, -34, -6);   // sulco do riacho
         const hillH = (x, z) => { const f = zf(x), behind = Math.max(0, dome(x, Math.min(z, f)) - chan(x, Math.min(z, f)));
           if (z <= f) return behind;
           const d = z - f, cliff = behind * (1 - THREE.MathUtils.smoothstep(d, 0, 0.9));                   // face quase vertical
           const talus = Math.min(behind, 9) * (1 - THREE.MathUtils.smoothstep(d, 0, 11)) * THREE.MathUtils.smoothstep(Math.abs(x), 13, 20);   // pedras no pé (fora do poço)
           return Math.max(cliff, talus); };
-        { const X0 = -82, X1 = 82, Z0 = -112, Z1 = 26, CS = LO ? 2.0 : MID ? 1.4 : 1.0, nx = Math.ceil((X1 - X0) / CS), nz = Math.ceil((Z1 - Z0) / CS), pos = [], col = [], idx = [];
-          for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = X0 + i * CS, z = Z0 + j * CS + zf(x), h = hillH(x, z);   // linhas da malha seguem a curva da face: sem degraus/listras verticais no penhasco
+        { const X0 = -82, X1 = 82, Z0 = -112, Z1 = 26, CS = LO ? 2.0 : MID ? 1.4 : 1.0, nx = Math.ceil((X1 - X0) / CS), pos = [], col = [], idx = [];
+          // fileiras da malha (deslocamento a partir da linha da face). A face quase vertical (~45 m) acontece entre 0 e 0,9 m
+          // à frente da linha: com fileiras a cada 1 m ela virava UMA faixa de triângulos de 45 m de altura -> cor e luz
+          // esticadas ("línguas" verdes e listras verticais). Fileiras extras dentro da face: faixas de ~5 m.
+          const rows = []; for (let o = Z0; o <= Z1 + 1e-6; o += CS) rows.push(+o.toFixed(4));
+          [0.02, 0.06, 0.11, 0.17, 0.24, 0.32, 0.41, 0.51, 0.62, 0.75, 0.9, 1.4, 2.2].forEach(o => { if (!rows.some(r => Math.abs(r - o) < 0.01)) rows.push(o); });
+          rows.sort((a, b) => a - b); const nz = rows.length - 1;
+          for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = X0 + i * CS, z = rows[j] + zf(x), h = hillH(x, z);   // linhas da malha seguem a curva da face: sem degraus/listras verticais no penhasco
             pos.push(x, h > 0.05 ? h - 1.2 : -2.5, z); col.push(Math.min(1, h / HM), 0, 1); }
           for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
@@ -1072,7 +1373,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         // pedregulhos low-poly no pé e dentro do poço (cor de pedra das montanhas)
         { const bm = new THREE.MeshLambertMaterial({ color: 0x5c534d, flatShading: true }), bg = new THREE.DodecahedronGeometry(1, 0);
           [[-10.5, 3, 2.6], [11, 2.5, 2.2], [-7.5, 7.5, 1.6], [8, 9, 1.3], [-2.8, 11.5, 1.1], [3.4, 13, 0.9], [-15, 9, 3.2], [16, 7, 3.6], [-19, 13, 2.4], [20.5, 12, 2.0]]
-            .forEach(([x, z, s], k) => { const o = new THREE.Mesh(bg, bm); o.position.set(x, WATER_Y - 0.25 + s * 0.35, zf(x) + z * 0.6); o.scale.set(s * 1.25, s * 0.75, s); o.rotation.set(k, k * 1.7, k * 0.5); o.castShadow = o.receiveShadow = true; wf.add(o); }); }
+            .forEach(([x, z, s], k) => { if (Math.abs(x) <= 11.5) return; const o = new THREE.Mesh(bg, bm); o.position.set(x, WATER_Y - 0.25 + s * 0.35, zf(x) + z * 0.6); o.scale.set(s * 1.25, s * 0.75, s); o.rotation.set(k, k * 1.7, k * 0.5); o.castShadow = o.receiveShadow = true; wf.add(o); }); }   // pedras dentro da neblina (|x| <= 11.5) não são criadas: o contorno escuro do pós-efeito atravessava a fumaça
         // pinheiros no topo do morro (em cima da malha, longe da beirada)
         for (let k = 0, tries = 0; k < 16 && tries < 400; tries++) { const x = (rnd() - 0.5) * 120, z = -20 - rnd() * 80, h = hillH(x, z);
           if (h < 8 || z > zf(x) - 8 || Math.abs(x) < 10 && z > -40) continue; const p = wf.localToWorld(new THREE.Vector3(x, h - 2.4, z));
@@ -1100,8 +1401,8 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
             grab.tex.needsUpdate = true; grab.w = w; grab.h = h; }
           try { renderer.copyFramebufferToTexture(grab.o, grab.tex); grabU.tGrab.value = grab.tex; grabU.uRes.value.set(w, h); if (!grabU.uHasGrab.value) console.info('[cachoeira] refração ligada', w + 'x' + h); grabU.uHasGrab.value = 1; }
           catch (e) { grab.ok = false; grabU.uHasGrab.value = 0; } };
-        const fallMat = (speed, alpha, seed) => { const u = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uSpd: { value: speed }, uA: { value: alpha }, uSeed: { value: seed },
-            uDeep: { value: new THREE.Color(WC.DEEP) }, uShallow: { value: new THREE.Color(WC.SHALLOW) } }]);
+        const fallMat = (speed, alpha, seed) => { const u = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uSpd: { value: speed * 1.3 /* água caindo 30% mais rápido */ }, uA: { value: alpha }, uSeed: { value: seed },
+            uDeep: { value: new THREE.Color('#0fc9c2') }, uShallow: { value: new THREE.Color('#52f8e8') } }]);   // queda: água aerada, mais clara que o rio
           u.uT = waterU; Object.assign(u, grabU); u.uSunDir = wUni.uSunDir; u.uSunCol = wUni.uSunCol;
           const m = new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false, fog: true, side: THREE.DoubleSide,
             vertexShader: `uniform float uT; uniform float uSpd; uniform float uSeed; varying vec2 vUv; varying vec3 vWN; varying vec3 vWT; varying vec3 vWP;
@@ -1164,11 +1465,9 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         sheet(fallGeo(FW + 2, HT + 1, 0.4, 2.4, 0.12), fallMat(2.0, 0.62, 41.7), 1);              // fundo, mais largo
         sheet(fallGeo(FW, HT + 1, 0.9, 3.0, 0.1), fallMat(2.6, 0.96, 0), 2);                       // principal
         sheet(fallGeo(FW - 5, HT + 1, 1.6, 3.4, 0.14), fallMat(3.3, 0.6, 17.3), 3);                // véu da frente
-        [-1, 1].forEach(sd => { const xs = sd * (FW / 2 + 9), H2 = Math.min(HT * 0.55, hillH(xs, zf(xs) - 0.3) - 6);   // quedas laterais (fiozinhos saindo da face)
-          const m = sheet(fallGeo(2.6, H2, 0, 1.0, 0.4), fallMat(2.9, 0.8, 7.7 * sd + 30), 2, xs, 0); m.position.z = zf(xs) + 0.3; m.rotation.y = -Math.atan(0.022 * xs); });
         // pedra molhada atrás da queda
         { const u = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {}]); u.uT = waterU;
-          const wg = new THREE.PlaneGeometry(FW + 10, HT, 24, 1); { const p = wg.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, zf(p.getX(i)) + 0.15); }
+          const wg = new THREE.PlaneGeometry(FW - 1, HT, 24, 1); { const p = wg.attributes.position; for (let i = 0; i < p.count; i++) p.setZ(i, zf(p.getX(i)) + 0.15); }
           const wet = new THREE.Mesh(wg, new THREE.ShaderMaterial({ uniforms: u, transparent: true, depthWrite: false, fog: true,
             vertexShader: `varying vec2 vUv;
               #include <fog_pars_vertex>
@@ -1179,7 +1478,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
               #include <fog_pars_fragment>
               ${W_NOISE}
               void main(){ float x = abs(vUv.x - 0.5) * 2.0, n = wNoise(vec2(vUv.x * 34.0, vUv.y * 2.0 - uT * 0.6));
-                float a = (1.0 - smoothstep(0.5 + n * 0.3, 1.0, x)) * (0.4 + 0.25 * n) * smoothstep(0.0, 0.06, vUv.y);
+                float a = (1.0 - smoothstep(0.55, 0.9, x)) * (0.4 + 0.25 * n) * smoothstep(0.0, 0.06, vUv.y);   // borda lisa (sem dentes)
                 float sh = smoothstep(0.75, 0.95, wNoise(vec2(vUv.x * 55.0, vUv.y * 7.0 - uT * 2.0)));
                 gl_FragColor = vec4(mix(vec3(0.07, 0.16, 0.2), vec3(0.6, 0.95, 1.0), sh * 0.6), a);
                 #include <fog_fragment>
@@ -1256,7 +1555,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
                 float a;
                 if (uDrop > 0.5) a = vA * (1.0 - smoothstep(0.35, 1.0, r));                  // gotícula: ponto redondo
                 else { float n = wNoise(vQ * 2.2 + vS * 40.0 + uT * 0.12) * 0.6 + wNoise(vQ * 5.0 - vS * 13.0) * 0.4;   // fumaça: borda macia e rasgada
-                  a = vA * (1.0 - smoothstep(0.15, 1.0, r)) * smoothstep(0.15, 0.75, n + 0.25 * (1.0 - r)); }
+                  a = min(1.0, vA * 1.6) * (1.0 - smoothstep(0.55, 1.0, r)) * smoothstep(0.0, 0.3, n + 0.7 * (1.0 - r)); }
                 gl_FragColor = vec4(uColor, a);
                 #include <fog_fragment>
               }` }));
@@ -1267,33 +1566,47 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         // Textura de fumaça gerada em canvas (vários "puffs" macios sobrepostos). Cada nuvem nasce no impacto,
         // sobe com arrasto, se espalha para a frente e para os lados com turbulência, cresce e some.
         // Mistura normal (não soma luz): engrossa bem sem virar clarão.
-        const smokeTex = (() => { const S = 128, c = TX.cvs(S, S), g = c.getContext('2d');
-          for (let k = 0; k < 22; k++) { const x = S / 2 + (rnd() - 0.5) * S * 0.42, y = S / 2 + (rnd() - 0.5) * S * 0.42, r = S * (0.12 + rnd() * 0.2);
-            const gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, S, S); }
-          const im = g.getImageData(0, 0, S, S), d = im.data;                                         // borda redonda e macia
-          for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) { const r = Math.hypot(i - S / 2, j - S / 2) / (S / 2), k = (j * S + i) * 4; d[k + 3] *= Math.max(0, 1 - Math.pow(r, 2.2)); }
+        // textura da névoa: nuvem com ruído fractal (fiapos e falhas, não um disco liso), borda bem macia; o miolo levemente
+        // mais escuro dá volume (a cor final vem da nuvem: branca em cima, azul-acinzentada rente à água)
+        const smokeTex = (() => { const S = 128, c = TX.cvs(S, S), g = c.getContext('2d'), im = g.createImageData(S, S), d = im.data;
+          const hsh = (x, y) => { const v = Math.sin(x * 127.1 + y * 311.7 + 17.3) * 43758.5453; return v - Math.floor(v); };
+          const vno = (x, y) => { const i = Math.floor(x), j = Math.floor(y); let u = x - i, v = y - j; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+            return (hsh(i, j) * (1 - u) + hsh(i + 1, j) * u) * (1 - v) + (hsh(i, j + 1) * (1 - u) + hsh(i + 1, j + 1) * u) * v; };
+          for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) { const x = i / S * 5, y = j / S * 5, k = (j * S + i) * 4;
+            const f = vno(x, y) * 0.5 + vno(x * 2.1 + 3.1, y * 2.1 + 1.7) * 0.27 + vno(x * 4.3 + 7.7, y * 4.3 + 2.9) * 0.15 + vno(x * 8.9, y * 8.9 + 5.5) * 0.08;
+            const r = Math.hypot(i - S / 2, j - S / 2) / (S / 2), fall = Math.max(0, 1 - r * r) ** 1.6;
+            const a = Math.max(0, Math.min(1, (f * 1.4 - 0.1 + fall * 0.8) * fall));
+            const sh = 0.74 + 0.26 * f; d[k] = 255 * sh; d[k + 1] = 255 * sh; d[k + 2] = 255 * Math.min(1, sh + 0.03); d[k + 3] = 255 * a * a * (3 - 2 * a); }
           g.putImageData(im, 0, 0); const t = new THREE.CanvasTexture(c); t.minFilter = THREE.LinearFilter; return t; })();
         const fogZ = zf(0) + 4.2, puffs = [];
-        const mkPuff = (low) => { const m = new THREE.SpriteMaterial({ map: smokeTex, color: 0xf3f9fb, transparent: true, depthWrite: false, opacity: 0, fog: true });
-          const sp = new THREE.Sprite(m); sp.renderOrder = 7; sp.userData.noOutline = true; add(sp);
-          // de perto a nuvem some aos poucos (a câmera "entra" na neblina sem a tela ficar toda branca)
-          sp.onBeforeRender = (r, sc, cam) => { const e = cam.matrixWorld.elements, dx = e[12] - sp.position.x, dy = e[13] - sp.position.y, dz = e[14] - sp.position.z;
-            const d = Math.sqrt(dx * dx + dy * dy + dz * dz) - sp.scale.x * 0.35, f = Math.min(1, Math.max(0, (d - 2) / 16));
-            m.opacity = sp.userData.op * f * f * (3 - 2 * f); };
-          return { sp, low, life: low ? 8 + rnd() * 4 : 5 + rnd() * 3, ph: rnd(), x0: (rnd() - 0.5) * (low ? FW * 1.3 : FW * 0.95), z0: fogZ + (rnd() - 0.5) * 3,
-            vx: (rnd() - 0.5) * (low ? 7 : 5), vy: low ? 0.4 + rnd() * 0.6 : 3 + rnd() * 3, vz: low ? 3 + rnd() * 3 : 1.5 + rnd() * 2.5, s0: low ? 6 : 3, s1: low ? 26 + rnd() * 8 : 15 + rnd() * 8,
-            rot: (rnd() - 0.5) * 0.5, a: low ? 0.3 : 0.38, seed: rnd() * 100 }; };
-        for (let k = 0; k < (LO ? 16 : MID ? 36 : 64); k++) puffs.push(mkPuff(false));                                      // névoa que sobe do impacto
-        for (let k = 0; k < (LO ? 6 : MID ? 12 : 22); k++) puffs.push(mkPuff(true));                                       // névoa rasteira, colada na água
+        // todas as nuvens num lote só (1 chamada de desenho); de perto cada nuvem some aos poucos (nearFade, no shader):
+        // a câmera "entra" na neblina sem a tela ficar toda branca
+        const mistSpr = makeSpriteBatch({ map: smokeTex, nearFade: true, order: 7 });
+        // 3 camadas: 0 = borrifo que sobe colado na queda; 1 = nuvem que rola para a frente; 2 = névoa rasteira que desce o rio
+        const LAY = [
+          { col: 0xffffff, life: [3.5, 2.5], x: FW * 0.9, z: 1.8, vx: 4, vy: [4.5, 5], vz: [0.6, 1.8], s: [4, 11, 7], flat: 0.9, a: 0.4 },     // borrifo alto colado na queda
+          { col: 0xf2f8fa, life: [6, 3], x: FW * 1.1, z: 3, vx: 6, vy: [0.8, 1.6], vz: [3, 3.8], s: [7, 18, 10], flat: 0.75, a: 0.32 },          // nuvem que rola para a frente
+          { col: 0xdbe7ec, life: [10, 5], x: FW * 1.4, z: 3.5, vx: 7, vy: [0.15, 0.4], vz: [5, 5.5], s: [10, 26, 12], flat: 0.45, a: 0.28 },      // névoa rasteira que desce o rio
+          { col: 0xffffff, life: [5, 3], x: FW * 0.7, z: 1.2, vx: 2.5, vy: [7, 6], vz: [0.2, 0.9], s: [6, 16, 8], flat: 1.15, a: 0.3 },         // coluna alta de vapor
+          { col: 0xe9f3f6, life: [7, 4], x: FW * 1.2, z: 4.5, vx: 8, vy: [0.3, 0.7], vz: [1.5, 3], s: [8, 20, 10], flat: 0.55, a: 0.3 },
+          { col: 0xf4f9fb, life: [8, 4], x: FW * 1.5, z: 5, vx: 5, vy: [0.5, 1.2], vz: [0.5, 2], s: [10, 24, 8], flat: 0.8, a: 0.25 } ];     // cortina densa sobre as pedras do poço     // base densa no poço
+        const mkPuff = (L) => { const o = LAY[L], sp = mistSpr(o.col, 1, 0);
+          return { sp, L, low: L === 2, life: o.life[0] + rnd() * o.life[1], ph: rnd(), x0: (rnd() - 0.5) * o.x, z0: fogZ + (rnd() - 0.5) * o.z,
+            vx: (rnd() - 0.5) * o.vx, vy: o.vy[0] + rnd() * o.vy[1], vz: o.vz[0] + rnd() * o.vz[1], s0: o.s[0], s1: o.s[1] + rnd() * o.s[2], flat: o.flat,
+            rot: (rnd() - 0.5) * 0.35, a: Math.min(1, o.a * (0.9 + rnd() * 0.3)), seed: rnd() * 100 }; };
+        [[44, 26, 12], [38, 22, 10], [28, 16, 8], [24, 14, 6], [28, 16, 8], [30, 18, 8]].forEach((cnt, L) => { for (let k = 0; k < (LO ? cnt[2] : MID ? cnt[1] : cnt[0]); k++) puffs.push(mkPuff(L)); });
+        mistSpr.finish();
         const _pv = new THREE.Vector3();
-        tr.animated.push(t => { for (const q of puffs) {
+        tr.animated.push(t => { const gust = Math.sin(t * 0.23) * 0.6 + Math.sin(t * 0.61 + 1.3) * 0.3;   // brisa: a névoa toda balança devagar para os lados
+          for (const q of puffs) {
           const age = ((t / q.life + q.ph) % 1), tau = age * q.life, k = 0.45, dr = (1 - Math.exp(-k * tau)) / k;   // arrasto: desacelera
-          const tx = Math.sin(tau * 1.1 + q.seed) * 1.6 * age, tz = Math.cos(tau * 0.9 + q.seed * 1.3) * 1.2 * age;
-          _pv.set(q.x0 + q.vx * dr + tx, WATER_Y + 0.6 + q.vy * dr + Math.sin(tau * 0.8 + q.seed) * 0.4 * age, q.z0 + q.vz * dr + tz);
+          const tx = Math.sin(tau * 1.1 + q.seed) * 1.6 * age + gust * tau * 0.35, tz = Math.cos(tau * 0.9 + q.seed * 1.3) * 1.2 * age;
+          _pv.set(q.x0 + q.vx * dr + tx, WATER_Y + 0.5 + q.vy * dr + Math.sin(tau * 0.8 + q.seed) * 0.4 * age, q.z0 + q.vz * dr + tz);
           wf.localToWorld(_pv); q.sp.position.copy(_pv);
-          const s = q.s0 + (q.s1 - q.s0) * Math.pow(age, 0.6); q.sp.scale.set(s, s * (q.low ? 0.55 : 0.85), 1);
+          const s = q.s0 + (q.s1 - q.s0) * Math.sqrt(age); q.sp.scale.set(s, s * q.flat, 1);
           q.sp.material.rotation = q.seed + tau * q.rot;
-          q.sp.userData.op = q.a * Math.pow(Math.sin(Math.PI * age), 0.9); q.sp.material.opacity = q.sp.userData.op; } });
+          // aparece rápido e some devagar (nuvem se desfazendo), nunca uma parede branca: opacidade baixa e muitas camadas
+          q.sp.userData.op = q.a * Math.min(1, age / 0.12) * Math.pow(1 - age, 1.2); q.sp.material.opacity = q.sp.userData.op; } });
         // respingos: gotículas (pontos) que saltam do impacto em parábola e caem de volta
         { const ND = LO ? 60 : MID ? 130 : 220, pos = new Float32Array(ND * 3), D = Array.from({ length: ND }, () => ({ ph: rnd(), life: 0.9 + rnd() * 0.9, x: (rnd() - 0.5) * FW * 0.95, z: fogZ - 0.6 + (rnd() - 0.5) * 2.5,
             vx: (rnd() - 0.5) * 7, vy: 4 + rnd() * 7, vz: 0.5 + rnd() * 6 }));
@@ -1321,7 +1634,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
                 gl_FragColor = vec4(vec3(0.96, 1.0, 1.0), a);
                 #include <fog_fragment>
               }` });
-          [[-7.5, 7.5, 1.6], [8, 9, 1.3], [-2.8, 11.5, 1.1], [3.4, 13, 0.9]].forEach(([x, z, s]) => { const f = new THREE.Mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), ringM);
+          [].forEach(([x, z, s]) => {   // anéis de espuma desligados (eram as "pedrinhas" no poço) const f = new THREE.Mesh(new THREE.CircleGeometry(1, 32).rotateX(-Math.PI / 2), ringM);
             f.scale.setScalar(s * 2.4); f.position.set(x, WATER_Y + 0.05, zf(x) + z * 0.6); f.renderOrder = 4; f.userData.noOutline = true; wf.add(f); }); }
       }
       // domos de pedra com relevo irregular; cor de vértice esverdeada nas partes mais altas/planas
@@ -1345,7 +1658,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         MOUNTS.forEach((M, mk) => { for (let k = 0; k < 16; k++) { const a = rnd() * Math.PI * 2, e = 0.45 + rnd() * 0.45, lx = Math.cos(a) * M.rx * e, lz = Math.sin(a) * M.rz * e;
           if (lz < -M.rz * 0.4 && Math.abs(lx) < 30) continue;                                    // não cobre o paredão
           const p = M.c.clone().addScaledVector(TB, lx).addScaledVector(FD, lz); pines.push({ x: p.x, y: surfY(M, mk, a, e) - 1.2, z: p.z, r: rnd() * 6.28, s: 1 + rnd() * 0.5 }); } });
-        plants('pine', pines, 0x2a7a3a); }
+        pineForest(pines, 0.9); }
       const mist = [];                                                                   // névoa agora é o sistema de partículas da cachoeira
       // ---- laguinhos com contorno próprio ----
       const PNA = 96, ponds = tr.ponds;
@@ -1358,7 +1671,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       function tryPond(x, z, r) { const sh = pondShape(r);
         if (tr.shortcuts.length && shortcutDist(x, z) < sh.rmax + 14) return false;   // lago não nasce no atalho
         if (tr.vert) for (let k = 0; k <= 8; k++) { const a = k * 0.785, rr = k === 8 ? 0 : sh.rmax + 12; if (natH(x + Math.cos(a) * rr, z + Math.sin(a) * rr) > 0.5) return false; }   // laguinho só na parte plana
-        if (nearTrack({ x, z }, sh.rmax + W + 10) || nearRiver(x, z, sh.rmax + 22) || Math.hypot(x - F.x, z - F.z) < sh.rmax + 40 || inMountain(x, z, sh.rmax + 8)) return false;
+        if (nearTrack({ x, z }, sh.rmax + W + 10) || nearRiver(x, z, sh.rmax + 32) || Math.hypot(x - F.x, z - F.z) < sh.rmax + 40 || inMountain(x, z, sh.rmax + 8)) return false;
         if (ponds.some(q => Math.hypot(q.x - x, q.z - z) < q.r + sh.rmax + 16)) return false;
         ponds.push({ x, z, r: sh.rmax, R: sh.R }); return true; }
       { const cand = []; for (let x = -320; x <= 320; x += 10) for (let z = -320; z <= 320; z += 10) { if (!inside(x, z)) continue; let md = 1e9; for (let i = 0; i < N; i += 2) md = Math.min(md, Math.hypot(S[i].x - x, S[i].z - z)); md = Math.min(md, riverDist(x, z) + W - 6); cand.push({ x, z, md }); }
@@ -1385,8 +1698,9 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         lilyAll.im.instanceMatrix.needsUpdate = true;
         if (lilyAll.fm) { lilyAll.fl.forEach((q, k) => { d.position.set(q.x + Math.sin(t * 0.3 + lilyAll.indexOf(q)) * 0.05, WATER_Y + 0.2, q.z); d.rotation.set(0, q.r, 0); d.scale.setScalar(q.s * 0.9); d.updateMatrix(); lilyAll.fm.setMatrixAt(k, d.matrix); }); lilyAll.fm.instanceMatrix.needsUpdate = true; } });
       ponds.forEach(p => { const ang = k => k / PNA * 6.2832;
-        const bk = new THREE.Mesh(polyStrip(PNA, 4, (k, c) => { const a = ang(k), R = p.R(a), [d, h] = PROF[c]; return [p.x + Math.cos(a) * (R + d), h, p.z + Math.sin(a) * (R + d), c * 0.6, k / PNA * R * 6.2832 / 3]; }), bankM); bk.receiveShadow = true; add(bk);
-        add(new THREE.Mesh(polyStrip(PNA, 2, (k, c) => { const a = ang(k), R = (p.R(a) - 0.4) * c; return [p.x + Math.cos(a) * R, 0.14, p.z + Math.sin(a) * R, Math.cos(a) * R / 6, Math.sin(a) * R / 6]; }), bedM));
+        afterGrid.push(() => { const bk = new THREE.Mesh(polyStrip(PNA, PC, (k, c) => { const a = ang(k), R = p.R(a), [d] = PROF[c], x = p.x + Math.cos(a) * (R + d), z = p.z + Math.sin(a) * (R + d); return [x, bankH(d, bankBase(x, z)), z, x / 3.5, z / 3.5]; }), bankM); bk.receiveShadow = true; add(bk); });
+        { const bed = new THREE.Mesh(polyStrip(PNA, 9, (k, c) => { const a = ang(k), f = c / 8, R = (p.R(a) - 0.15) * f; return [p.x + Math.cos(a) * R, WATER_Y - bedDepth(f), p.z + Math.sin(a) * R, Math.cos(a) * R / 6, Math.sin(a) * R / 6]; }), bedM);   // bacia funda no meio
+          bed.receiveShadow = true; bed.userData.noOutline = true; add(bed); }
         const pos = [], uv = [], col = [], idx = [], C = WRING.length;
         for (let k = 0; k <= PNA; k++) { const a = ang(k % PNA), R = p.R(a) - 0.15; WRING.forEach(f => { const x = Math.cos(a) * R * f, z = Math.sin(a) * R * f; pos.push(x, 0.45, z); uv.push(x / 9, z / 9); const q = dcol(f); col.push(q.r, q.g, q.b); }); }
         for (let k = 0; k < PNA; k++) for (let c = 0; c < C - 1; c++) { const a = k * C + c, d = a + C; idx.push(a, a + 1, d, a + 1, d + 1, d); }
@@ -1402,27 +1716,101 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       // ---- malha do terreno com relevo (só quando a pista tem elev) ----
       waterDist = (x, z) => { let d = riverDist(x, z) - RHW; for (const q of ponds) d = Math.min(d, pondEdge(q, x, z)); return d; };
       // ---- terreno: bacia de areia dos lagos e do rio ----
-      const bprof = (d, R) => d > R + 6 ? 0 : d > R + 1.2 ? 0.03 + 0.82 * (R + 6 - d) / 4.8 : d > R ? 0.85 : d > R - 0.4 ? 0.14 + 0.71 * (d - (R - 0.4)) / 0.4 : 0.14;
-      const bank = (x, z) => { let h = 0; for (const q of ponds) h = Math.max(h, bprof(Math.hypot(x - q.x, z - q.z), q.R(Math.atan2(z - q.z, x - q.x))));
-        let md = 1e9, mk = 0; for (let k = 0; k < rpts.length; k++) { const d = Math.hypot(rpts[k].x - x, rpts[k].z - z); if (d < md) { md = d; mk = k; } } return Math.max(h, bprof(md, rHW[mk])); };
+      // margem RELATIVA ao chão de verdade (bankBase = grade da grama desenhada): sobe do chão local até o topo (0,85) com curva
+      // suave. Antes a curva partia da altura 0 fixa; onde o chão era mais baixo (perto das pontes, ~25 cm) a borda da areia e a
+      // faixa de grama ficavam acima dele -> linha de areia e degrau.
+      const bankH = (e, g0) => e >= 10.4 ? -1e9 : e >= 10 ? g0 - 0.2 * (e - 10) : e >= 1.2 ? g0 + (0.85 - g0) * (u => u * u * (3 - 2 * u))((10 - e) / 8.8) : BANKP(e);
+      const bank = (x, z) => { const g0 = bankBase(x, z); let h = -1e9; for (const q of ponds) h = Math.max(h, bankH(Math.hypot(x - q.x, z - q.z) - q.R(Math.atan2(z - q.z, x - q.x)), g0));
+        let md = 1e9, mk = 0; for (let k = 0; k < rpts.length; k++) { const d = Math.hypot(rpts[k].x - x, rpts[k].z - z); if (d < md) { md = d; mk = k; } } return Math.max(h, bankH(md - rHW[mk], g0)); };
       // altura do chão fora do asfalto: relevo + bacia de areia; perto da pista (dist/u) segue exatamente a beira do asfalto
       const terrain = (x, z, dist, u) => { let g = gH(x, z); if (tr.vert && dist !== undefined && u !== undefined) { const w = sm(W + 5, W + 40, dist); if (w < 1) g = lerp(elevAt(u) - drop(dist), g, w); } return Math.max(g, bank(x, z)); };
       if (tr.vert) tr.heightAt = (x, z) => terrain(x, z);
+      // superfície da grama exatamente como a faixa da beira da pista calcula (mistura com a altura do asfalto até W+40).
+      // A grade do terreno usa a MESMA conta: antes, no lado de dentro das curvas fechadas, a faixa acabava antes de W+40 e a
+      // grade ao lado tinha outra altura (degrau + vala) -> linha dura na grama.
+      const surfAt = (x, z, withBank) => { const r = roadInfo(x, z); let g = gH(x, z, r);
+        if (r.i >= 0 && r.d < W + 45) { const n = tr.nearest({ x, z }, r.i), w = sm(W + 5, W + 40, n.dist); if (w < 1) g = lerp(elevAt(n.i + n.f) - drop(n.dist), g, w); }
+        return withBank ? Math.max(g, bank(x, z)) : g; };
+      // normal da superfície por diferença central (2,5 m): grade e faixa ganham a mesma normal no mesmo ponto -> sem emenda
+      // de luz. Antes cada malha calculava a própria normal (computeVertexNormals) e a borda da faixa "via" a saia que desce
+      // 3 m para baixo da grama: a última fileira escurecia e virava um risco escuro paralelo à pista.
+      const _sn = new THREE.Vector3();
+      const surfNormal = (x, z, withBank) => { const e = 2.5, hx = surfAt(x + e, z, withBank) - surfAt(x - e, z, withBank), hz = surfAt(x, z + e, withBank) - surfAt(x, z - e, withBank);
+        return _sn.set(-hx / (2 * e), 1, -hz / (2 * e)).normalize(); };
       const gcol = (x, z) => { const m = 0.9 + 0.06 * Math.sin(x * 0.013 + 1.3) * Math.cos(z * 0.011) + 0.05 * Math.sin(x * 0.034 + z * 0.029) + 0.03 * Math.sin(x * 0.071 - z * 0.064 + 2), h = Math.sin(x * 0.009 - z * 0.012 + 0.7) * 0.5 + 0.5; return [m * (1 + 0.07 * h), m, m * (1 - 0.07 * 1.4 * h)]; };
-      const grassUV = (x, z) => [(x + GS / 2) / 7, (-z + GS / 2) / 7];                // mesmo mapeamento do chão grande (sem emenda)
+      const grassUV = (x, z) => [(x + GS / 2) / 7, (-z + GS / 2) / 7];
+      // ---- transição grama -> areia (margens do rio e dos laguinhos) ----
+      // Uma faixa da MESMA grama do chão (mesma textura, mapeamento, tom e cor) cobre a parte de fora da rampa de areia e
+      // termina numa borda recortada por ruído: a grama vai ficando rala, mais seca/amarelada e com falhas, e a areia aparece
+      // em manchas. Antes a areia começava numa linha reta e dura.
+      afterGrid.push(() => { const ovM = GfxFX.chain(grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 })), 'bank-blend-v1', sh => {
+          sh.vertexShader = 'attribute float aB;\nvarying float vB;\nvarying vec2 vBW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vB = aB; vBW = position.xz;');
+          sh.fragmentShader = 'varying float vB;\nvarying vec2 vBW;\n' + sh.fragmentShader
+            .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+              float bN = gfxN(vBW * 0.35) * 0.55 + gfxN(vBW * 1.3 + 5.0) * 0.3 + gfxN(vBW * 4.1 + 9.0) * 0.15;
+              float bE = vB + (bN - 0.5) * 0.75 * smoothstep(0.08, 0.4, vB);                // perto da borda de fora a grama é inteira (sem furos)
+              if (bE > 0.66) discard;                                                       // borda recortada
+              if (bE > 0.36 && gfxN(vBW * 2.7 + 3.0) * 0.7 + gfxN(vBW * 9.0) * 0.3 < (bE - 0.36) * 3.0) discard;   // grama rala, com falhas`)
+            .replace('#include <color_fragment>', `#include <color_fragment>
+              diffuseColor.rgb *= mix(vec3(1.0), vec3(1.1, 1.03, 0.78), smoothstep(0.15, 0.62, bE)) * mix(1.0, 0.86, smoothstep(0.3, 0.66, bE));   // mais seca e com sombra de terra perto da areia`); });
+        const COLS = 10, D0 = 10, D1 = 1.0;   // cobre a parte de fora da margem (que começa no chão a 10 m da água)
+        const band = (rows, at) => { const pos = [], uv = [], col = [], nor = [], ab = [], idx = [];
+          for (let k = 0; k <= rows; k++) for (let c = 0; c <= COLS; c++) { const f = c / COLS, dd = D0 + (D1 - D0) * f, [x, z, nx, nz] = at(k, dd), g0 = bankBase(x, z), h = bankH(dd, g0) + 0.01 + 0.02 * f;   // segue a areia, que parte do chão de verdade: na borda de fora fica rente à grama
+            pos.push(x, h, z); const t = grassUV(x, z); uv.push(t[0], t[1]); col.push(...gcol(x, z)); ab.push(f);
+            const d2 = Math.min(dd + 0.1, 10), sl = (bankH(dd - 0.1, g0) - bankH(d2, g0)) / (d2 - dd + 0.1), l = Math.hypot(sl, 1); nor.push(nx * sl / l, 1 / l, nz * sl / l); }   // normal da curva da margem (na borda de fora: reta, igual à grama do chão)
+          for (let k = 0; k < rows; k++) for (let c = 0; c < COLS; c++) { const a = k * (COLS + 1) + c, d = a + COLS + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); }
+          // todo triângulo virado para CIMA: num lado do rio a ordem dos vértices sai espelhada e a face de trás aparecia
+          // (o Lambert ilumina a face de trás com a normal invertida -> faixa verde-escura)
+          for (let q = 0; q < idx.length; q += 3) { const A = idx[q] * 3, B = idx[q + 1] * 3, Cc = idx[q + 2] * 3;
+            const ux = pos[B] - pos[A], uz = pos[B + 2] - pos[A + 2], vx = pos[Cc] - pos[A], vz = pos[Cc + 2] - pos[A + 2];
+            if (uz * vx - ux * vz < 0) { const t = idx[q + 1]; idx[q + 1] = idx[q + 2]; idx[q + 2] = t; } }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+          g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setAttribute('aB', new THREE.Float32BufferAttribute(ab, 1)); g.setIndex(idx);
+          const m = new THREE.Mesh(g, ovM); m.receiveShadow = true; m.userData.noOutline = true; m.userData.dynamic = true; add(m); };
+        // rio (os dois lados): (x, z) na distância dd além da beira d'água e a direção para fora (a rampa sobe em direção à água)
+        [1, -1].forEach(sg => band(RM, (k, dd) => { const p = rpts[k], t = rtan[k], hw = rHW[k]; return [p.x + t.z * sg * (hw + dd), p.z - t.x * sg * (hw + dd), t.z * sg, -t.x * sg]; }));
+        ponds.forEach(q => band(PNA, (k, dd) => { const a = (k % PNA) / PNA * 6.2832, R = q.R(a); return [q.x + Math.cos(a) * (R + dd), q.z + Math.sin(a) * (R + dd), Math.cos(a), Math.sin(a)]; }));
+      });                // mesmo mapeamento do chão grande (sem emenda)
       const nearBridge = i => bridges.some(b => { const d = Math.abs(((i - b) % N + N + N / 2) % N - N / 2); return d <= BR.END + 2; });
+      // alturas EXATAS das malhas de grama desenhadas (grade + faixas da beira), para a física, os enfeites e os atalhos
+      // pousarem no chão que aparece na tela (a malha é plana entre vértices; a conta analítica fica até ~17 cm fora dela)
+      const RG = tr.vert ? { grid: null, strip: {} } : null;
+      // interpolação nos triângulos da grade (diagonal de (i+1,j) a (i,j+1), igual ao índice da malha)
+      const triAt = (G, Yv, x, z) => { const fx = (x - G.x0) / G.cs, fz = (z - G.z0) / G.cs, i = Math.floor(fx), j = Math.floor(fz);
+        if (i < 0 || j < 0 || i >= G.nx || j >= G.nz) return -0.6; const u = fx - i, v = fz - j, a = j * (G.nx + 1) + i, b = a + 1, c = a + G.nx + 1, d = c + 1;
+        return u + v <= 1 ? Yv[a] + u * (Yv[b] - Yv[a]) + v * (Yv[c] - Yv[a]) : Yv[d] + (1 - u) * (Yv[c] - Yv[d]) + (1 - v) * (Yv[b] - Yv[d]); };
+      let gridRawAt = () => 0;
       if (tr.vert) {
+        // largura da faixa da beira em cada nó e lado (no lado de dentro das curvas fechadas ela é mais curta)
+        const Rloc = i => { const a = T[(i - 3 + N) % N], b = T[(i + 3) % N], cr = a.x * b.z - a.z * b.x, ang = Math.asin(Math.max(-1, Math.min(1, cr))), len = 6 * L.length / N; return { R: Math.abs(ang) > 1e-4 ? len / Math.abs(ang) : 1e9, sg: Math.sign(cr) }; };
+        // ===== GRAMA = grade (relevo) + faixa estreita na beira da pista =====
+        // A grade só afunda os vértices que ficam EMBAIXO do asfalto/zebra. Um triângulo de grade "puxado" por um vértice afundado
+        // vai até ~1 diagonal de célula para fora; a faixa da beira cobre exatamente essa zona (oS) e termina EM CIMA da grade
+        // (mesma altura dos triângulos da grade, +3 cm). Antes a grade afundava até 40 m da pista e, onde a faixa acabava
+        // (lado de dentro das curvas), sobravam valas, buracos e pedaços da "saia" da faixa furando os atalhos.
+        // DINF = até onde (a partir da zebra) um triângulo da grade pode estar puxado para baixo; a faixa fica ACIMA da grade até
+        // DINF+0,5 e depois mergulha embaixo dela (as duas têm a mesma textura, cor e normal: a troca não aparece)
+        const CELL = LO ? 13 : MID ? 13 : 10, DINF = CELL * 1.42 + 0.4, oS = W + 1.8 + DINF + 3.5;   // oS cabe até na curva mais fechada (0,8 x raio)
+        const oMaxAt = (i, sg) => { const rl = Rloc(i), inner = rl.sg !== 0 && Math.sign(-rl.sg) === sg; return inner ? Math.max(W + 8, Math.min(oS, 0.8 * rl.R)) : oS; };
         const terrM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true }));
-        { const pad = 420, x0 = L.bbox.x0 - pad, x1 = L.bbox.x1 + pad, z0 = L.bbox.z0 - pad, z1 = L.bbox.z1 + pad, CELL = LO ? 20 : MID ? 15 : 12;
-          const nx = Math.ceil((x1 - x0) / CELL), nz = Math.ceil((z1 - z0) / CELL), pos = new Float32Array((nx + 1) * (nz + 1) * 3), uv = new Float32Array((nx + 1) * (nz + 1) * 2), col = new Float32Array(pos.length), idx = [];
+        const stripM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));   // faixa ganha da grade onde as duas se encostam
+        { const pad = 420, x0 = L.bbox.x0 - pad, x1 = L.bbox.x1 + pad, z0 = L.bbox.z0 - pad, z1 = L.bbox.z1 + pad;
+          const nx = Math.ceil((x1 - x0) / CELL), nz = Math.ceil((z1 - z0) / CELL), pos = new Float32Array((nx + 1) * (nz + 1) * 3), uv = new Float32Array((nx + 1) * (nz + 1) * 2), col = new Float32Array(pos.length), idx = [], rawY = new Float32Array((nx + 1) * (nz + 1));
           for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = x0 + i * CELL, z = z0 + j * CELL, k = j * (nx + 1) + i, r = roadInfo(x, z);
-            let h = gH(x, z, r);
-            if (r.d < W + 40) { h = Math.min(h, H[r.i] - drop(r.d) - (r.d < W + 2 ? 0.3 : 0));                    // nunca acima da beira do asfalto
-              if (!nearBridge(r.i)) h -= (0.6 + 2.4 * sm(0.4, 2, r.h)) * (1 - sm(W + 28, W + 40, r.d)); }   // fica embaixo da faixa da beira
-            if (i === 0 || j === 0 || i === nx || j === nz) h = -0.6;                     // borda escondida embaixo do chão grande
+            let h = surfAt(x, z, false); rawY[k] = h;
+            if (r.d < W + 40) {
+              if (nearBridge(r.i)) { if (r.d < W + 6) h = Math.min(h, H[r.i] - drop(r.d) - (r.d < W + 2 ? 0.3 : 0)); }   // nunca acima da beira do asfalto (só rente à pista: mais longe a grade afundava ~25 cm e a borda da areia aparecia como uma linha)
+              else if (r.d < W + 12) { const n = tr.nearest({ x, z }, r.i); if (n.dist < W + 2.2) h = Math.min(h, elevAt(n.i + n.f) - 1.2); } }   // só embaixo do asfalto/zebra
+            if (i === 0 || j === 0 || i === nx || j === nz) h = rawY[k] = -0.6;           // borda escondida embaixo do chão grande
             pos[k * 3] = x; pos[k * 3 + 1] = h; pos[k * 3 + 2] = z; const t = grassUV(x, z); uv[k * 2] = t[0]; uv[k * 2 + 1] = t[1]; const c = gcol(x, z); col.set(c, k * 3); }
           for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+          RG.grid = { x0, z0, cs: CELL, nx, nz, pos, rawY };
+          gridRawAt = (x, z) => triAt(RG.grid, RG.grid.rawY, x, z); bankBase = gridRawAt;
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+          { const nr = g.attributes.normal.array;                                         // normais da superfície (lisas e iguais às da faixa da beira)
+            for (let j = 1; j < nz; j++) for (let i = 1; i < nx; i++) { const k = j * (nx + 1) + i, x = pos[k * 3], z = pos[k * 3 + 2];
+              if (roadInfo(x, z).d > W + 175) { nr[k * 3] = 0; nr[k * 3 + 1] = 1; nr[k * 3 + 2] = 0; continue; }   // planície
+              const n = surfNormal(x, z, false); nr[k * 3] = n.x; nr[k * 3 + 1] = n.y; nr[k * 3 + 2] = n.z; } }
           // em pedaços (chunks) de 16x16 células (~190 m): o que fica além da névoa não é desenhado (normais calculadas antes, sem emenda)
           const nor = g.attributes.normal.array, TS = 16;
           for (let tj = 0; tj < nz; tj += TS) for (let ti = 0; ti < nx; ti += TS) {
@@ -1433,20 +1821,78 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
             tg.setAttribute('uv', new THREE.Float32BufferAttribute(U2, 2)); tg.setAttribute('color', new THREE.Float32BufferAttribute(C2, 3)); tg.setIndex(I2);
             const m = new THREE.Mesh(tg, terrM); m.receiveShadow = true; m.userData.noOutline = true; add(m); } }
         // faixa da beira da pista (do fim da zebra até 40 m para fora): mesma altura que a física usa
-        const Rloc = i => { const a = T[(i - 3 + N) % N], b = T[(i + 3) % N], cr = a.x * b.z - a.z * b.x, ang = Math.asin(Math.max(-1, Math.min(1, cr))), len = 6 * L.length / N; return { R: Math.abs(ang) > 1e-4 ? len / Math.abs(ang) : 1e9, sg: Math.sign(cr) }; };
         [1, -1].forEach(sg => {
-          const FR = [0, 0.09, 0.19, 0.32, 0.5, 0.74, 1], C = FR.length + 1, pos = [], uv = [], col = [], idx = [], STEP = 2, rows = [];
+          const OFF = [0, 1.5, 3.3, 5.5, 8.6, 12, DINF + 0.5, DINF + 3.5], FR = OFF.map(v => v / OFF[OFF.length - 1]), C = FR.length + 1, LIFT = 0.18, pos = [], uv = [], col = [], idx = [], STEP = 2, rows = [];
           for (let i = 0; i <= N; i += STEP) rows.push(i % N);
-          rows.forEach(i => { const rl = Rloc(i), inner = rl.sg !== 0 && Math.sign(-rl.sg) === sg, oMax = inner ? Math.max(W + 8, Math.min(W + 40, 0.8 * rl.R)) : W + 40;
-            FR.concat([1.15]).forEach((f, c) => { const o = c < FR.length ? W + 1.8 + (oMax - W - 1.8) * f : oMax + 6, p = side(i, sg * o, 0), h = c < FR.length ? terrain(p.x, p.z, o, i) : terrain(p.x, p.z, oMax, i) - 3;
-              pos.push(p.x, c === 0 ? h - 0.02 : h, p.z); const t = grassUV(p.x, p.z); uv.push(t[0], t[1]); col.push(...gcol(p.x, p.z)); }); });
+          const oMR = [], skipR = rows.map(i => nearBridge(i));
+          rows.forEach(i => { const oMax = oMaxAt(i, sg); oMR.push(oMax);
+            FR.concat([1.15]).forEach((f, c) => { const o = c < FR.length ? W + 1.8 + (oMax - W - 1.8) * f : oMax + 3, p = side(i, sg * o, 0); let h;
+              if (c === 0) h = terrain(p.x, p.z, o, i) - 0.02;                                // rente à zebra: altura exata da beira do asfalto
+              else if (c < FR.length - 2) { h = Math.max(terrain(p.x, p.z, o, i), gridRawAt(p.x, p.z)) + (c === 1 ? 0.06 : c === 2 ? 0.12 : 0.15); const bk = bank(p.x, p.z); if (bk > gridRawAt(p.x, p.z) + 0.015) h = Math.min(h, bk - 0.04); }   // margem de lago perto da pista: a faixa passa por baixo da areia   // acima da grade (ela dobra até ~15 cm entre vértices), subindo aos poucos a partir da zebra
+              else if (c === FR.length - 2) { h = gridRawAt(p.x, p.z) + 0.02; const bk = bank(p.x, p.z); if (bk > gridRawAt(p.x, p.z) + 0.015) h = Math.min(h, bk - 0.04); }                // já fora da zona afundada: desce suave até a grade (sem degrau -> o pós-efeito não desenha linha/sombra)
+              else if (c === FR.length - 1) h = gridRawAt(p.x, p.z) - 0.3;                 // borda: já embaixo da grade inteira (sem vala, sem degrau)
+              else h = gridRawAt(p.x, p.z) - 0.8;                                          // saia escondida
+              pos.push(p.x, h, p.z); const t = grassUV(p.x, p.z); uv.push(t[0], t[1]); col.push(...gcol(p.x, p.z)); }); });
           for (let r = 0; r < rows.length - 1; r++) { if (nearBridge(rows[r]) || nearBridge(rows[r + 1])) continue; for (let c = 0; c < C - 1; c++) { const a = r * C + c, d = a + C; if (sg > 0) idx.push(a, d, a + 1, a + 1, d, d + 1); else idx.push(a, a + 1, d, a + 1, d + 1, d); } }
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-          const m = new THREE.Mesh(g, terrM); m.receiveShadow = true; m.userData.noOutline = true; add(m); });
+          { const nr = g.attributes.normal.array, pp = g.attributes.position.array;     // fileiras visíveis: normal da superfície (a saia, escondida, fica com a da malha)
+            for (let r = 0; r < rows.length; r++) for (let c = 1; c < FR.length; c++) { const k = r * C + c, n = surfNormal(pp[k * 3], pp[k * 3 + 2], true); nr[k * 3] = n.x; nr[k * 3 + 1] = n.y; nr[k * 3 + 2] = n.z; } }
+          RG.strip[sg] = { FR, C, step: STEP, oMR, skipR, Y: pos.filter((_, q) => q % 3 === 1) };
+          const m = new THREE.Mesh(g, stripM); m.receiveShadow = true; m.userData.noOutline = true; add(m); });
       }
+      // ---- vida embaixo d'água (rio e laguinhos): pedras no leito e tufos de plantas aquáticas balançando ----
+      // aparecem através da água translúcida, mais escuras/esverdeadas quanto mais fundo (uwFX) e com a cáustica passando
+      { const rockG = new THREE.DodecahedronGeometry(1, 1), rp = rockG.attributes.position;
+        for (let i = 0; i < rp.count; i++) { const x = rp.getX(i), y = rp.getY(i), z = rp.getZ(i), h = Math.sin(Math.round(x * 97) * 12.9898 + Math.round(y * 97) * 78.233 + Math.round(z * 97) * 37.719) * 43758.5453, k = 0.82 + 0.3 * (h - Math.floor(h)); rp.setXYZ(i, x * k, y * k * 0.62, z * k); }
+        rockG.computeVertexNormals();
+        const Lam = (window.Toon && Toon.Lambert) || THREE.MeshLambertMaterial;
+        const rockM = uwFX(new Lam({ color: 0xffffff, flatShading: true }), 'rock'); rockM.userData.noToon = true;
+        // folha de planta aquática: 4 lâminas finas, curvadas, saindo do mesmo ponto
+        const weedG = (() => { const P = [], NN = []; for (let b = 0; b < 4; b++) { const a = b / 4 * 6.283 + 0.4, ca = Math.cos(a), sa = Math.sin(a), lean = 0.18 + b * 0.05, SEG = 4;
+            for (let j = 0; j < SEG; j++) { const y0 = j / SEG, y1 = (j + 1) / SEG, w0 = 0.07 * (1 - y0), w1 = 0.07 * (1 - y1), o0 = lean * y0 * y0, o1 = lean * y1 * y1;
+              const A = [ca * o0 - sa * w0, y0, sa * o0 + ca * w0], B = [ca * o0 + sa * w0, y0, sa * o0 - ca * w0], C = [ca * o1 - sa * w1, y1, sa * o1 + ca * w1], D = [ca * o1 + sa * w1, y1, sa * o1 - ca * w1];
+              [A, B, C, B, D, C].forEach(v => { P.push(...v); NN.push(ca * 0.5, 0.8, sa * 0.5); }); } }
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(NN, 3)); return g; })();
+        const weedM = uwFX(GfxFX.foliage(new Lam({ color: 0xffffff, side: THREE.DoubleSide }), { amp: 0.22, h0: 0.0, freq: 0.9 }), 'weed'); weedM.userData.noToon = true;
+        const rocks = [], weeds = [];
+        const addSpot = (x, z, depth, e) => { const by = WATER_Y - depth;
+          if (rnd() < 0.55) { const n = 1 + (rnd() * 3 | 0); for (let j = 0; j < n; j++) { const s = Math.min(0.25 + rnd() * 0.9, Math.max(0.15, (depth - 0.18) / 0.62));   // topo sempre embaixo d'água
+              rocks.push({ x: x + (rnd() - 0.5) * 1.6, z: z + (rnd() - 0.5) * 1.6, y: by + s * 0.12, s, r: rnd() * 6.28, c: [0x7d776e, 0x6a655c, 0x8a8478, 0x5f6b55, 0x726a5a][rnd() * 5 | 0] }); } }
+          if (e > 0.3 && e < 0.9 && rnd() < 0.7) { const n = 3 + (rnd() * 4 | 0); for (let j = 0; j < n; j++) { const h = Math.min(0.5 + rnd() * 0.8, depth - 0.12);
+              if (h > 0.15) weeds.push({ x: x + (rnd() - 0.5) * 1.4, z: z + (rnd() - 0.5) * 1.4, y: by - 0.05, h, s: 0.8 + rnd() * 0.6, r: rnd() * 6.28, c: [0x3f6b2a, 0x4f7d2f, 0x355f2c, 0x5d8a3a][rnd() * 4 | 0] }); } } };
+        for (let k = 3; k < RM - 2; k++) for (let m = 0; m < 2; m++) { const u = (rnd() * 2 - 1) * 0.86, e = Math.abs(u), hw = Math.max(0, rHW[k] - 0.15), p = rpts[k], t = rtan[k];
+          if (hw < 2) continue; addSpot(p.x + t.z * hw * u, p.z - t.x * hw * u, bedDepth(e), e); }
+        ponds.forEach(q => { for (let k = 0; k < Math.round(q.r * 2.2); k++) { const a = rnd() * 6.283, f = Math.sqrt(rnd()) * 0.86, R = (q.R(a) - 0.15) * f; addSpot(q.x + Math.cos(a) * R, q.z + Math.sin(a) * R, bedDepth(f), f); } });
+        const d = new THREE.Object3D(), c = new THREE.Color();
+        rocks.length = 0; weeds.length = 0;   // desligado: com a água opaca não aparecem direito (viravam "pedrinhas" estranhas) e só custavam
+        if (rocks.length) { const im = new THREE.InstancedMesh(rockG, rockM, rocks.length);
+          rocks.forEach((o, i) => { d.position.set(o.x, o.y, o.z); d.rotation.set(0, o.r, 0); d.scale.set(o.s * (0.9 + rnd() * 0.4), o.s, o.s * (0.8 + rnd() * 0.4)); d.updateMatrix(); im.setMatrixAt(i, d.matrix); im.setColorAt(i, c.set(o.c)); });
+          im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.receiveShadow = true; im.userData.noOutline = true; add(im); }
+        if (weeds.length) { const im = new THREE.InstancedMesh(weedG, weedM, weeds.length);
+          weeds.forEach((o, i) => { d.position.set(o.x, o.y, o.z); d.rotation.set(0, o.r, 0); d.scale.set(o.s, o.h, o.s); d.updateMatrix(); im.setMatrixAt(i, d.matrix); im.setColorAt(i, c.set(o.c)); });
+          im.instanceMatrix.needsUpdate = true; im.instanceColor.needsUpdate = true; im.userData.noOutline = true; add(im); }
+        console.info('[água] fundo visível:', rocks.length, 'pedras e', weeds.length, 'plantas embaixo d\'água'); }
+      afterGrid.forEach(f => f());                                                         // areia das margens + faixa de grama (seguem a grade)
+      // altura da grade desenhada (mesma divisão dos triângulos: diagonal de (i+1,j) a (i,j+1))
+      const gridAt = (x, z) => { const G = RG.grid, fx = (x - G.x0) / G.cs, fz = (z - G.z0) / G.cs, i = Math.floor(fx), j = Math.floor(fz);
+        if (i < 0 || j < 0 || i >= G.nx || j >= G.nz) return -0.6; const u = fx - i, v = fz - j, Y = k => G.pos[k * 3 + 1], a = j * (G.nx + 1) + i, b = a + 1, c = a + G.nx + 1, d = c + 1;
+        return u + v <= 1 ? Y(a) + u * (Y(b) - Y(a)) + v * (Y(c) - Y(a)) : Y(d) + (1 - u) * (Y(c) - Y(d)) + (1 - v) * (Y(b) - Y(d)); };
+      // altura da faixa da beira desenhada (fileiras a cada STEP nós, colunas em FR); null fora dela
+      const stripAt = n => { const sg = Math.sign(n.lat) || 1, Sd = RG.strip[sg]; if (!Sd) return null; const o = Math.abs(n.lat), ru = (n.i + n.f) / Sd.step, r0 = Math.floor(ru), r1 = r0 + 1, t = ru - r0;
+        if (r1 >= Sd.oMR.length || Sd.skipR[r0] || Sd.skipR[r1]) return null;
+        const col = r => { const f = (o - W - 1.8) / (Sd.oMR[r] - W - 1.8); if (f < 0 || f > 1) return null; let c = 0; while (c < Sd.FR.length - 2 && Sd.FR[c + 1] < f) c++;
+          const w = (f - Sd.FR[c]) / (Sd.FR[c + 1] - Sd.FR[c]), y0 = Sd.Y[r * Sd.C + c], y1 = Sd.Y[r * Sd.C + c + 1]; return y0 + (y1 - y0) * w; };
+        const a = col(r0), b = col(r1); if (a === null || b === null) return null; return a + (b - a) * t; };
+      // chão VISÍVEL no ponto: o mais alto entre grade e faixa da beira (embaixo da faixa a grade fica afundada) e a areia das margens
+      const visGround = (x, z, hint) => { if (!RG || !RG.grid) return terrain(x, z);
+        const r = roadInfo(x, z); if (r.d > W + 50) return Math.max(gridAt(x, z), bank(x, z));   // longe da pista: só a grade (sem busca do nó)
+        if (hint === undefined || hint < 0) hint = r.i; const n = tr.nearest({ x, z }, Math.max(0, hint | 0)), st = n.dist < W + 45 ? stripAt(n) : null;
+        return Math.max(gridAt(x, z), st === null ? -1e9 : st, bank(x, z)); };
+      if (tr.vert) tr.heightAt = (x, z) => { const sg = tr.shortcuts.length ? tr.shortcutGround(x, z) : null; const vg = visGround(x, z); return sg !== null ? Math.max(sg, vg) : vg; };   // a beira do atalho mergulha embaixo da grama: vale o mais alto
       // altura do chão para enfeites: perto da pista usa a mesma conta da faixa da beira (terrain com dist/u),
       // senão os enfeites ficavam flutuando (ou enterrados) nas subidas e descidas
-      const gy = (x, z) => { const r = roadInfo(x, z); if (r.i < 0 || r.d > W + 45) return terrain(x, z);
+      const gy = (x, z) => { const r = roadInfo(x, z); if (tr.vert) return visGround(x, z, r.i);
+        if (r.i < 0 || r.d > W + 45) return terrain(x, z);
         const n = tr.nearest({ x, z }, r.i); return terrain(x, z, n.dist, n.i + n.f); };
       // ---- postes de luz (estilo praça: base de pedra, poste afinando com anéis, braço curvo sobre a pista e luminária) ----
       // Geometrias e materiais compartilhados por todos os postes. A lente acende à noite (tr.nightMats) e um círculo de
@@ -1471,9 +1917,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
           lens: new THREE.CylinderGeometry(0.3, 0.38, 0.22, 12)
         };
         LG.hood.rotateY(Math.PI / 12);
-        const poolM = new THREE.MeshBasicMaterial({ map: Fx.glowTex(), color: 0xffc977, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
-        poolM.userData.unique = true;
-        const poolG = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+        const heads = [], halos = [];   // luminárias (posição da lente e altura do chão embaixo) e halos pequenos
         const mk = (g, m, x, y, z, parent) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
         for (let i = 15; i < N; i += 36) { if (bridges.some(b => Math.abs(i - b) < 14)) continue;
           const sd = ((i / 36 | 0) % 2 ? 1 : -1), q = side(i, sd * (W + 4), 0); if (tr.shortcuts.length && shortcutDist(q.x, q.z) < 4) continue;
@@ -1490,11 +1934,56 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
           // +x local do poste aponta para a pista (o braço fica por cima do asfalto)
           const dx = -sd * T[i].z, dz = sd * T[i].x; grp.rotation.y = Math.atan2(-dz, dx); grp.position.set(q.x, y0, q.z); add(grp);
           const lx = q.x + dx * ARM, lz = q.z + dz * ARM;
-          const h = glowSpr(0xffd9a0, 7, 0.9); h.position.set(lx, y0 + TOPY - 0.2, lz); tr.lamps.push(h);
-          const pool = new THREE.Mesh(poolG, poolM), ni = tr.nearest({ x: lx, z: lz }, i);
-          pool.scale.set(15, 1, 15); pool.position.set(lx, (ni.dist < W + 2 ? tr.roadBase + hAt(ni.i + ni.f) : gy(lx, lz)) + 0.1, lz); pool.renderOrder = 1; pool.userData.noOutline = true; add(pool);
+          // halo pequeno colado na lente (o brilho grande que virava "bola amarela" saiu; ele não entra em tr.lamps,
+          // que o main.js aumenta para ~19 m à noite)
+          const h = glowSpr(0xfff1d6, 1.4, 0); h.position.set(lx, y0 + TOPY - 0.16, lz); halos.push(h);
+          const ni = tr.nearest({ x: lx, z: lz }, i);
+          heads.push({ x: lx, y: y0 + TOPY - 0.13, z: lz, g: (ni.dist < W + 2 ? tr.roadBase + hAt(ni.i + ni.f) : gy(lx, lz)) });
           tr.obstacles.push({ x: q.x, z: q.z, r: 0.45 }); }
-        tr.animated.push(() => { poolM.opacity = 0.42 * NIGHT(); });
+        // ---- LUZ DOS POSTES (realista e barata: sem luz de verdade, tudo em 2 chamadas de desenho para todos os postes) ----
+        // 1) poça no chão: queda de uma lâmpada a h metros de altura -> E(d) = (1 + (d/h)^2)^-1,5 (cosseno^3 / distância^2),
+        //    branco quente, apagando suave na borda. Todas as poças numa malha só.
+        // 2) cone de luz: feixe bem sutil da luminária até o chão, mais forte perto da lâmpada; some nas bordas da silhueta
+        //    (por isso não fica com "contorno"). Só aparece à noite e é atenuado pela névoa como o resto da cena.
+        if (heads.length) {
+          const LU = { uNight: { value: 0 }, uCol: { value: new THREE.Color(0xffd7a0) } };
+          const fogU = () => THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
+          const mkMat = (vs, fs, extra) => { const m = new THREE.ShaderMaterial(Object.assign({ uniforms: Object.assign(fogU(), LU), vertexShader: vs, fragmentShader: fs,
+            transparent: true, depthWrite: false, fog: true, blending: THREE.AdditiveBlending }, extra || {})); m.userData.unique = true; return m; };
+          // --- poças
+          { const R = 13, pos = [], q = [], hh = [], idx = [];
+            heads.forEach((L, k) => { const y = L.g + 0.07, H = Math.max(3, L.y - L.g);
+              [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b]) => { pos.push(L.x + a * R, y, L.z + b * R); q.push(a * R, b * R); hh.push(H); });
+              const o = k * 4; idx.push(o, o + 2, o + 1, o, o + 3, o + 2); });
+            const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('aQ', new THREE.Float32BufferAttribute(q, 2));
+            g.setAttribute('aH', new THREE.Float32BufferAttribute(hh, 1)); g.setIndex(idx); g.computeBoundingSphere();
+            const m = mkMat(['attribute vec2 aQ; attribute float aH; varying vec2 vQ; varying float vH;', '#include <fog_pars_vertex>',
+              'void main() { vQ = aQ; vH = aH; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;', '#include <fog_vertex>', '}'].join('\n'),
+              ['uniform float uNight; uniform vec3 uCol; varying vec2 vQ; varying float vH;', '#include <fog_pars_fragment>',
+               'void main() { float d = length(vQ), e = pow(1.0 + (d * d) / (vH * vH), -1.5) * (1.0 - smoothstep(0.3 * ' + R.toFixed(1) + ', ' + R.toFixed(1) + ', d));',
+               '  gl_FragColor = vec4(uCol * e * 0.7 * uNight, 1.0); if (e * uNight < 0.002) discard;', FOG_ADD, '}'].join('\n'),
+              { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+            const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 1; mesh.userData.dynamic = true; mesh.userData.noOutline = true; add(mesh); }
+          // --- cones
+          { const SEG = 20, RT = 0.26, pos = [], nor = [], tt = [], idx = [];
+            heads.forEach(L => { const H = Math.max(3, L.y - L.g - 0.05), RB = Math.min(5.5, 0.62 * H), b0 = pos.length / 3, sl = (RB - RT) / H;
+              for (let r = 0; r < 2; r++) for (let j = 0; j <= SEG; j++) { const a = j / SEG * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), rad = r ? RB : RT;
+                pos.push(L.x + c * rad, r ? L.y - H : L.y, L.z + s2 * rad); const n = new THREE.Vector3(c, sl, s2).normalize(); nor.push(n.x, n.y, n.z); tt.push(r); }
+              for (let j = 0; j < SEG; j++) { const a = b0 + j, b = a + 1, c = a + SEG + 1, d = c + 1; idx.push(a, c, b, b, c, d); } });
+            const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+            g.setAttribute('aT', new THREE.Float32BufferAttribute(tt, 1)); g.setIndex(idx); g.computeBoundingSphere();
+            const m = mkMat(['attribute float aT; varying float vT; varying vec3 vN; varying vec3 vV;', '#include <fog_pars_vertex>',
+              'void main() { vT = aT; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mvPosition.xyz);',
+              '  gl_Position = projectionMatrix * mvPosition;', '#include <fog_vertex>', '}'].join('\n'),
+              ['uniform float uNight; uniform vec3 uCol; varying float vT; varying vec3 vN; varying vec3 vV;', '#include <fog_pars_fragment>',
+               'void main() { float face = abs(dot(normalize(vN), normalize(vV)));',              // de frente = muito volume atravessado; na borda = quase nada
+               '  float fall = pow(1.0 - vT, 1.6) * smoothstep(0.0, 0.06, vT) + 0.12 * (1.0 - vT);',  // forte perto da lâmpada, apagando até o chão
+               '  float a = fall * face * face * 0.085 * uNight;', '  if (a < 0.0015) discard;', '  gl_FragColor = vec4(uCol * a, 1.0);', FOG_ADD, '}'].join('\n'),
+              { side: THREE.DoubleSide });
+            const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 8; mesh.userData.dynamic = true; mesh.userData.noOutline = true; mesh.frustumCulled = false; add(mesh); }
+          tr.animated.push(() => { const nf = NIGHT(); LU.uNight.value = nf;
+            for (const h of halos) { h.material.opacity = 0.85 * nf; h.scale.setScalar(1.15 + 0.35 * nf); } });
+        }
       }
       // ---- muro azul e amarelo: mesma barreira das pontes, mais alta, seguindo o chão (com colisão) ----
       if (def.wall) buildBarrier({ u0: def.wall[0], u1: def.wall[1], lat: -(W + 5), base: (u, p) => terrain(p.x, p.z, W + 5, u), colors: [0xffd21a, 0x3a5fe0], h: 1.5, t: 0.8, sink: 1.2, blk: 2, collide: true });
@@ -1506,7 +1995,10 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         const kind = kinds[gc % 4]; for (let k = 0; k < 11; k++) { const r = 4 + Math.sqrt(k) * 5.5, a = k * 2.4; lists[kind].push({ x: c.x + Math.cos(a) * r, z: c.z + Math.sin(a) * r, r: rnd() * 6.28, s: 0.9 + rnd() * 0.5 }); } gc++; }
       for (let c = 0; c < 60; c++) { const i = Math.floor(rnd() * N), sd = rnd() > 0.5 ? 1 : -1; for (let k = 0; k < 3; k++) { const q = side(i + k * 3, sd * (W + 7 + rnd() * 6), 0); if (okSpot(q.x, q.z, 3)) lists.bush.push({ x: q.x, z: q.z, r: rnd() * 6.28, s: 0.8 + rnd() * 0.6 }); } }
       Object.values(lists).forEach(l => l.forEach(o => { o.y = gy(o.x, o.z) - 0.15; }));
-      plants('round', lists.round, 0x4fae3a); plants('round', lists.dark, 0x2f8a35); plants('pine', lists.pine, 0x2a7a3a); plants('round', lists.autumn, 0xe8892f); plants('bush', lists.bush, 0x3f9e2c);
+      // só pinheiros: as árvores antigas de bolas (verde, verde-escura e de outono) viraram pinheiros nos mesmos lugares
+      if (window.Pines) pineForest(lists.round.concat(lists.dark, lists.pine, lists.autumn), 1.0);
+      else { plants('round', lists.round, 0x4fae3a); plants('round', lists.dark, 0x2f8a35); plants('pine', lists.pine, 0x2a7a3a); plants('round', lists.autumn, 0xe8892f); }
+      plants('bush', lists.bush, 0x3f9e2c);
       // ---- tufos de grama ----
       { const tuftG = new THREE.ConeGeometry(0.3, 1.5, 4); tuftG.translate(0, 0.75, 0); const dm = new THREE.Object3D();
         [0x45782c, 0x5f8e3c].forEach(col => /* tufos no mesmo tom da grama */ { const cnt = LO ? 400 : MID ? 900 : 1600, im = new THREE.InstancedMesh(tuftG, GfxFX.foliage(new THREE.MeshLambertMaterial({ color: col, flatShading: true }), { amp: 0.14, h0: 0.0, freq: 1.9, ao: [0.55, 0.0, 1.4] }), cnt); let n = 0;
@@ -1519,28 +2011,52 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
       //      postes listrados e placa com seta na entrada, e um morrinho de terra em cada ponta ----
       function buildShortcuts() {
         if (!tr.shortcuts.length) return;
-        const dirtM = new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('dirt', 1, 1)), vertexColors: true, side: THREE.DoubleSide, alphaTest: 0.5, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 });
+        // terra do atalho: textura própria (sem direção) em coordenada do mundo; a borda é recortada no shader pela distância
+        // à beira do caminho (atributo aS) + ruído -> contorno irregular e natural, que puxa para o verde/seco perto da grama
+        const dirtM = GfxFX.chain(new THREE.MeshLambertMaterial({ map: GfxFX.aniso(TX.get('trail', 1, 1), 16), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }), 'trail-edge-v1', sh => {
+          sh.vertexShader = 'attribute float aS;\nvarying float vTS;\nvarying vec2 vTW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vTS = aS; vTW = position.xz;');
+          sh.fragmentShader = GfxFX.NOISE + 'varying float vTS;\nvarying vec2 vTW;\n' + sh.fragmentShader
+            .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+              float tE = vTS + (gfxN(vTW * 0.45) - 0.5) * 1.1 + (gfxN(vTW * 1.7 + 7.0) - 0.5) * 0.5 + (gfxN(vTW * 5.3 + 3.0) - 0.5) * 0.18;
+              if (tE > 0.0) discard;`)
+            .replace('#include <map_fragment>', `#include <map_fragment>
+              diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.86, 0.96, 0.7), smoothstep(-1.1, 0.0, tE) * 0.6);`); });
+        // grama do chão do atalho: mesma grama (textura, tom e mapeamento) do chão, para emendar sem diferença
+        const bermM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
         const rutM = new THREE.MeshBasicMaterial({ color: 0x5a3c22, transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -3 });
         const postM = new THREE.MeshLambertMaterial({ map: TX.get('stripes', 1, 2) }), logM = new THREE.MeshLambertMaterial({ map: TX.get('bark', 1, 1), color: 0xc8a070 });
         let hint = 0; const yH = (x, z) => { const n = tr.nearest({ x, z }, hint); return n.dist < W + 1.8 ? tr.roadBase + hAt(n.i + n.f) + 0.03 : terrain(x, z, n.dist, n.i + n.f); };
         // superfície VISÍVEL mais alta no ponto: relevo suave, faixa da beira de cada perna da curva (entrada e saída) e asfalto
         const legH = (x, z, c) => { let bd = 1e18, bi = c; for (let d = -45; d <= 45; d++) { const i = (c + d + N) % N, dx = S[i].x - x, dz = S[i].z - z, q = dx * dx + dz * dz; if (q < bd) { bd = q; bi = i; } }
           const dist = Math.sqrt(bd); if (dist > W + 42) return -1e9; return dist < W + 1.8 ? tr.roadBase + hAt(bi) : terrain(x, z, dist, bi); };
-        const visH = (x, z, sc) => Math.max(terrain(x, z), legH(x, z, sc.i), legH(x, z, sc.j));
+        // nó mais próximo procurado na pista INTEIRA (a busca local do tr.nearest parte de um nó "chute" e, na ponta de saída
+        // do atalho, achava um trecho errado)
+        const nearAll = (x, z) => { let bd = 1e18, bi = 0; for (let i = 0; i < N; i++) { const dx = S[i].x - x, dz = S[i].z - z, q = dx * dx + dz * dz; if (q < bd) { bd = q; bi = i; } } return tr.nearest({ x, z }, bi); };
+        // chão que REALMENTE aparece no ponto: perto da pista é a faixa da beira (segue a altura do asfalto), longe é o relevo.
+        // (antes era o máximo entre relevo e faixas: perto da pista o relevo "cru" fica escondido por baixo, mais alto que a faixa,
+        //  e o atalho virava um dique elevado, "voando")
+        const visH = (x, z) => { const nn = nearAll(x, z); return nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i); };
+        // teto perto da pista: o chão do atalho sobe no máximo 1:2,5 a partir da zebra (antes, onde o atalho passava rente à
+        // pista, ficava um "paredão" de terra de ~1 m colado na zebra)
+        const capNN = nn => nn.dist < W + 40 ? tr.roadBase + hAt(nn.i + nn.f) + 0.06 + Math.max(0, nn.dist - (W + 2.1)) * 0.4 : 1e9;
         // perfil do caminho: máximo das superfícies na largura do caminho, depois envelope (máximo móvel) e média móvel -> sem degraus
         tr.shortcuts.forEach(sc => { const P = sc.pts, n = P.length, raw = [];
           for (let k = 0; k < n; k++) { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-            let m = -1e9; for (const o of [-sc.hw, 0, sc.hw]) m = Math.max(m, visH(P[k].x + tz * o, P[k].z - tx * o, sc)); raw.push(m); }
-          const env = raw.map((_, k) => { let m = -1e9; for (let d = -3; d <= 3; d++) m = Math.max(m, raw[Math.max(0, Math.min(n - 1, k + d))]); return m; });
-          sc.h = env.map((_, k) => { let s2 = 0; for (let d = -3; d <= 3; d++) s2 += env[Math.max(0, Math.min(n - 1, k + d))]; return s2 / 7 + 0.06; });
+            let m = -1e9; for (const o of [-sc.hw * 0.8, 0, sc.hw * 0.8]) m = Math.max(m, visH(P[k].x + tz * o, P[k].z - tx * o)); raw.push(m); }
+          // trilha de verdade: acompanha o relevo (agora liso) colada no chão. Antes o perfil era o MAIOR chão na largura do
+          // caminho + média móvel: em encosta e nos vales o caminho ficava acima do chão, com barranco -> dique "voando"
+          raw.length = 0; for (let k = 0; k < n; k++) raw.push(visH(P[k].x, P[k].z));
+          sc.h = raw.map((r, k) => Math.min(r + 0.06, capNN(nearAll(P[k].x, P[k].z))));
           // pontas: enquanto o caminho está em cima do asfalto ele fica na altura exata da pista; depois sobe/desce em rampa
           // suave (6 amostras, ~15 m) até o perfil do terreno -> sem degrau na hora de sair da pista
-          const road = P.map(q => { const nn = tr.nearest({ x: q.x, z: q.z }, sc.i); return nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) + 0.03 : null; });
+          const road = P.map(q => { const nn = nearAll(q.x, q.z); return nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) + 0.03 : null; });
           [[0, 1], [n - 1, -1]].forEach(([k0, dir]) => { let kE = -1; for (let k = k0; k >= 0 && k < n && road[k] !== null; k += dir) kE = k; if (kE < 0) return;
             const base = road[kE], R = 6; for (let k = k0; k !== kE + dir; k += dir) sc.h[k] = road[k];
             for (let m = 1; m <= R; m++) { const k = kE + dir * m; if (k < 0 || k >= n) break; const w = m / R, e = w * w * (3 - 2 * w); sc.h[k] = base + (sc.h[k] - base) * e; } }); });
-        const skirtM = new THREE.MeshLambertMaterial({ color: 0x7a5634, side: THREE.DoubleSide });
         // recursos compartilhados da "vida" dos atalhos (pedras, flores, cogumelos, lampiões, vaga-lumes, borboletas)
+        // enfeites EM CIMA/na beira da terra (toras, pedras, tufos, flores, cogumelos, lampiões, postes da entrada): desligados,
+        // a trilha fica limpa, só terra e grama (o pedido foi um caminho com cara de real). true traz tudo de volta.
+        const CLUTTER = false;
         const LIFE = { flick: [] };
         LIFE.rockG = new THREE.DodecahedronGeometry(1, 0); LIFE.rockM = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
         LIFE.tuftG = new THREE.ConeGeometry(0.22, 1.1, 4); LIFE.tuftG.translate(0, 0.55, 0);
@@ -1568,55 +2084,87 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.05, 0.3, 0, 0.2, 0.34, 0, -0.04, 0, 0, 0.05, 0.34, 0, -0.04, 0.17, 0, -0.2, 0, 0, 0.05, 0.17, 0, -0.2, 0, 0, -0.08], 3)); g.computeVertexNormals(); LIFE.wingG = g; }
         LIFE.wingM = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
         // lampiões tremulam de leve e brilham mais à noite (controlados aqui, fora de tr.lamps)
-        tr.animated.push(t => { const nf = NIGHT(); LIFE.flick.forEach((g, k) => { const f = 0.88 + 0.08 * Math.sin(t * 13 + k * 1.7) + 0.04 * Math.sin(t * 29 + k); g.scale.setScalar(3.2 * f); g.material.opacity = (0.15 + 0.8 * nf) * f; }); });
+        tr.animated.push(t => { const nf = NIGHT(); LIFE.flick.forEach((g, k) => { const f = 0.88 + 0.08 * Math.sin(t * 13 + k * 1.7) + 0.04 * Math.sin(t * 29 + k); g.scale.setScalar(1.0 * f); g.material.opacity = 0.9 * nf * f; }); });
         const logG = new THREE.CylinderGeometry(0.22, 0.26, 1.1, 8); logG.rotateZ(Math.PI / 2);
         // nada do caminho é desenhado em cima do asfalto/zebra: o ponto que cairia na pista é empurrado para logo depois da zebra
-        const EDGE = W + 2.1, snap = (x, z) => { const nn = tr.nearest({ x, z }, hint); if (nn.dist >= EDGE) return [x, z];
+        const EDGE = W + 2.1, snap = (x, z) => { const nn = nearAll(x, z); if (nn.dist >= EDGE) return [x, z];
           const i = nn.i, i1 = (i + 1) % N, qx = S[i].x + (S[i1].x - S[i].x) * nn.f, qz = S[i].z + (S[i1].z - S[i].z) * nn.f, sg = Math.sign(nn.lat) || 1;
           return [qx + T[i].z * sg * EDGE, qz - T[i].x * sg * EDGE]; };
         tr.shortcuts.forEach(sc => {
           hint = sc.i;
-          const P = sc.pts, n = P.length, hw = sc.hw, EW = hw * 1.45, pos = [], uv = [], idx = [], col = [], NX = 12;
-          // faixa: centro de terra, bordas na transição terra->grama da textura (u 0,7..0,86) e transparente depois
-          let acc = 0;
-          for (let k = 0; k < n; k++) { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-            if (k) acc += Math.hypot(P[k].x - P[k - 1].x, P[k].z - P[k - 1].z);
-            for (let c = 0; c <= NX; c++) { const f = c / NX * 2 - 1, o = f * EW, [x, z] = snap(P[k].x + tz * o, P[k].z - tx * o); pos.push(x, sc.h[k] + 0.04, z); uv.push(Math.abs(f) * 0.98, acc / 6);
-              // manchas: trechos mais claros (terra seca) e mais escuros (úmida); trilha do meio mais batida e as bordas puxando para o verde
-              const nz = 0.5 + 0.25 * Math.sin(acc * 0.09 + f * 2.1) + 0.15 * Math.sin(acc * 0.23 - f * 4.3 + 1.7) + 0.1 * Math.sin(acc * 0.61 + f * 9);
-              const worn = Math.exp(-Math.pow(f * EW / 3.2, 2)), v = 0.82 + 0.3 * nz - 0.08 * worn, ed = Math.max(0, Math.abs(f) - 0.62) / 0.38;
-              col.push(v * (1 - 0.12 * ed), v * (1 + 0.06 * ed), v * (0.92 - 0.1 * ed)); } }
-          for (let k = 0; k < n - 1; k++) for (let c = 0; c < NX; c++) { const a = k * (NX + 1) + c, d = a + NX + 1; idx.push(a, d, a + 1, a + 1, d, d + 1); }
-          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-          const m = new THREE.Mesh(g, dirtM); m.receiveShadow = true; m.userData.noOutline = true; add(m);
-          // barranco: laterais de terra descendo 3,5 m a partir da borda opaca do caminho (onde o terreno visual afunda perto
-          // da pista, o caminho vira um aterro em vez de uma folha flutuando)
-          [-1, 1].forEach(sd => { const sp = [], si = [];
-            for (let k = 0; k < n; k++) { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-              const o = sd * EW * 0.86, [x, z] = snap(P[k].x + tz * o, P[k].z - tx * o), y = sc.h[k] + 0.02; sp.push(x, y, z, x + tz * sd * 1.2, y - 3.5, z - tx * sd * 1.2); }
-            for (let k = 0; k < n - 1; k++) { const a = k * 2; si.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
-            const sg2 = new THREE.BufferGeometry(); sg2.setAttribute('position', new THREE.Float32BufferAttribute(sp, 3)); sg2.setIndex(si); sg2.computeVertexNormals();
-            const sk = new THREE.Mesh(sg2, skirtM); sk.receiveShadow = true; sk.userData.noOutline = true; add(sk); });
+          const P = sc.pts, n = P.length, hw = sc.hw, EW = hw * 1.45;
+          // largura da terra variando um pouco ao longo do caminho (borda natural, não de régua); a física usa sc.hw, que não muda
+          let acc0 = 0; const ewk = P.map((q, k) => { if (k) acc0 += Math.hypot(q.x - P[k - 1].x, q.z - P[k - 1].z); return EW * (1 + 0.07 * Math.sin(acc0 * 0.21 + sc.i) + 0.04 * Math.sin(acc0 * 0.57 + 1.3)); });
+          // ===== CHÃO DO ATALHO: UMA superfície contínua (grade), em vez de faixas soltas =====
+          // Altura em cada ponto = max(chão visível + folga, "envelope" do caminho). O envelope é a altura do caminho caindo numa
+          // curva suave (ombro arredondado, depois ~1:2,6) com a distância à borda da terra. Assim o barranco nunca fica solto no ar,
+          // nunca dobra nas curvas e nunca passa por cima de outro trecho do caminho; perto da pista ele mergulha sob a zebra.
+          const SL = 1 / 2.6, SA = 1.6, LIFT = 0.06;   // camada bem rente ao chão: borda sem degrau (o contorno/AO do pós-efeito marcava uma linha)
+          const segs = []; for (let k = 0; k < n - 1; k++) { const ax = P[k].x, az = P[k].z, bx = P[k + 1].x - ax, bz = P[k + 1].z - az; segs.push({ ax, az, bx, bz, L2: bx * bx + bz * bz || 1, h0: sc.h[k], h1: sc.h[k + 1], e0: ewk[k], e1: ewk[k + 1] }); }
+          const pathQ = (x, z) => { let s = 1e9, env = -1e9;
+            for (const q of segs) { const t = Math.max(0, Math.min(1, ((x - q.ax) * q.bx + (z - q.az) * q.bz) / q.L2)), d = Math.hypot(x - q.ax - q.bx * t, z - q.az - q.bz * t);
+              const e = d - (q.e0 + (q.e1 - q.e0) * t); if (e < s) s = e; const dr = e <= 0 ? 0 : e < SA ? SL * e * e / (2 * SA) : SL * (e - SA / 2); const v = q.h0 + (q.h1 - q.h0) * t - dr; if (v > env) env = v; }
+            return { s, env }; };
+          const RB = 6;                                                      // faixa de grama além da borda da terra (a camada acompanha o chão: não há barranco)
+          // chão do atalho = chão DESENHADO (grade/faixa, exatamente os mesmos triângulos) + 12 cm; na beira de fora mergulha
+          // embaixo da grama. Como segue os mesmos triângulos, nunca fica solto no ar nem é engolido pelo chão.
+          const surf = (x, z, nn) => { nn = nn || nearAll(x, z); const q = pathQ(x, z), g = nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i), lift = q.s < RB - 2.5 ? LIFT : LIFT - (LIFT + 0.45) * Math.min(1, (q.s - (RB - 2.5)) / 2.5);
+            return { y: Math.min(g + lift, capNN(nn)), s: q.s }; };
+          const CS = LO ? 2.0 : MID ? 1.5 : 1.2;
+          let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; P.forEach(q => { bx0 = Math.min(bx0, q.x); bx1 = Math.max(bx1, q.x); bz0 = Math.min(bz0, q.z); bz1 = Math.max(bz1, q.z); });
+          const MG = EW * 1.2 + RB + 1, gx0 = bx0 - MG, gz0 = bz0 - MG, gnx = Math.ceil((bx1 - bx0 + 2 * MG) / CS), gnz = Math.ceil((bz1 - bz0 + 2 * MG) / CS), NV = (gnx + 1) * (gnz + 1);
+          const GY = new Float32Array(NV), GS2 = new Float32Array(NV), GR = new Uint8Array(NV), PY = new Float32Array(NV).fill(NaN), GX = new Float32Array(NV).fill(NaN), GZ = new Float32Array(NV);
+          for (let j = 0; j <= gnz; j++) for (let i = 0; i <= gnx; i++) { const v = j * (gnx + 1) + i, x = gx0 + i * CS, z = gz0 + j * CS, q = pathQ(x, z); GS2[v] = q.s;
+            if (q.s > RB + 0.5) { GY[v] = -1e9; continue; }
+            const nn = nearAll(x, z);
+            if (nn.dist < EDGE) {
+              // dentro da pista: longe da beira some; perto, o vértice é puxado para a beira de fora da zebra (contorno liso que
+              // acompanha a curva, sem os "dentes" de antes), na altura do chão dali
+              if (nn.dist < W - 3) { GY[v] = -1e9; continue; }
+              const i0 = nn.i, i1 = (i0 + 1) % N, qx = S[i0].x + (S[i1].x - S[i0].x) * nn.f, qz = S[i0].z + (S[i1].z - S[i0].z) * nn.f, sg = Math.sign(nn.lat) || 1;
+              const ex = qx + T[i0].z * sg * EDGE, ez = qz - T[i0].x * sg * EDGE; GX[v] = ex; GZ[v] = ez; GS2[v] = pathQ(ex, ez).s; GY[v] = tr.roadBase + hAt(nn.i + nn.f) + 0.05; GR[v] = 1; continue; }   // rente à zebra
+            const sf = surf(x, z, nn); GY[v] = sf.y; PY[v] = sf.y; }
+          sc.grid = { x0: gx0, z0: gz0, cs: CS, nx: gnx, nz: gnz, Y: PY };
+          sc.surf = (x, z) => surf(x, z).y;
+          const gP = [], gU = [], gC = [], gI = [], tP = [], tU = [], tC = [], tS = [], tI = [], gMap = new Int32Array(NV).fill(-1), tMap = new Int32Array(NV).fill(-1);
+          const vx = v => GX[v] === GX[v] ? GX[v] : gx0 + (v % (gnx + 1)) * CS, vz = v => GX[v] === GX[v] ? GZ[v] : gz0 + ((v / (gnx + 1)) | 0) * CS;
+          const gv = v => { if (gMap[v] < 0) { const x = vx(v), z = vz(v); gMap[v] = gP.length / 3; gP.push(x, GY[v], z); const t = grassUV(x, z); gU.push(t[0], t[1]); gC.push(...gcol(x, z)); } return gMap[v]; };
+          const tv = v => { if (tMap[v] < 0) { const x = vx(v), z = vz(v), s = GS2[v]; tMap[v] = tP.length / 3; tP.push(x, GY[v] + 0.04, z); tU.push(x / 5.5, z / 5.5); tS.push(s);
+              // trilha do meio mais batida (escura), bordas mais secas; manchas grandes de tom
+              const ew = EW, f = Math.max(0, Math.min(1, -s / ew)), nz = 0.5 + 0.25 * Math.sin(x * 0.09 + z * 0.05) + 0.15 * Math.sin(x * 0.23 - z * 0.31 + 1.7) + 0.1 * Math.sin(x * 0.61 + z * 0.47);
+              const mid = Math.exp(-Math.pow(Math.max(0, ew + s) / 3.0, 2)), v2 = 0.9 + 0.2 * nz - 0.1 * mid;
+              tC.push(v2, v2 * 0.98, v2 * 0.95); } return tMap[v]; };
+          for (let j = 0; j < gnz; j++) for (let i = 0; i < gnx; i++) { const a = j * (gnx + 1) + i, b = a + 1, c = a + gnx + 1, d = c + 1;
+            [[a, c, b], [b, c, d]].forEach(T3 => { if (T3.some(v => GY[v] < -1e8)) return; if (T3.every(v => GR[v])) return;
+              gI.push(gv(T3[0]), gv(T3[1]), gv(T3[2]));
+              if (Math.min(GS2[T3[0]], GS2[T3[1]], GS2[T3[2]]) < 0.7) tI.push(tv(T3[0]), tv(T3[1]), tv(T3[2])); }); }
+          const mk = (Pp, U, C, I, mat, extra) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Pp, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
+            g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); if (extra) g.setAttribute('aS', new THREE.Float32BufferAttribute(extra, 1)); g.setIndex(I); g.computeVertexNormals();
+            if (tr.vert) { const nr = g.attributes.normal.array;                        // mesma normal da grama embaixo: a emenda some (antes a borda que mergulha escurecia e virava um risco)
+              for (let k = 0; k < Pp.length / 3; k++) { const x = Pp[k * 3], z = Pp[k * 3 + 2]; if (roadInfo(x, z).d < W + 3) continue; const q = surfNormal(x, z, true); nr[k * 3] = q.x; nr[k * 3 + 1] = q.y; nr[k * 3 + 2] = q.z; } }
+            const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.userData.noOutline = true; add(m); return m; };
+          if (gI.length) mk(gP, gU, gC, gI, bermM);
+          if (tI.length) mk(tP, tU, tC, tI, dirtM, tS).userData.dynamic = true;   // fora da junção de malhas: ela descarta o atributo aS (a terra ficava cheia de buracos verdes)
           // duas marcas de pneu escuras (quem passou antes)
           [-1.8, 1.8].forEach(off => { const rp = [], ri = [];
             for (let k = 0; k < n; k++) { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-              [-0.35, 0.35].forEach(w => { const o = off + w + Math.sin(k * 0.37) * 0.15, [x, z] = snap(P[k].x + tz * o, P[k].z - tx * o); rp.push(x, sc.h[k] + 0.07, z); }); }
+              [-0.35, 0.35].forEach(w => { const o = off + w + Math.sin(k * 0.37) * 0.15, [x, z] = snap(P[k].x + tz * o, P[k].z - tx * o); rp.push(x, sc.surf(x, z) + 0.09, z); }); }
             for (let k = 0; k < n - 1; k++) { const a = k * 2; ri.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
             const rg = new THREE.BufferGeometry(); rg.setAttribute('position', new THREE.Float32BufferAttribute(rp, 3)); rg.setIndex(ri);
             const rm = new THREE.Mesh(rg, rutM); rm.renderOrder = 1; rm.userData.noOutline = true; add(rm); });
           // toras deitadas na beira, uma a cada ~7 m (só enfeite: não bloqueiam)
           const logs = []; for (let k = 3; k < n - 3; k += 3) [-1, 1].forEach(sd => { const a = P[k - 1], b = P[k + 1]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
             const o = sd * (hw + 1.6), x = P[k].x + tz * o, z = P[k].z - tx * o; if (Math.hypot(x - P[0].x, z - P[0].z) < 10 || Math.hypot(x - P[n - 1].x, z - P[n - 1].z) < 10) return;
-            if (tr.nearest({ x, z }, 0).dist < W + 3) return; logs.push({ x, z, y: Math.max(sc.h[k] - 0.1, yH(x, z)) + 0.2, r: Math.atan2(tx, tz) + (Math.random() - 0.5) * 0.3 }); });
-          if (logs.length) { const im = new THREE.InstancedMesh(logG, logM, logs.length), d = new THREE.Object3D();
+            if (tr.nearest({ x, z }, 0).dist < W + 3) return; logs.push({ x, z, y: sc.surf(x, z) + 0.2, r: Math.atan2(tx, tz) + (Math.random() - 0.5) * 0.3 }); });
+          if (CLUTTER && logs.length) { const im = new THREE.InstancedMesh(logG, logM, logs.length), d = new THREE.Object3D();
             logs.forEach((q, i) => { d.position.set(q.x, q.y, q.z); d.rotation.set(0, q.r, 0); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); im.castShadow = true; add(im); }
           // ===== VIDA NO ATALHO =====
           // pontos da beira do caminho: frame (tangente/lateral) em cada amostra, longe das pontas e do asfalto
           const frameAt = k => { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; return [tx / l, tz / l]; };
           const edgePt = (k, o) => { const [tx, tz] = frameAt(k), x = P[k].x + tz * o, z = P[k].z - tx * o;
             if (Math.hypot(x - P[0].x, z - P[0].z) < 9 || Math.hypot(x - P[n - 1].x, z - P[n - 1].z) < 9) return null;
-            if (tr.nearest({ x, z }, sc.i).dist < W + 3) return null; return { x, z, y: Math.max(sc.h[k] - 0.12, yH(x, z)), tx, tz }; };
-          const inst = (geo, mat, list, setup, shadow) => { if (!list.length) return null; const im = new THREE.InstancedMesh(geo, mat, list.length), d = new THREE.Object3D(), c = new THREE.Color();
+            if (tr.nearest({ x, z }, sc.i).dist < W + 3) return null; return { x, z, y: sc.surf(x, z) - 0.02, tx, tz }; };
+          const inst = (geo, mat, list, setup, shadow) => { if (!CLUTTER || !list.length) return null; const im = new THREE.InstancedMesh(geo, mat, list.length), d = new THREE.Object3D(), c = new THREE.Color();
             list.forEach((q, i) => { setup(d, q); d.updateMatrix(); im.setMatrixAt(i, d.matrix); if (q.c !== undefined) im.setColorAt(i, c.set(q.c)); });
             im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.castShadow = !!shadow; im.receiveShadow = true; im.userData.noOutline = true; add(im); return im; };
           // pedras: grupinhos irregulares na beira, algumas meio enterradas
@@ -1637,7 +2185,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
           inst(LIFE.shStemG, LIFE.shStemM, shrooms, (d, q) => { d.position.set(q.x, q.y + 0.13 * q.s, q.z); d.rotation.set(0, 0, 0); d.scale.setScalar(q.s); });
           inst(LIFE.shCapG, LIFE.shCapM, shrooms, (d, q) => { d.position.set(q.x, q.y + 0.26 * q.s, q.z); d.rotation.set((q.x % 0.4) - 0.2, 0, (q.z % 0.4) - 0.2); d.scale.setScalar(q.s); }, true);
           // lampiões de madeira ao longo do caminho (a cada ~22 m, alternando os lados): acendem à noite
-          { const posts = []; let side0 = 1;
+          if (CLUTTER) { const posts = []; let side0 = 1;
             for (let k = 5; k < n - 5; k += 9) { side0 = -side0; const q = edgePt(k, side0 * (hw + 2.0)); if (!q) continue; posts.push(Object.assign(q, { sd: side0 })); }
             posts.forEach(q => { const grp = new THREE.Group(), toPath = -q.sd;
               const post = new THREE.Mesh(LIFE.postG, LIFE.woodM); post.position.y = 1.35; post.castShadow = true; grp.add(post);
@@ -1647,7 +2195,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
               const fl = new THREE.Mesh(LIFE.flameG, LIFE.flameM); fl.position.set(0.68, 2.06, 0); grp.add(fl);
               // +x local aponta para o caminho
               const dx = q.tz * toPath, dz = -q.tx * toPath; grp.rotation.y = Math.atan2(-dz, dx); grp.position.set(q.x, q.y, q.z); add(grp);
-              const gl = glowSpr(0xffb35a, 3.2, 0.9); gl.position.set(q.x + dx * 0.68, q.y + 2.06, q.z + dz * 0.68); LIFE.flick.push(gl);
+              const gl = glowSpr(0xffb35a, 1.0, 0); gl.position.set(q.x + dx * 0.68, q.y + 2.06, q.z + dz * 0.68); LIFE.flick.push(gl);
               tr.obstacles.push({ x: q.x, z: q.z, r: 0.22 }); }); }
           // vaga-lumes (à noite) e borboletas (de dia) voando sobre o atalho (fora no detalhe baixo)
           if (!LO) { const NFF = 46, ffBase = [], fpos = new Float32Array(NFF * 3);
@@ -1678,7 +2226,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
           // entrada (nas duas pontas): dois postes listrados e uma placa com seta apontando para dentro do atalho
           [[0, 1], [n - 1, -1]].forEach(([k0, dir]) => { const k1 = Math.max(0, Math.min(n - 1, k0 + dir * 6)), A = P[k1], B = P[Math.max(0, Math.min(n - 1, k1 + dir))];
             let tx = (B.x - A.x) * dir, tz = (B.z - A.z) * dir; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
-            [-1, 1].forEach(sd => { const o = sd * (hw + 1.2), x = A.x + tz * o * dir, z = A.z - tx * o * dir, y = Math.max(sc.h[k1] - 0.2, yH(x, z));
+            if (CLUTTER) [-1, 1].forEach(sd => { const o = sd * (hw + 1.2), x = A.x + tz * o * dir, z = A.z - tx * o * dir, y = Math.max(sc.h[k1] - 0.2, yH(x, z));
               const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 2.6, 10), postM); pole.position.set(x, y + 1.3, z); pole.castShadow = true; add(pole);
               tr.obstacles.push({ x, z, r: 0.25 }); });
           });
@@ -1700,7 +2248,7 @@ console.info('%c[tracks.js] versão otimizada (qualidade gráfica configurável)
         return ponds.some(q => pondEdge(q, p.x, p.z) < 0) || nearRiver(p.x, p.z, RHW - 0.5); };
       buildShortcuts();
       tr.dustColor = 0xc9a878;
-      return { terrain, waterTest };
+      return { terrain: tr.vert ? (x, z, dist, u) => visGround(x, z, u === undefined ? undefined : Math.floor(u)) : terrain, waterTest };   // física = chão desenhado
     }
   }
 

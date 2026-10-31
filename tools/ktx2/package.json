@@ -1,0 +1,21 @@
+{
+  "name": "super-kartec-ktx2",
+  "private": true,
+  "description": "Converte as texturas dos modelos .glb do jogo para KTX2 (Basis Universal)",
+  "type": "module",
+  "scripts": {
+    "converter": "node converter.mjs",
+    "restaurar": "node converter.mjs --restaurar",
+    "refazer": "node converter.mjs --refazer",
+    "inspecionar": "node inspecionar.mjs",
+    "simplificar": "node simplificar.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/core": "4.1.1",
+    "@gltf-transform/extensions": "4.1.1",
+    "@gltf-transform/functions": "4.1.1",
+    "ktx2-encoder": "0.6.0",
+    "meshoptimizer": "0.22.0",
+    "sharp": "0.33.5"
+  }
+}

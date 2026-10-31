@@ -22,6 +22,11 @@
   // sombras: na borda da área coberta pelo mapa de sombra elas desaparecem num degradê, em vez de surgir/cortar de repente
   (function () { const C = THREE.ShaderChunk, k = 'shadowmap_pars_fragment', src = C[k] || '', i = src.indexOf('float getShadow('), j = src.indexOf('return shadow;', i);
     if (i >= 0 && j > i) C[k] = src.slice(0, j) + 'vec2 shE = abs( shadowCoord.xy * 2.0 - 1.0 ); shadow = mix( shadow, 1.0, smoothstep( 0.62, 0.97, max( shE.x, shE.y ) ) );\n\t\t' + src.slice(j); })();
+  // memória de vídeo esgotada: o navegador derruba o contexto WebGL. Em vez de tela preta, baixa a qualidade e recarrega.
+  renderer.domElement.addEventListener('webglcontextlost', e => { e.preventDefault(); console.warn('[WebGL] contexto perdido (memória de vídeo?)');
+    try { if (window.Settings && Settings.s) { const g = Settings.s.gfx, low = ['massinha', 'low'].includes(g.preset) ? 'massinha' : 'low'; Settings.applyPreset(low); Settings.save(); } } catch (err) { }
+    try { if (window.UI && UI.toast) UI.toast('Faltou memória de vídeo: baixando a qualidade e recarregando…', 4000); } catch (err) { }
+    setTimeout(() => location.reload(), 1500); }, false);
   TX.aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
   const CAMC = Object.assign({ FOV: 53, DIST: 13.5, HEIGHT: 6.5, TILT: 3 }, CFG.CAMERA || {});   // câmera "lente tele" (config.js)
@@ -29,6 +34,43 @@
   // acabamento da imagem da corrida (contorno de tinta, brilho, cor, FXAA): js/postfx.js; CFG.GFX ajusta; modo leve desliga
   const G0 = CFG.GFX || {};
   const postFX = window.PostFX && G0.POSTFX !== false ? PostFX.create(renderer, { ao: G0.AO, ink: G0.INK, bloom: G0.BLOOM, sat: G0.SAT, con: G0.CONTRAST, vig: G0.VIGNETTE, scatter: G0.SCATTER, rays: G0.RAYS, sharpen: G0.SHARPEN }) : null;
+
+  // ---------------- memória: utilidades (guia de performance) ----------------
+  // textura que o three.js consegue reenviar sozinho se for descartada (imagem, canvas, bitmap ou dados);
+  // texturas de render target (reflexo, mapa de ambiente) NÃO: descartar uma delas apagaria o conteúdo
+  const reuploadable = t => { if (t && t.isCompressedTexture) return !!(t.mipmaps && t.mipmaps.length && t.mipmaps[0] && t.mipmaps[0].data);   // KTX2: reenviada a partir dos mipmaps
+    const im = t && t.isTexture && t.image; if (!im || Array.isArray(im)) return false;
+    return (typeof HTMLImageElement !== 'undefined' && im instanceof HTMLImageElement) || (typeof HTMLCanvasElement !== 'undefined' && im instanceof HTMLCanvasElement) ||
+      (typeof ImageBitmap !== 'undefined' && im instanceof ImageBitmap) || (typeof OffscreenCanvas !== 'undefined' && im instanceof OffscreenCanvas) || !!im.data; };
+  const matTextures = (m, fn) => { for (const k in m) { const v = m[k]; if (v && v.isTexture) fn(v); }
+    if (m.uniforms) for (const k in m.uniforms) { const v = m.uniforms[k] && m.uniforms[k].value; if (v && v.isTexture) fn(v); } };
+  const eachMat = (o, fn) => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; ms.forEach(m => m && fn(m)); };
+  // HIBERNAR: libera da GPU as geometrias e texturas de uma cena que não está na tela (vitrine, pódio). Nada é destruído no
+  // JavaScript: quando a cena volta a ser desenhada, o three.js reenvia tudo sozinho. O que a cena da corrida também usa fica.
+  function hibernate(scene, keepScene) {
+    if (!scene) return 0;
+    const keepG = new Set(), keepT = new Set(), seen = new Set(); let n = 0;
+    if (keepScene) keepScene.traverse(o => { if (o.geometry) keepG.add(o.geometry); eachMat(o, m => matTextures(m, t => keepT.add(t))); });
+    scene.traverse(o => {
+      const g = o.geometry;
+      if (g && !keepG.has(g) && !seen.has(g) && !o.isInstancedMesh) { let ok = true; for (const k in g.attributes) if (!g.attributes[k].array) ok = false;
+        if (ok) { seen.add(g); g.dispose(); n++; } }
+      eachMat(o, m => matTextures(m, t => { if (!keepT.has(t) && !seen.has(t) && reuploadable(t)) { seen.add(t); t.dispose(); n++; } }));
+    });
+    return n;
+  }
+  // geometria parada da pista: depois de enviada para a GPU, o array do JavaScript é solto (cada vértice deixa de existir em
+  // dobro). Só para as malhas juntadas pelo mergeByMaterial: ninguém lê esses vértices depois (colisão usa as funções da pista).
+  function freeAfterUpload() { this.array = null; }
+  function gpuOnly(meshes) {
+    let bytes = 0;
+    (meshes || []).forEach(m => { const g = m.geometry; if (!g || g.userData.gpuOnly) return; g.userData.gpuOnly = true;
+      m.raycast = () => { };   // sem vértices na RAM não há o que testar (nenhum código do jogo faz raycast na pista)
+      if (!g.boundingSphere) g.computeBoundingSphere(); if (!g.boundingBox) g.computeBoundingBox();
+      for (const k in g.attributes) { const a = g.attributes[k]; bytes += a.array.byteLength; a.onUpload(freeAfterUpload); }
+      if (g.index) { bytes += g.index.array.byteLength; g.index.onUpload(freeAfterUpload); } });
+    return bytes;
+  }
 
   // ---------------- contornos dos personagens/karts: roxo escuro -> preto ----------------
   // Os contornos (toon) são malhas "de costas" com cor escura. Procura nas cenas ativas, de tempos em tempos, materiais de
@@ -442,7 +484,11 @@
       this.track = Toon.during(() => Tracks.build(def, root));
       this.propStats = Props.build(this.track, def, root);            // cones, pneus e balões de brinquedo
       // agrupa toda a geometria parada por material: de ~1.300 para algumas dezenas de chamadas de desenho
-      const st = GEO.mergeByMaterial(root, { cell: 120 }); this.mergeStats = st; this._cullT = 0;   // blocos de 120 m: o que está fora da câmera/sombra não é desenhado
+      // blocos de 400 m (eram 120): a câmera via ~90 blocos por material até a névoa -> ~500 chamadas de desenho só de pista e
+      // terreno, e o jogo ficava preso na CPU (mesmo FPS no baixo e no ultra). Com 400 m são ~11x menos chamadas; a placa de
+      // vídeo desenha alguns triângulos a mais nas bordas, o que ela aguenta com folga.
+      const st = GEO.mergeByMaterial(root, { cell: 400 }); this.mergeStats = st; this._cullT = 0;
+      st.cpuFreedMB = gpuOnly(st.meshes) / 1048576;   // arrays dos vértices soltos da RAM assim que vão para a GPU   // blocos de 120 m: o que está fora da câmera/sombra não é desenhado
       // preenchimento do mundo até o horizonte (instanciado, em blocos com culling por câmera e por distância)
       const dens = window.Settings ? Settings.sceneryDensity() * (this.lite && Settings.autoPerf() ? 0.6 : 1) : (this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY);
       this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: dens }));
@@ -487,6 +533,9 @@
       this.wrongT = 0;
       if (this.lite) this.setLite(true);
       this.precompile(scene);
+      // vitrine e pódio não aparecem durante a corrida: saem da GPU (voltam sozinhos quando forem desenhados de novo)
+      try { const n = hibernate(window.Showroom && Showroom.scene, scene) + hibernate(window.Podium && Podium.scene, scene);
+        console.info('[memória] pista montada: ' + (st.cpuFreedMB || 0).toFixed(1) + ' MB de vértices só na GPU; ' + n + ' recursos da vitrine/pódio liberados da GPU'); } catch (e) { console.warn('[memória] hibernar', e); }
     },
     // compila agora (atrás da cortina) os shaders de tudo que a pista pode mostrar, inclusive o que está escondido
     // (faróis, chamas do turbo, blocos distantes do cenário, contornos): nada compila depois, no meio da corrida
@@ -508,8 +557,11 @@
       if (this.player) this.player.m.group.traverse(o => { if (o.material && o.material.map) keep.add(o.material.map); if (o.material && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); });
       (this.rivals || []).forEach(b => b.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); }));
       [Pilot.tpl && Pilot.tpl.map, Pilot.tpl && Pilot.tpl.normalMap, KartMats.tread(false), KartMats.tread(true)].forEach(t => t && keep.add(t));
-      this.scene.traverse(o => { if (o.geometry) o.geometry.dispose(); const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
-        ms.forEach(m => { ['map', 'emissiveMap'].forEach(k => { if (m[k] && !keep.has(m[k])) m[k].dispose(); }); m.dispose(); }); });
+      // dispose completo: todas as texturas do material (normalMap, alphaMap, uniforms...), não só map/emissiveMap.
+      // Texturas de render target (mapa de ambiente dos karts, reflexo) nunca: não dá para reenviá-las.
+      const done = new Set();
+      this.scene.traverse(o => { if (o.geometry) o.geometry.dispose();
+        eachMat(o, m => { matTextures(m, t => { if (!keep.has(t) && !done.has(t) && reuploadable(t)) { done.add(t); t.dispose(); } }); m.dispose(); }); });
       this.scene = null; this.track = null; this.player = this.bot = null; this.karts = []; this.rivals = []; this.ais = [];
     },
     // n cores bem diferentes da cor do jogador (as mais contrastantes primeiro)
@@ -551,6 +603,7 @@
       const go = () => {
         this.state = 'menu'; UI.screen('menu'); UI.Fairy.hide(); Cine.hide(true); UI.countNum(''); Env.hideFlare(); Podium.stop(); this.dispose(); this.cup = null;
         $('signal').hidden = true; Showroom.setRig('menu'); UI.menuKart(Custom.spec); if (Intro.karts) Intro.dispose();
+        try { hibernate(window.Podium && Podium.scene, Showroom.scene); } catch (e) { }   // pódio fora da tela: sai da GPU
       };
       if (fromIntro === true || this.state === 'garage' || this.state === 'menu') go(); else blackFade(go);   // saindo da corrida/pódio: tela preta (fade in/out)
     },
@@ -832,8 +885,7 @@
         if (!k._outl) { k._outl = []; k.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) k._outl.push(o); }); }
         const d2 = k.pos.distanceToSquared(cp), near = !this.lite && (k === this.player || d2 < 55 * 55);
         if (k._near !== near) { k._near = near; k._outl.forEach(o => o.visible = near); }
-        // os karts NUNCA são escondidos por proximidade: perto da câmera, perto do jogador, colados — sempre visíveis
-        if (k !== this.player && !k.gone && !k.m.group.visible) k.m.group.visible = true;
+        // visibilidade dos rivais: kartCull (todo quadro, antes de desenhar)
       });
     },
     // vácuo: colado atrás de qualquer kart por ~1 s = empurrão (vale para todos os 8)
@@ -932,6 +984,21 @@
     lite: false,
     setLite(on) { this.lite = on;   // o preenchimento de cenário da PRÓXIMA pista também fica mais leve (CFG.FILL.LITE_DENSITY)
       const f = sc => sc && sc.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) o.visible = !on; }); f(this.scene); if (on) console.info('[desempenho] modo leve ativado: contornos desligados'); },
+    // rivais fora da tela não são desenhados (nem na passada da sombra). Os karts usam frustumCulled = false (para não
+    // sumirem na borda da tela), então antes os 7 bots eram desenhados em todo quadro, até atrás da câmera.
+    // Regra: escondido só se estiver FORA do campo de visão (com 9 m de folga) E a mais de 30 m da câmera.
+    // Também define o LOD da animação do piloto (karts.js > animate).
+    kartCull() {
+      const F = this._frus || (this._frus = new THREE.Frustum()), M = this._pm || (this._pm = new THREE.Matrix4()), S = this._sph || (this._sph = new THREE.Sphere(new THREE.Vector3(), 9));
+      camera.updateMatrixWorld(); M.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); F.setFromProjectionMatrix(M);
+      const cp = camera.position, all = this.state === 'round';
+      for (const k of this.karts) { if (!k || !k.m || k.gone) continue;
+        if (k === this.player) { k.m.lod = 0; continue; }
+        const d2 = k.pos.distanceToSquared(cp); S.center.copy(k.pos);
+        const show = all || d2 < 900 || F.intersectsSphere(S);
+        if (k.m.group.visible !== show) k.m.group.visible = show;
+        k.m.lod = !show ? 3 : d2 > 8100 ? 2 : d2 > 2025 ? 1 : 0; }
+    },
     // culling por distância dos blocos da pista: o que passa do fim da névoa fica invisível (4x por segundo).
     // O frustum culling do Three.js já cuida do que está fora do campo de visão.
     cullTrack() {
@@ -952,7 +1019,7 @@
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
-      else if (this.scene) { this.cullTrack(); if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+      else if (this.scene) { this.cullTrack(); this.kartCull(); if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
       if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
     },
     // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa

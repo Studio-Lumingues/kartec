@@ -11,12 +11,12 @@
   // MASSINHA: o mínimo possível para PC/celular fraco (meia resolução, sem sombra, sem pós-efeito, sem reflexo,
   // texturas viram cor lisa, pouca coisa no cenário, visão curta). ULTRA: o máximo (sombra 4096, cenário mais cheio).
   const PRESETS = {
-    auto:     { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' },
-    massinha: { res: '0.5',  shadows: 'off',    outlines: false, scenery: 'min',    particles: 'min',    view: 'veryNear', postfx: 'off',    water: 'off',  detail: 'low',    textures: 'flat', fpsCap: '60' },
-    low:      { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near',     postfx: 'simple', water: 'low',  detail: 'low',    textures: 'full', fpsCap: '60' },
-    medium:   { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium',   postfx: 'simple', water: 'low',  detail: 'medium', textures: 'full', fpsCap: '0' },
-    high:     { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' },
-    ultra:    { res: '2',    shadows: 'ultra',  outlines: true,  scenery: 'ultra',  particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0' }
+    auto:     { res: 'auto', shadows: 'medium', outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048' },
+    massinha: { res: '0.5',  shadows: 'off',    outlines: false, scenery: 'min',    particles: 'min',    view: 'veryNear', postfx: 'off',    water: 'off',  detail: 'low',    textures: 'flat', fpsCap: '60', texRes: '512' },
+    low:      { res: '0.75', shadows: 'off',    outlines: false, scenery: 'low',    particles: 'low',    view: 'near',     postfx: 'simple', water: 'low',  detail: 'low',    textures: 'full', fpsCap: '60', texRes: '1024' },
+    medium:   { res: '1',    shadows: 'low',    outlines: true,  scenery: 'medium', particles: 'normal', view: 'medium',   postfx: 'simple', water: 'low',  detail: 'medium', textures: 'full', fpsCap: '0', texRes: '1024' },
+    high:     { res: '1.5',  shadows: 'high',   outlines: true,  scenery: 'high',   particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: '2048' },
+    ultra:    { res: '2',    shadows: 'ultra',  outlines: true,  scenery: 'ultra',  particles: 'normal', view: 'far',      postfx: 'full',   water: 'high', detail: 'high',   textures: 'full', fpsCap: '0', texRes: 'max' }
   };
   const DEF = { vol: { master: 80, engine: 70, sfx: 80, ui: 60, amb: 50 },
     gfx: Object.assign({ preset: 'auto', speedFx: true, shake: true, fps: false }, PRESETS.auto) };
@@ -25,7 +25,7 @@
   const VIEW = { veryNear: 0.45, near: 0.62, medium: 0.82, far: 1 };
   const PARTS = { min: 0.15, low: 0.45, normal: 1 };
   // opções que fazem a predefinição virar "Personalizada" quando mexidas
-  const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap'];
+  const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap', 'texRes'];
 
   const Settings = {
     s: null,
@@ -46,6 +46,7 @@
     q() { const g = this.s ? this.s.gfx : DEF.gfx; return { water: g.water || 'high', detail: g.detail || 'high' }; },
     fpsCap() { return +(this.s && this.s.gfx.fpsCap) || 0; },                   // 0 = sem limite (acompanha a tela)
     postfxMode() { return (this.s && this.s.gfx.postfx) || 'full'; },
+    applyPreset(name) { if (!PRESETS[name]) return; Object.assign(this.s.gfx, PRESETS[name]); this.s.gfx.preset = name; this.apply(); this.sync && $('setGfx') && $('setGfx').innerHTML && this.sync(); },
     // ---------- aplicação ----------
     apply() {
       const g = this.s.gfx;
@@ -137,6 +138,7 @@
         tog('outlines', 'Contornos de desenho', 'Traço escuro em volta dos karts e objetos') +
         opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Montanhas, terreno, névoa da cachoeira e enfeites. Vale na próxima corrida') +
         opt('textures', 'Texturas', [['flat', 'Massinha (cor lisa)'], ['full', 'Detalhadas']], 'Vale na próxima corrida') +
+        opt('texRes', 'Resolução das texturas 3D', [['512', '512'], ['1024', '1024'], ['2048', '2048'], ['max', 'Original']], 'Piloto, karts, garagem e fadinha. O que mais gasta memória de vídeo. Vale ao recarregar o jogo (F5)') +
         opt('scenery', 'Cenário', [['min', 'Mínimo'], ['low', 'Leve'], ['medium', 'Médio'], ['high', 'Completo'], ['ultra', 'Ultra']], 'Árvores e enfeites até o horizonte. Vale na próxima corrida') +
         opt('particles', 'Partículas', [['min', 'Mínimas'], ['low', 'Poucas'], ['normal', 'Normais']]) +
         opt('view', 'Distância de visão', [['veryNear', 'Muito curta'], ['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
@@ -150,9 +152,11 @@
       // gráficos
       $('setGfx').querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
         const id = seg.dataset.g, v = b.dataset.v, g = this.s.gfx;
+        const oldTex = g.texRes;
         if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; }
         else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (GFX_KEYS.includes(id)) g.preset = 'custom'; }
-        this.save(); this.apply(); this.sync(); })));
+        this.save(); this.apply(); this.sync();
+        if (g.texRes !== oldTex && window.UI && UI.toast) UI.toast('Resolução das texturas: vale ao recarregar o jogo (F5)', 2600); })));
       $('setReset').addEventListener('click', () => { this.s = JSON.parse(JSON.stringify(DEF)); this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
       $('btnSettings').addEventListener('click', () => this.open());
       $('setBtn').addEventListener('click', () => this.open());
@@ -169,4 +173,39 @@
     }
   };
   window.Settings = Settings;
+
+  // ---------- LIMITE DE RESOLUÇÃO DAS TEXTURAS DOS MODELOS 3D (.glb) ----------
+  // Cada textura de 4096 px ocupa ~89 MB na GPU; de 1024, ~5,6 MB. Aqui, assim que um .glb termina de carregar e ANTES de
+  // ir para a GPU, toda textura maior que o limite (configurações > Resolução das texturas 3D) é reduzida pela metade quantas
+  // vezes for preciso, num canvas. Funciona com qualquer .glb sem converter arquivo. Vale para o que carregar depois de mudar.
+  (function capGltfTextures() {
+    if (!window.THREE || !THREE.GLTFLoader) return;
+    const capNow = () => { let v = Settings.s && Settings.s.gfx.texRes;
+      if (!v) { try { const sv = JSON.parse(localStorage.getItem(KEY()) || 'null'); v = sv && sv.gfx && (sv.gfx.texRes || (PRESETS[sv.gfx.preset] || {}).texRes); } catch (e) { } }
+      v = v || PRESETS.auto.texRes; return v === 'max' ? Infinity : (+v || 2048); };
+    const orig = THREE.GLTFLoader.prototype.parse;
+    THREE.GLTFLoader.prototype.parse = function (data, path, onLoad, onError) {
+      return orig.call(this, data, path, gltf => {
+        try {
+          const cap = capNow();
+          if (isFinite(cap)) {
+            const byImg = new Map(); let before = 0, after = 0;
+            const visit = t => { if (!t || !t.isTexture || t.isCompressedTexture || t.isDataTexture) return; const im = t.image; if (!im || !im.width || !im.height) return;
+              if (!byImg.has(im)) { const big = Math.max(im.width, im.height); let c = null;
+                if (big > cap) { let k = 1; while (big / k > cap) k *= 2;
+                  c = document.createElement('canvas'); c.width = Math.max(1, Math.round(im.width / k)); c.height = Math.max(1, Math.round(im.height / k));
+                  const g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high'; g.drawImage(im, 0, 0, c.width, c.height);
+                  before += im.width * im.height; after += c.width * c.height; }
+                byImg.set(im, c); }
+              const c = byImg.get(im); if (c) { t.image = c; t.needsUpdate = true; } };
+            (gltf.scenes || [gltf.scene]).forEach(sc => sc && sc.traverse(o => { const ms = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+              ms.forEach(m => { if (!m) return; for (const k in m) visit(m[k]); }); }));
+            byImg.forEach((c, im) => { if (c && im.close) try { im.close(); } catch (e) { } });   // solta o bitmap original da memória
+            if (before) console.info('[texturas] ' + (path || 'glb') + ': ' + (before * 5.32 / 1048576).toFixed(0) + ' MB -> ' + (after * 5.32 / 1048576).toFixed(0) + ' MB (limite ' + cap + ' px)');
+          }
+        } catch (e) { console.warn('[texturas] não reduzidas:', e); }
+        onLoad(gltf);
+      }, onError);
+    };
+  })();
 })();

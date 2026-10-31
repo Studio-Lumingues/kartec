@@ -70,8 +70,30 @@
     flowers: () => merge([colored(new THREE.IcosahedronGeometry(0.5, 0), 0xffffff, M(0, 0.4, 0, 1, 0.6, 1)), colored(new THREE.IcosahedronGeometry(0.4, 0), 0xffffff, M(0.6, 0.35, 0.3, 1, 0.6, 1)), colored(new THREE.IcosahedronGeometry(0.35, 0), 0xffffff, M(-0.5, 0.3, -0.3, 1, 0.6, 1))], { y0: 0, y1: 0.7, min: 0.7 }),
     rock: () => merge([colored(lumpy(new THREE.DodecahedronGeometry(1, 1), 0.12, 10), 0x8e8880, M(0, 0.45, 0, 1.3, 0.8, 1))], { y0: -0.2, y1: 1.1, min: 0.62 }),   // pedra no cinza das montanhas
     forest: () => merge([0, 1, 2, 3].map(k => colored(new THREE.ConeGeometry(3.4, 9, 6), k % 2 ? 0x2c7a44 : 0x37894c, M(Math.cos(k * 1.7) * 3.2, 4.5, Math.sin(k * 1.7) * 3.2, 1 + (k % 3) * 0.2))), { y0: 0, y1: 11, min: 0.55 }),
-    hill: () => merge([colored(new THREE.IcosahedronGeometry(1, 2), 0x4f8236, M(0, 0, 0, 1, 0.45, 1))], { y0: -0.1, y1: 0.45, min: 0.82 })   // morros no mesmo verde natural da grama
+    hill: () => merge([colored(new THREE.IcosahedronGeometry(1, 2), 0x4f8236, M(0, 0, 0, 1, 0.45, 1))], { y0: -0.1, y1: 0.45, min: 0.82 }),   // morros no mesmo verde natural da grama
+    // ---- coisas da floresta (bem leves): toco, tronco caído com musgo, cogumelos ----
+    stump: () => merge([colored(new THREE.CylinderGeometry(0.52, 0.68, 0.75, 10), 0x6e4c32, M(0, 0.37, 0, 1)),
+      colored(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 10), 0xd8b07a, M(0, 0.76, 0, 1)), colored(new THREE.CylinderGeometry(0.26, 0.26, 0.06, 8), 0xb3855a, M(0, 0.77, 0, 1)),
+      ...[0, 1, 2, 3].map(k => colored(new THREE.IcosahedronGeometry(0.3, 0), 0x5a3d28, M(Math.cos(k * 1.7) * 0.62, 0.08, Math.sin(k * 1.7) * 0.62, 1.4, 0.45, 0.8, -k * 1.7))),
+      colored(new THREE.IcosahedronGeometry(0.22, 0), 0x6f9a3a, M(0.25, 0.8, -0.1, 1.2, 0.35, 1))], { y0: 0, y1: 0.85, min: 0.6 }),
+    log: () => { const body = new THREE.CylinderGeometry(0.42, 0.36, 4.2, 9); body.rotateZ(Math.PI / 2);
+      const moss = new THREE.CylinderGeometry(0.44, 0.38, 3.2, 9, 1, true, 0.35, Math.PI - 0.7); moss.rotateZ(Math.PI / 2);
+      const capA = new THREE.CircleGeometry(0.4, 9); capA.rotateY(Math.PI / 2); const capB = capA.clone(); capB.rotateY(Math.PI);
+      const stub = new THREE.CylinderGeometry(0.07, 0.12, 0.8, 5); stub.rotateZ(-0.9);
+      return merge([colored(body, 0x6a4a30, M(0, 0.38, 0, 1)), colored(moss, 0x5f8f38, M(0.2, 0.4, 0, 1)), colored(capA, 0xcfa070, M(2.11, 0.38, 0, 1)), colored(capB, 0xcfa070, M(-2.11, 0.38, 0, 1)),
+        colored(stub, 0x5a3d28, M(0.6, 0.85, 0.15, 1))], { y0: 0, y1: 0.8, min: 0.62 }); },
+    shrooms: () => merge([[0, 0, 1], [0.35, 0.18, 0.7], [-0.28, 0.25, 0.8], [0.1, -0.32, 0.55]].flatMap(([x, z, s]) => [
+      colored(new THREE.CylinderGeometry(0.06, 0.08, 0.28, 6), 0xf1e6d2, M(x, 0.14 * s, z, s)),
+      colored(new THREE.SphereGeometry(0.17, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), 0xd8402e, M(x, 0.26 * s, z, s, s * 0.75, s))]), { y0: 0, y1: 0.4, min: 0.75 })
   };
+  // várias geometrias numa só, com aVar = índice de cada uma (mesmo seletor dos pinheiros: 1 chamada de desenho para todas)
+  function withVar(list) {
+    let n = 0; list.forEach(g => n += g.attributes.position.count);
+    const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3), vr = new Float32Array(n); let o = 0;
+    list.forEach((g, v) => { const c = g.attributes.position.count; pos.set(g.attributes.position.array, o * 3); nor.set(g.attributes.normal.array, o * 3); col.set(g.attributes.color.array, o * 3); vr.fill(v, o, o + c); o += c; g.dispose(); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3)); g.setAttribute('aVar', new THREE.BufferAttribute(vr, 1)); g.computeBoundingSphere(); return g;
+  }
 
   // ---------- consulta rápida de distância até a pista (hash espacial dos nós) ----------
   function trackIndex(tr, C) {
@@ -126,17 +148,33 @@
       let bands;
       {
         const m = vc();
-        kind('tree', GEOS.tree(), m, { geoLo: GEOS.treeLo(), sMin: 0.9, sMax: 1.6, r: 3, tint: () => new THREE.Color().setHSL(0.2 + rnd() * 0.2, 0.45, 0.78 + rnd() * 0.17) });
-        kind('pine', GEOS.pine(), m, { geoLo: GEOS.pineLo(), sMin: 1, sMax: 1.8, r: 2.4 });
-        kind('bush', GEOS.bush(), m, { sMin: 0.8, sMax: 1.5, r: 1.6, shadow: false });
+        const PINES = !!window.Pines;   // só pinheiros (js/pines.js): sem as árvores de bolas nem as florestas de cones
+        if (!PINES) kind('tree', GEOS.tree(), m, { geoLo: GEOS.treeLo(), sMin: 0.9, sMax: 1.6, r: 3, tint: () => new THREE.Color().setHSL(0.2 + rnd() * 0.2, 0.45, 0.78 + rnd() * 0.17) });
+        // pinheiros: 4 modelos detalhados (js/pines.js) numa malha só, com material próprio (seletor de modelo + vento suave)
+        if (PINES) { const pm = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), { amp: 0.02, h0: 3.0, freq: 0.9 });
+          // perto: um bloco por modelo (split) -> cada árvore só processa os vértices do próprio modelo; longe: os 4 juntos (leve)
+          kind('pine', Pines.geometry('hi'), pm, { geoLo: Pines.geometry('lo'), sMin: 0.95, sMax: 1.45, r: 5, variants: v => Pines.variantAt(v.x, v.z), split: v => Pines.single('hi', v) });
+          // horizonte: pinheiros leves e maiores no lugar das "florestas" de cones
+          kind('pineFar', Pines.geometry('lo'), pm, { sMin: 1.6, sMax: 2.4, r: 6, shadow: false, variants: v => Pines.variantAt(v.x, v.z) });
+          // chão da floresta: toco, tronco caído e cogumelos numa malha só (seletor de modelo, sem vento)
+          const lm = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), false);
+          kind('litter', withVar([GEOS.stump(), GEOS.log(), GEOS.shrooms()]), lm, { sMin: 0.85, sMax: 1.35, r: 2.2, shadow: true,
+            variants: v => { const h = Math.sin(v.x * 3.7 + v.z * 9.1) * 7919.3; const f = h - Math.floor(h); return f < 0.4 ? 0 : f < 0.75 ? 1 : 2; } }); }
+        else kind('pine', GEOS.pine(), m, { geoLo: GEOS.pineLo(), sMin: 1, sMax: 1.8, r: 2.4 });
+        // arbusto: moita nova do tracks.js (window.Bush: folhagem recortada, mais realista); sem ela, a antiga de bolinhas
+        if (window.Bush) kind('bush', Bush.geometry('lo'), Bush.material(), { sMin: 0.65, sMax: 1.15, r: 2.2, shadow: false, y: 0.05,
+          tint: () => new THREE.Color().setHSL(0.22 + rnd() * 0.09, 0.3 + rnd() * 0.2, 0.84 + rnd() * 0.14) });
+        else kind('bush', GEOS.bush(), m, { sMin: 0.8, sMax: 1.5, r: 1.6, shadow: false });
         kind('flowers', GEOS.flowers(), m, { sMin: 0.8, sMax: 1.3, r: 1, shadow: false, tint: () => new THREE.Color([0xff7ab8, 0xffe14a, 0xffffff, 0xff8a3d, 0xb08aff][Math.floor(rnd() * 5)]) });
         kind('rock', GEOS.rock(), m, { sMin: 0.8, sMax: 2.4, r: 1.5, shadow: false });
-        kind('forest', GEOS.forest(), m, { sMin: 1.2, sMax: 2.6, r: 8, shadow: false });
+        if (!PINES) kind('forest', GEOS.forest(), m, { sMin: 1.2, sMax: 2.6, r: 8, shadow: false });
         kind('hill', GEOS.hill(), m, { sMin: 45, sMax: 110, r: 60, shadow: false, yaw: false, y: -6, tint: () => new THREE.Color().setHSL(0.2 + rnd() * 0.08, 0.22, 0.78 + rnd() * 0.14) });
         bands = [
-          { d0: W + 26, d1: 220, step: 16, p: 0.55, pick: () => { const r = rnd(); return r < 0.45 ? 'tree' : r < 0.62 ? 'pine' : r < 0.8 ? 'bush' : r < 0.93 ? 'flowers' : 'rock'; } },
-          { d0: 220, d1: 620, step: 30, p: 0.55, pick: () => { const r = rnd(); return r < 0.5 ? 'tree' : r < 0.85 ? 'pine' : 'forest'; } },
-          { d0: 620, d1: far, step: 70, p: 0.75, pick: () => rnd() < 0.8 ? 'forest' : 'hill' }
+          // com pinheiros: menos árvores e maiores (perto 24 m entre pontos, era 16; meio 46, era 30; horizonte 85) + chão da floresta
+          PINES ? { d0: W + 26, d1: 220, step: 24, p: 0.6, pick: () => { const r = rnd(); return r < 0.4 ? 'pine' : r < 0.53 ? 'bush' : r < 0.7 ? 'litter' : r < 0.84 ? 'flowers' : 'rock'; } }
+                : { d0: W + 26, d1: 220, step: 16, p: 0.55, pick: () => { const r = rnd(); return r < 0.45 ? 'tree' : r < 0.62 ? 'pine' : r < 0.8 ? 'bush' : r < 0.93 ? 'flowers' : 'rock'; } },
+          { d0: 220, d1: 620, step: PINES ? 46 : 30, p: 0.55, pick: () => { const r = rnd(); return PINES ? 'pine' : r < 0.5 ? 'tree' : r < 0.85 ? 'pine' : 'forest'; } },
+          { d0: 620, d1: far, step: PINES ? 85 : 70, p: 0.75, pick: () => rnd() < 0.8 ? (PINES ? 'pineFar' : 'forest') : 'hill' }
         ];
       }
 
@@ -157,12 +195,16 @@
       const group = new THREE.Group(); group.userData.dynamic = true; root.add(group);
       const chunks = [], d = new THREE.Object3D(), tmp = new THREE.Color();
       const byChunk = new Map();
-      const push = (k, inst) => { const key = Math.floor(inst.x / CH) + ',' + Math.floor(inst.z / CH) + ',' + k.id + (inst.lo ? 'L' : '');
-        if (!byChunk.has(key)) byChunk.set(key, { k, geo: inst.lo ? k.geoLo : k.geo, items: [] }); byChunk.get(key).items.push(inst); };
+      // blocos: o que fica perto da pista (versão detalhada, projeta sombra) em 2x CH; o que é distante (versão leve, florestas,
+      // morros) em blocos 3x maiores -> bem menos chamadas de desenho (eram ~420 só de cenário por quadro)
+      const push = (k, inst) => { const ch = inst.lo || k.id === 'forest' || k.id === 'hill' || k.id === 'pineFar' ? CH * 3 : CH * 2;   // perto: 2x (600 m); longe: 3x (900 m)
+        const sp = k.split && !inst.lo;   // pinheiro perto: um bloco por modelo
+        const key = Math.floor(inst.x / ch) + ',' + Math.floor(inst.z / ch) + ',' + k.id + (inst.lo ? 'L' : '') + (sp ? ':' + inst.v : '');
+        if (!byChunk.has(key)) byChunk.set(key, { k, geo: sp ? k.split(inst.v) : inst.lo ? k.geoLo : k.geo, items: [] }); byChunk.get(key).items.push(inst); };
       Object.values(kinds).forEach(k => {
         k.list.forEach(it => {
           const yaw = k.yaw ? rnd() * Math.PI * 2 : 0;
-          const s = k.sMin + rnd() * (k.sMax - k.sMin); push(k, { x: it.x, z: it.z, y: k.y + (tr.heightAt ? tr.heightAt(it.x, it.z) : 0), sx: s, sy: s, sz: s, ry: yaw, near: it.d < 160, lo: it.lo, c: k.tint ? k.tint() : null });
+          const s = k.sMin + rnd() * (k.sMax - k.sMin); push(k, { x: it.x, z: it.z, y: k.y + (tr.heightAt ? tr.heightAt(it.x, it.z) : 0), sx: s, sy: s, sz: s, ry: yaw, near: it.d < 160, lo: it.lo, c: k.tint ? k.tint() : null, v: k.variants ? k.variants(it) : 0 });
         });
       });
       let total = 0;
@@ -173,17 +215,19 @@
         items.forEach(i => { R = Math.max(R, Math.hypot(i.x - cx, i.z - cz) + gr * Math.max(i.sx, i.sy, i.sz)); });
         // geometria "casca": mesmos atributos (mesmos buffers na GPU), esfera envolvente própria do bloco
         const g = new THREE.BufferGeometry(); for (const a in geo.attributes) g.setAttribute(a, geo.attributes[a]); if (geo.index) g.setIndex(geo.index);
+        if (k.variants) g.setAttribute('iVar', new THREE.InstancedBufferAttribute(Float32Array.from(items.map(i => i.v)), 1));   // modelo de cada pinheiro
         g.boundingSphere = new THREE.Sphere(V3(0, 0, 0), R);
         const im = new THREE.InstancedMesh(g, k.mat, items.length);
         items.forEach((i, n) => { d.position.set(i.x - cx, i.y, i.z - cz); d.rotation.set(0, i.ry, 0); d.scale.set(i.sx, i.sy, i.sz); d.updateMatrix(); im.setMatrixAt(n, d.matrix);
           im.setColorAt(n, i.c || tmp.set(0xffffff)); });   // sempre com instanceColor: o r128 não separa programas com/sem cor de instância
         im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
         im.position.set(cx, 0, cz); im.castShadow = k.shadow && items.some(i => i.near); im.receiveShadow = false;
+        if (k.variants) im.customDepthMaterial = Pines.depthMaterial();   // sombra com o modelo certo de cada árvore
         im.userData.noOutline = true; im.matrixAutoUpdate = false; im.updateMatrix();
         group.add(im); chunks.push({ im, cx, cz, R }); total += items.length;
       });
       // os maiores objetos também bloqueiam o lens flare (teste barato por esfera)
-      Object.values(kinds).forEach(k => { if (k.id === 'hill' || k.id === 'forest') k.list.forEach((it, n) => { if (n % 3 === 0) tr.blockers.push({ x: it.x, y: 10, z: it.z, r: k.r }); }); });
+      Object.values(kinds).forEach(k => { if (k.id === 'hill' || k.id === 'forest' || k.id === 'pineFar' || k.id === 'pine') k.list.forEach((it, n) => { if (n % 3 === 0) tr.blockers.push({ x: it.x, y: 10, z: it.z, r: k.r }); }); });
 
       let t = 0;
       return {
@@ -194,7 +238,8 @@
           const lim = fogFar + 30;
           for (const c of chunks) { const dx = c.cx - cam.x, dz = c.cz - cam.z; c.im.visible = Math.sqrt(dx * dx + dz * dz) - c.R < lim; }
         },
-        dispose() { Object.values(kinds).forEach(k => { k.geo.dispose(); if (k.geoLo) k.geoLo.dispose(); }); }
+        dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || (k.id === 'bush' && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/pines.js; arbusto: window.Bush)
+          k.geo.dispose(); if (k.geoLo) k.geoLo.dispose(); }); }
       };
     }
   };

@@ -228,22 +228,109 @@
       const col = u > cut ? null : u > cut - 0.13 ? outer : inner; if (col) { im.data[i] = col[0]; im.data[i + 1] = col[1]; im.data[i + 2] = col[2]; im.data[i + 3] = 255; } }
     g.putImageData(im, 0, 0); return c; };
   const TOON = {
-    grass() { const S = 128, [c, g] = flat(S, S, '#5fd641');
-      for (let k = 0; k < 26; k++) tuft(g, rnd() * S, rnd() * S, 3 + rnd() * 3, rnd() < 0.6 ? '#46bd34' : '#86ea5c', S, S);
-      for (let k = 0; k < 6; k++) { const x = rnd() * S, y = rnd() * S; blob(g, x, y, 2.4, rnd() < 0.5 ? '#ffffff' : '#ffe14a', S, S); blob(g, x, y, 1, '#ff8a3d', S, S); }
+    // grama: base com manchas suaves de 3 verdes (touceiras mais escuras, partes mais claras de sol), muitas folhinhas
+    // finas em 3 tons, trevos e poucas florzinhas. Mesmo estilo cartum, mas sem o "verde chapado". Tileável; 256 px (~350 KB na GPU).
+    // (variação grande fica fraca de propósito: a de longe vem do shader, senão a repetição a cada 7 m aparece em grade)
+    grass() { const S = 256, n = fbm(S, S, 8, 3, 717), m = fbm(S, S, 16, 2, 727);
+      const c = paint(S, S, (x, y, i) => {
+        let col = mixc([88, 196, 60], [106, 210, 74], Math.min(1, Math.max(0, (n[i] - 0.3) * 1.7)));
+        col = mixc(col, [70, 172, 52], Math.max(0, 0.4 - n[i]) * 1.4);          // touceiras mais escuras (pequenas)
+        col = mixc(col, [128, 222, 92], Math.max(0, m[i] - 0.62) * 1.4);          // pontinhos claros
+        return jit(col, 5);
+      }), g = c.getContext('2d');
+      // folhinhas finas (traço curvo), escuras embaixo e claras por cima -> sensação de grama com volume
+      g.lineCap = 'round';
+      const blade = (x, y, h, lean, col, w) => wrapXY(S, S, x, y, (px, py) => { g.strokeStyle = col; g.lineWidth = w; g.beginPath(); g.moveTo(px, py); g.quadraticCurveTo(px + lean * 0.3, py - h * 0.6, px + lean, py - h); g.stroke(); });
+      for (let k = 0; k < 900; k++) { const x = rnd() * S, y = rnd() * S, h = 3 + rnd() * 5, l = (rnd() - 0.5) * 4; blade(x, y, h, l, rnd() < 0.55 ? 'rgba(50,140,40,.75)' : 'rgba(70,165,50,.7)', 1.2); }
+      for (let k = 0; k < 500; k++) { const x = rnd() * S, y = rnd() * S, h = 2.5 + rnd() * 4, l = (rnd() - 0.5) * 3.5; blade(x, y, h, l, rnd() < 0.6 ? 'rgba(140,230,96,.8)' : 'rgba(176,240,120,.7)', 1); }
+      for (let k = 0; k < 40; k++) tuft(g, rnd() * S, rnd() * S, 3 + rnd() * 3, rnd() < 0.6 ? '#3fae30' : '#8ae860', S, S);
+      // trevinhos
+      for (let k = 0; k < 18; k++) { const x = rnd() * S, y = rnd() * S; [0, 2.09, 4.19].forEach(a => blob(g, x + Math.cos(a) * 1.6, y + Math.sin(a) * 1.6, 1.5, '#4fb83a', S, S)); }
+      for (let k = 0; k < 8; k++) { const x = rnd() * S, y = rnd() * S; blob(g, x, y, 2.2, rnd() < 0.5 ? '#ffffff' : '#ffe14a', S, S); blob(g, x, y, 0.9, '#ff8a3d', S, S); }
       return c; },
     asphalt() { const S = 128, [c, g] = flat(S, S, '#5b5574');
       for (let k = 0; k < 22; k++) blob(g, rnd() * S, rnd() * S, 1 + rnd() * 2, rnd() < 0.6 ? '#6a6487' : '#524c69', S, S);
       return c; },
-    curb() { const c = cvs(64, 128), g = c.getContext('2d');
-      [[0, '#ff4d6d', '#ff8099', '#d6304f'], [64, '#fff7ee', '#ffffff', '#e2d7cf']].forEach(([y, base, hi, lo]) => { g.fillStyle = base; g.fillRect(0, y, 64, 64); g.fillStyle = lo; g.fillRect(0, y, 10, 64); g.fillRect(54, y, 10, 64); g.fillStyle = hi; g.fillRect(22, y, 12, 64); });
+    // zebra: blocos vermelho/branco com cara de zebra de verdade: cada bloco é abaulado (claro no meio, mais escuro nas
+    // bordas laterais), tem friso de luz em cima e sombra embaixo na junta entre blocos, sujeira e borracha de pneu
+    // (marcas escuras puxadas no sentido da pista), lascas na pintura e grão fino. Repete a cada 2 blocos (no sentido da pista).
+    curb() { const SW = 128, SH = 256, n = fbm(SW, SH, 4, 3, 919), m = fbm(SW, SH, 16, 2, 929);
+      const RED = [[222, 44, 58], [246, 92, 100]], WHT = [[236, 230, 222], [255, 252, 246]];
+      const c = paint(SW, SH, (x, y, i) => {
+        const blk = y < SH / 2 ? RED : WHT, yy = y % (SH / 2), u = x / (SW - 1);
+        const crown = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.04) / 0.92))), 0.6);     // abaulado no sentido transversal
+        let col = mixc(blk[0], blk[1], crown * 0.75);
+        if (yy < 5) col = mixc(col, [255, 255, 255], (1 - yy / 5) * 0.35);                      // friso de luz no começo do bloco
+        if (yy > SH / 2 - 7) col = mixc(col, [60, 40, 50], ((yy - (SH / 2 - 7)) / 7) * 0.45);   // sombra na junta
+        if (u < 0.04 || u > 0.96) col = mixc(col, [70, 60, 66], 0.55);                           // filete escuro nas laterais
+        col = mixc(col, [90, 80, 78], Math.max(0, n[i] - 0.62) * 0.9);                           // sujeira
+        col = mixc(col, [40, 36, 40], Math.max(0, 0.32 - u) * 0.5 * (0.6 + n[i]));                // borracha perto da pista
+        return jit(mixc(col, col.map(v => v * 0.92), m[i] > 0.7 ? 0.6 : 0), 6);
+      }), g = c.getContext('2d');
+      // marcas de pneu no sentido da pista (mais fortes do lado de dentro)
+      for (let k = 0; k < 9; k++) { const x = 4 + Math.pow(rnd(), 1.6) * 70, y = rnd() * SH, l = 40 + rnd() * 90, w = 2 + rnd() * 4;
+        wrapXY(SW, SH, x, y, (px, py) => { const gr = g.createLinearGradient(0, py, 0, py + l); gr.addColorStop(0, 'rgba(30,26,30,0)'); gr.addColorStop(0.3, 'rgba(30,26,30,.28)'); gr.addColorStop(0.7, 'rgba(30,26,30,.22)'); gr.addColorStop(1, 'rgba(30,26,30,0)');
+          g.fillStyle = gr; g.fillRect(px, py, w, l); }); }
+      // lascas na pintura (aparece o concreto)
+      for (let k = 0; k < 12; k++) { const x = rnd() * SW, y = rnd() * SH, r = 0.8 + rnd() * 1.8;
+        wrapXY(SW, SH, x, y, (px, py) => { g.fillStyle = 'rgba(150,140,140,.85)'; g.beginPath(); g.ellipse(px, py, r * 1.4, r, rnd() * 3, 0, 6.2832); g.fill(); }); }
       return c; },
     paint() { return flat(16, 16, '#ffffff')[0]; },
     dirt() { const c = wavy(128, 128, [226, 150, 92], [95, 214, 65], 0.86), g = c.getContext('2d');
       for (let k = 0; k < 10; k++) { g.fillStyle = rnd() < 0.5 ? '#c97f4c' : '#f0b47a'; g.beginPath(); g.arc(rnd() * 80, rnd() * 128, 2 + rnd() * 3, 0, 6.2832); g.fill(); }
       return c; },
-    sand() { const S = 128, [c, g] = flat(S, S, '#ffd98a'); g.strokeStyle = '#ffe9b5'; g.lineWidth = 3; g.lineCap = 'round';
-      for (let k = 0; k < 8; k++) { const x = rnd() * S, y = rnd() * S; wrapXY(S, S, x, y, (px, py) => { g.beginPath(); g.moveTo(px - 10, py); g.quadraticCurveTo(px, py - 5, px + 10, py); g.stroke(); }); }
+    // terra batida do atalho (sem direção, repete nos dois sentidos; o caminho usa coordenada do mundo, sem dobra nas curvas):
+    // base de barro com manchas secas/úmidas, rachadinhas, grãos, pedrinhas com sombra e alguns gravetos/folhinhas
+    trail() { const S = 256, n = fbm(S, S, 4, 4, 818), m = fbm(S, S, 12, 3, 828), w = fbm(S, S, 2, 2, 838);
+      const c = paint(S, S, (x, y, i) => {
+        let col = mixc([200, 136, 82], [232, 172, 108], Math.min(1, Math.max(0, (n[i] - 0.25) * 1.6)));
+        col = mixc(col, [170, 108, 64], Math.max(0, 0.42 - w[i]) * 1.5);            // partes úmidas mais escuras
+        col = mixc(col, [242, 192, 132], Math.max(0, m[i] - 0.6) * 1.6);            // poeira seca clara
+        return jit(col, 10);
+      }), g = c.getContext('2d');
+      // rachadinhas finas (linhas quebradas)
+      g.lineCap = 'round'; g.lineJoin = 'round';
+      for (let k = 0; k < 22; k++) { let x = rnd() * S, y = rnd() * S, a = rnd() * 6.28; const pts = [[x, y]];
+        for (let j = 0; j < 5; j++) { a += (rnd() - 0.5) * 1.4; x += Math.cos(a) * (4 + rnd() * 6); y += Math.sin(a) * (4 + rnd() * 6); pts.push([x, y]); }
+        wrapXY(S, S, 0, 0, (ox, oy) => { g.strokeStyle = 'rgba(120,72,40,.45)'; g.lineWidth = 1.1; g.beginPath(); pts.forEach(([px, py], j) => j ? g.lineTo(px + ox, py + oy) : g.moveTo(px + ox, py + oy)); g.stroke();
+          g.strokeStyle = 'rgba(255,220,170,.25)'; g.lineWidth = 0.8; g.beginPath(); pts.forEach(([px, py], j) => j ? g.lineTo(px + ox + 0.8, py + oy + 0.8) : g.moveTo(px + ox + 0.8, py + oy + 0.8)); g.stroke(); }); }
+      for (let k = 0; k < 1800; k++) { const x = rnd() * S | 0, y = rnd() * S | 0, v = rnd(); g.fillStyle = v < 0.5 ? 'rgba(110,66,36,.35)' : v < 0.9 ? 'rgba(255,226,180,.45)' : 'rgba(80,50,30,.5)'; g.fillRect(x, y, 1 + (rnd() < 0.2), 1); }
+      const cols = ['#c9b49a', '#a8927a', '#e8d6bc', '#b89a7a', '#8f7c6a'];
+      for (let k = 0; k < 34; k++) { const x = rnd() * S, y = rnd() * S, r = 1.2 + rnd() * 2.6, a = rnd() * 3.14, col = cols[k % cols.length];
+        wrapXY(S, S, x, y, (px, py) => { g.fillStyle = 'rgba(90,52,28,.4)'; g.beginPath(); g.ellipse(px + 0.8, py + 1, r, r * 0.75, a, 0, 6.2832); g.fill();
+          g.fillStyle = col; g.beginPath(); g.ellipse(px, py, r, r * 0.75, a, 0, 6.2832); g.fill();
+          g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(px - r * 0.3, py - r * 0.3, r * 0.35, r * 0.22, a, 0, 6.2832); g.fill(); }); }
+      for (let k = 0; k < 7; k++) { const x = rnd() * S, y = rnd() * S, a = rnd() * 3.14, l = 6 + rnd() * 8;
+        wrapXY(S, S, x, y, (px, py) => { g.strokeStyle = 'rgba(90,56,30,.8)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); g.stroke(); }); }
+      for (let k = 0; k < 6; k++) { const x = rnd() * S, y = rnd() * S; blob(g, x, y, 1.8, rnd() < 0.5 ? '#c98a3a' : '#9aa83c', S, S); }
+      return c; },
+    // faixa de terra ao lado da zebra: a MESMA terra dos atalhos, com a borda de fora irregular (recorte por alpha, sem
+    // contorno verde) e um pouco mais escura/seca perto da grama. u = 0 junto da zebra, u ~0,8 a borda; repete no sentido da pista.
+    trailSide() { const S = 256, src = window.TX.canvas('trail'), c = cvs(S, S), g = c.getContext('2d'); g.drawImage(src, 0, 0, S, S);
+      const im = g.getImageData(0, 0, S, S), d = im.data, n = fbm(S, S, 4, 2, 949);
+      for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const i = (y * S + x) * 4, u = x / (S - 1), t = y / S;
+        const cut = 0.8 + 0.05 * Math.sin(t * 6.2832 * 2 + 0.7) + 0.03 * Math.sin(t * 6.2832 * 5 + 2.1) + 0.1 * (n[y * S + 64] - 0.5);
+        if (u > cut) { d[i + 3] = 0; continue; } d[i + 3] = 255;
+        const e = Math.max(0, Math.min(1, (u - (cut - 0.18)) / 0.18)) * 0.5;                       // borda mais seca/escura
+        d[i] = d[i] * (1 - e * 0.25); d[i + 1] = d[i + 1] * (1 - e * 0.12); d[i + 2] = d[i + 2] * (1 - e * 0.4); }
+      g.putImageData(im, 0, 0); return c; },
+    // areia: base dourada com manchas, ondulações de vento (cristas claras, vales escuros), partes úmidas mais escuras,
+    // grãos claros/escuros e algumas pedrinhas e conchinhas. Tudo tileável (repete sem emenda).
+    sand() { const S = 256, n = fbm(S, S, 4, 4, 616), m = fbm(S, S, 8, 3, 626), w = fbm(S, S, 2, 2, 636);
+      const c = paint(S, S, (x, y, i) => {
+        const rip = 0.5 + 0.5 * Math.sin((y + (w[i] - 0.5) * 70 + (n[i] - 0.5) * 18) * (2 * Math.PI * 10 / S));
+        let col = mixc([226, 192, 132], [247, 224, 172], Math.min(1, n[i] * 0.9 + 0.08));
+        col = mixc(col, [208, 172, 114], (1 - rip) * 0.24);
+        col = mixc(col, [253, 236, 196], Math.pow(rip, 7) * 0.4);
+        col = mixc(col, [196, 162, 108], Math.max(0, m[i] - 0.58) * 1.5);
+        return jit(col, 9);
+      }), g = c.getContext('2d');
+      for (let k = 0; k < 1400; k++) { const x = rnd() * S | 0, y = rnd() * S | 0, v = rnd(); g.fillStyle = v < 0.45 ? 'rgba(120,92,56,.32)' : v < 0.9 ? 'rgba(255,249,228,.55)' : 'rgba(90,70,48,.45)'; g.fillRect(x, y, 1, 1); }
+      const cols = ['#b9a58a', '#9c8a74', '#efe2cf', '#d8c2a0', '#f4e6d4'];
+      for (let k = 0; k < 16; k++) { const x = rnd() * S, y = rnd() * S, r = 1.3 + rnd() * 2.4, a = rnd() * 3.14, col = cols[k % cols.length];
+        wrapXY(S, S, x, y, (px, py) => { g.fillStyle = 'rgba(95,72,44,.33)'; g.beginPath(); g.ellipse(px + 0.7, py + 0.9, r, r * 0.72, a, 0, 6.2832); g.fill();
+          g.fillStyle = col; g.beginPath(); g.ellipse(px, py, r, r * 0.72, a, 0, 6.2832); g.fill();
+          g.fillStyle = 'rgba(255,255,255,.35)'; g.beginPath(); g.ellipse(px - r * 0.3, py - r * 0.25, r * 0.35, r * 0.22, a, 0, 6.2832); g.fill(); }); }
       return c; },
     pebble() { const S = 128, [c, g] = flat(S, S, '#d99b62'); const cols = ['#f2c48f', '#c7d0ff', '#ffb3c7', '#bfe9a8', '#fff1c9'];
       for (let k = 0; k < 40; k++) { const x = rnd() * S, y = rnd() * S, r = 3 + rnd() * 4, col = cols[k % cols.length]; wrapXY(S, S, x, y, (px, py) => { g.fillStyle = col; g.beginPath(); g.ellipse(px, py, r, r * 0.75, 0, 0, 6.2832); g.fill(); }); }
@@ -329,7 +416,7 @@
     // MASSINHA (configurações): superfícies viram cor lisa (a média da textura num canvas 4x4). Fica com cara de massinha,
     // quase não usa memória de vídeo e é o mais leve possível. Só os pisos e materiais; faixas, placas, zebras e partículas ficam.
     flat: false,
-    FLAT: { grass: 1, asphalt: 1, sand: 1, pebble: 1, rock: 1, leaf: 1, bark: 1, concrete: 1, wood: 1 },
+    FLAT: { grass: 1, asphalt: 1, sand: 1, trail: 1, pebble: 1, rock: 1, leaf: 1, bark: 1, concrete: 1, wood: 1 },
     flatCanvas(name) { const k = name + ':flat';
       if (!canvases[k]) { const src = this.canvas(name), c = cvs(4, 4), g = c.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
         g.drawImage(src, 0, 0, src.width, src.height, 0, 0, 4, 4); const d = g.getImageData(0, 0, 4, 4).data; let r = 0, gg = 0, b = 0;

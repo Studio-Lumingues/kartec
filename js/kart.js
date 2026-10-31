@@ -93,7 +93,10 @@
           }
         }
         const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-        if (useCol) g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        // cor de vértice em 1 byte por canal (Uint8 normalizado) quando todas cabem em 0..1: 4x menos memória que Float32
+        if (useCol) { let fits = true; for (let q = 0; q < col.length; q++) if (col[q] < 0 || col[q] > 1) { fits = false; break; }
+          if (fits) { const c8 = new Uint8Array(col.length); for (let q = 0; q < col.length; q++) c8[q] = Math.round(col[q] * 255); g.setAttribute('color', new THREE.BufferAttribute(c8, 3, true)); }
+          else g.setAttribute('color', new THREE.BufferAttribute(col, 3)); }
         g.computeBoundingSphere();
         const mesh = new THREE.Mesh(g, b.m); mesh.castShadow = b.cast; mesh.receiveShadow = b.recv; mesh.renderOrder = b.ro; mesh.userData.merged = true; root.add(mesh); meshes.push(mesh);
       });
@@ -272,27 +275,31 @@
       scene.add(this.skids); this.skidI = 0; this._d = new THREE.Object3D();
     },
     rate: 1,   // partículas: 1 = normal, < 1 = menos (configurações)
+    // partícula que nasceria longe da câmera (> 110 m) ou bem atrás dela (> 15 m para trás): nem nasce.
+    // Com 8 karts, os bots do outro lado da pista soltavam fumaça e faísca o tempo todo sem ninguém ver.
+    _far(x, y, z) { const c = this.cam; if (!c) return false; const e = c.matrixWorld.elements, dx = x - e[12], dy = y - e[13], dz = z - e[14], d2 = dx * dx + dy * dy + dz * dz;
+      return d2 > 12100 || (d2 > 225 && dx * e[8] + dy * e[9] + dz * e[10] > 15); },
     _next(k) { const s = this.S && this.S[k]; if (!s) return null; const p = s.list[s.i]; s.i = (s.i + 1) % s.list.length; return p; },
     // fumaça (js/smoke.js) ou brilho somado. Mesma assinatura de sempre.
     puff(kind, x, y, z, vx, vy, vz, col, s0, s1, life, op, up) {
-      if (this.rate < 1 && Math.random() > this.rate) return;
+      if ((this.rate < 1 && Math.random() > this.rate) || this._far(x, y, z)) return;
       if (kind === 'smoke') { if (window.Smoke) Smoke.puff({ x, y, z, vx, vy, vz, tint: col, size: s0, grow: s1 / Math.max(0.05, s0), life, opacity: Math.min(1, op * 1.6), up: up || 0 }); return; }
       const p = this._next('glow'); if (!p) return;
       p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.c = col; p.s0 = s0; p.s1 = s1; p.l = p.ml = life; p.o = op; p.up = up || 0; p.rot = Math.random() * 6.28;
     },
     // faísca: nasce branco-quente, esfria para a cor, cai com gravidade e QUICA no chão (gy = altura do chão; padrão: 0,6 m abaixo)
     spark(x, y, z, vx, vy, vz, c, sz, l, gy) {
-      if (this.rate < 1 && Math.random() > this.rate) return; const p = this._next('spark'); if (!p) return;
+      if ((this.rate < 1 && Math.random() > this.rate) || this._far(x, y, z)) return; const p = this._next('spark'); if (!p) return;
       p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.c = c; p.s = sz; p.l = p.ml = l * (0.8 + Math.random() * 0.5); p.gy = gy === undefined ? y - 0.6 : gy; p.g = 16; p.bn = 0; return p;
     },
     // rastro de vento/velocidade: risco branco sem gravidade (turbo)
     streak(x, y, z, vx, vy, vz, c, sz, l) {
-      if (this.rate < 1 && Math.random() > this.rate) return; const p = this._next('spark'); if (!p) return;
+      if ((this.rate < 1 && Math.random() > this.rate) || this._far(x, y, z)) return; const p = this._next('spark'); if (!p) return;
       p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.c = c; p.s = sz; p.l = p.ml = l; p.gy = -1e9; p.g = 0; p.bn = 9;
     },
     // labareda do turbo: tint 0 = laranja (plataforma/cogumelo), 1 = azul (mini-turbo), 2 = laranja forte (super mini-turbo), 3 = roxo
     flame(x, y, z, vx, vy, vz, size, life, tint, quiet) {
-      if (this.rate < 1 && Math.random() > this.rate) return; const p = this._next('fire'); if (!p) return;
+      if ((this.rate < 1 && Math.random() > this.rate) || this._far(x, y, z)) return; const p = this._next('fire'); if (!p) return;
       p.x = x; p.y = y; p.z = z; p.vx = vx; p.vy = vy; p.vz = vz; p.s = size; p.l = p.ml = life * (0.8 + Math.random() * 0.4); p.tint = tint || 0;
       p.rot = Math.random() * 6.28; p.rv = (Math.random() - 0.5) * 6; p.smoked = !!quiet;
       if (!quiet && Math.random() < 0.5) this.puff('glow', x, y, z, vx * 0.6, vy * 0.5, vz * 0.6, Fx.FIRE_CORE[p.tint], size * 0.6, size * 0.25, 0.14, 0.6);   // núcleo quente
@@ -594,10 +601,10 @@
       const g = this.m.group, b = this.m.body;
       this.m.flames.forEach(f => { f.visible = boosting; f.scale.set(1, 0.8 + Math.random() * 0.7, 1); });
       g.rotation.order = 'YXZ'; g.rotation.y = this.ang;
-      const tp = this.air ? Math.max(-0.35, Math.min(0.3, -this.vy * 0.03)) : (off || wet ? 0 : -Math.atan(gr.slope || 0));
+      const tp = this.air ? Math.max(-0.35, Math.min(0.3, -this.vy * 0.03)) : (wet ? 0 : -Math.atan((gr && gr.slope) || 0));   // fora do asfalto também (relevo dos atalhos)
       g.rotation.x += (tp - g.rotation.x) * Math.min(1, 10 * dt);
       if (this.trick) { this.trickT = Math.min(1, (this.trickT || 0) + dt / 0.45); const e = this.trickT, k = e < 0.5 ? 4 * e * e * e : 1 - Math.pow(-2 * e + 2, 3) / 2; g.rotation.z = -this.trickDir * k * Math.PI * 2; }
-      else g.rotation.z = 0;
+      else { const tr0 = this.air || wet ? 0 : ((gr && gr.roll) || 0); g.rotation.z += (tr0 - g.rotation.z) * Math.min(1, 10 * dt); }   // inclina de lado no barranco
       this.steerVis += (steer - this.steerVis) * Math.min(1, 10 * dt);
       const sd = Math.min(dt, 0.05); this.fxT = (this.fxT || 0) + dt;   // molas com passo limitado (estáveis mesmo num quadro lento)
       // ângulo da derrapada com MOLA: na entrada a traseira passa um pouco do ponto e "assenta"; fechando o arco ela abre mais,

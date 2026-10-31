@@ -92,3 +92,48 @@ sozinha assim que ele acorda (até ~1 minuto). O jogo também começa a acordá-
 4. Todos marcam **Estou pronto** e o anfitrião clica em **Iniciar corrida**.
 
 Verificação: `/health` responde `{"ok":true,"rooms":N,"players":M}`.
+
+## Texturas KTX2 (menos memória de vídeo)
+
+As texturas dos modelos `.glb` podem ficar em KTX2 (Basis Universal), que continua comprimido dentro da placa de
+vídeo: 4 a 8 vezes menos memória que PNG/JPG. O jogo já sabe ler (`js/vendor/KTX2Loader.js` + `js/ktx2-setup.js`);
+arquivos não convertidos continuam funcionando normalmente.
+
+Para converter todos os `.glb` do jogo (Node.js 18 ou mais novo):
+
+```bash
+cd tools/ktx2
+npm install            # só na primeira vez
+npm run converter      # texturas até 2048 px; para economizar mais: npm run converter -- --max 1024
+npm run restaurar      # se quiser voltar aos originais
+```
+
+**Modelo novo ou atualizado:** exporte o `.glb` normal (com PNG/JPG) para a pasta do jogo e rode `npm run converter`
+de novo. Só os arquivos que ainda não estão em KTX2 são convertidos (alguns segundos cada); os outros são pulados.
+
+Os originais ficam em `tools/ktx2/_originais/`. Para reconverter tudo a partir deles (por exemplo, com outro tamanho):
+`npm run refazer -- --max 1024`. Normal maps viram UASTC (qualidade alta); o resto vira ETC1S.
+
+O piloto (`assets/pilot.glb`) fica de fora de propósito: a troca de cor da roupa/capacete/pele procura cores exatas na
+textura, e a compressão alteraria essas cores nas bordas.
+
+Para ver o peso de cada modelo (triângulos, vértices e texturas): `npm run inspecionar`.
+
+## Modelos 3D pesados: simplificar
+
+Modelos gerados por IA (Tripo, Meshy) costumam vir com centenas de milhares ou milhões de triângulos. Para reduzir:
+
+```bash
+cd tools/ktx2
+npm run inspecionar                                                   # lista triângulos e texturas de cada .glb
+npm run simplificar -- js/models/entidades/banana.glb --tris 15000 --tex 1024
+npm run converter                                                     # depois, texturas para KTX2
+```
+
+O simplificador guarda a versão de alta em `tools/ktx2/_originais_alta/` e sempre parte dela (dá para rodar de novo
+com outro `--tris`). Ele preserva UV, normais e texturas. Confira o modelo no jogo depois: se aparecer defeito, suba
+o `--tris`. Referência: personagem/item de jogo de kart, 10 a 60 mil triângulos.
+
+Valores usados: Fatecxie 60 mil (era 1,9 milhão), dinossauro 30 mil (era 107 mil), banana 15 mil (era 62 mil).
+A Fatecxie ganha, ao simplificar, as partes marcadas (asas, corpo, semáforo) e a cor da pele, que o `js/ui.js` usa.
+Se gerar o `fatecxie.glb` de outro jeito, rode o simplificador nele mesmo assim (pode ser com `--tris` alto).

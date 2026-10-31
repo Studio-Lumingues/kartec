@@ -108,14 +108,18 @@
       if (!geo.boundingSphere) geo.computeBoundingSphere();
       const pos = geo.attributes.position, uv = geo.attributes.uv, n = pos.count;
       const body = Array.isArray(src.material) ? src.material[0] : src.material;
+      // partes já marcadas no arquivo (tools/ktx2 > simplificar.mjs grava o atributo _PART e a cor da pele, calculados
+      // com a textura original). Necessário com textura KTX2: textura comprimida não pode ser lida aqui.
+      const partA = geo.attributes._part, extra = (src.userData && src.userData.fatecxie) || null;
       // cor da textura reduzida a 256 px: asa = amarelo-clarinho; corpo e mãos = amarelo forte; haste e olhos = escuros
       let pix = null; const PW = 256;
-      try { const img = body.map && body.map.image; if (img && uv) { const cv = document.createElement('canvas'); cv.width = cv.height = PW; const g = cv.getContext('2d'); g.drawImage(img, 0, 0, PW, PW); pix = g.getImageData(0, 0, PW, PW).data; } } catch (e) { pix = null; }
+      try { const img = body.map && body.map.image; if (!partA && img && uv && !body.map.isCompressedTexture) { const cv = document.createElement('canvas'); cv.width = cv.height = PW; const g = cv.getContext('2d'); g.drawImage(img, 0, 0, PW, PW); pix = g.getImageData(0, 0, PW, PW).data; } } catch (e) { pix = null; }
       const B = C.BODY, cx = B.CENTER[0], cy = B.CENTER[1], cz = B.CENTER[2], R2 = B.RADIUS * B.RADIUS;
       // vértice de asa: fora da esfera do corpo, longe do meio, atrás do rosto, acima da haste e longe das mãos
       // vértice do sinaleiro (caixa + cabo, abaixo do ponto de giro): vai para uma malha própria que balança
       const SG = C.SIGNAL, side = new Int8Array(n), sem = new Uint8Array(n);
       for (let i = 0; i < n; i++) {
+        if (partA) { const p = Math.round(partA.getX(i)); if (p === 3) sem[i] = 1; else if (p === 1) side[i] = -1; else if (p === 2) side[i] = 1; continue; }
         const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), dx = x - cx, dy = y - cy, dz = z - cz;
         if (z > SG.MIN_Z && y < SG.CUT_Y && x > SG.MIN_X) { sem[i] = 1; continue; }
         if (dx * dx + dy * dy + dz * dz < R2 || Math.abs(dz) < 0.05 || x > 0.04 || y < -0.02 || (y < 0.13 && x > -0.06)) continue;
@@ -133,7 +137,7 @@
         const I = geo.index.array, T = I.length / 3, tag = new Uint8Array(T), cnt = [0, 0, 0, 0];
         for (let t = 0; t < T; t++) { const a = I[3 * t], b = I[3 * t + 1], c = I[3 * t + 2], s = side[a] + side[b] + side[c];
           const k = sem[a] + sem[b] + sem[c] >= 2 ? 3 : s <= -2 ? 1 : s >= 2 ? 2 : 0; tag[t] = k; cnt[k]++; }
-        const okW = cnt[1] > 500 && cnt[2] > 500, okS = cnt[3] > 500;
+        const MIN = partA ? 50 : 500, okW = cnt[1] > MIN && cnt[2] > MIN, okS = cnt[3] > MIN;   // modelo simplificado tem bem menos triângulos
         if (!okW) { cnt[0] += cnt[1] + cnt[2]; cnt[1] = cnt[2] = 0; console.warn('[Fatecxie] asas não encontradas (sem batida de asas)'); }
         if (!okS) { cnt[0] += cnt[3]; cnt[3] = 0; console.warn('[Fatecxie] sinaleiro não encontrado (sem balanço)'); }
         if (okW || okS) {
@@ -150,7 +154,8 @@
       if (wingM.emissive) wingM.emissiveIntensity = C.GLOW * 2.2;   // asas mais luminosas (parte do glow)
       // cor da pele (topo do corpo, na textura) para a pálpebra da piscada; sRGB -> linear
       let skin = new THREE.Vector3(1, 0.86, 0.12);
-      if (pix) { let r = 0, g = 0, b = 0, m = 0;
+      if (extra && Array.isArray(extra.skin)) skin.fromArray(extra.skin);
+      else if (pix) { let r = 0, g = 0, b = 0, m = 0;
         for (let i = 0; i < n && m < 4000; i += 7) { const y = pos.getY(i), x = pos.getX(i); if (y < cy + 0.1 || x < cx) continue;
           let u = uv.getX(i), v = uv.getY(i); u -= Math.floor(u); v -= Math.floor(v); const p = (Math.min(PW - 1, v * PW | 0) * PW + Math.min(PW - 1, u * PW | 0)) * 4;
           if (pix[p + 2] > 110) continue; r += pix[p]; g += pix[p + 1]; b += pix[p + 2]; m++; }
