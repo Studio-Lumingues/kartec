@@ -279,6 +279,27 @@
 
   const _sL = new THREE.Vector3(), _sF = new THREE.Vector3(), _sC = new THREE.Vector3(), _sR = new THREE.Vector3(), _sU = new THREE.Vector3();
   const Env = {
+    // SHOWCASE (cutscene): sem as otimizações de corrida. Sombra num raio grande (320 m) com mapa 4096, névoa/visão no
+    // máximo e plano de corte longe. on = false devolve tudo como estava.
+    cinema(on) {
+      const sun = this.sun, sc = window.Game && Game.scene; if (!sun) return;
+      if (on && !this._cin) {
+        this._cin = { fogFar: this.fogFar, far: camera.far, map: sun.shadow.mapSize.x, nb: sun.shadow.normalBias, cam: Object.assign({}, { l: sun.shadow.camera.left, r: sun.shadow.camera.right, t: sun.shadow.camera.top, b: sun.shadow.camera.bottom, n: sun.shadow.camera.near, f: sun.shadow.camera.far }) };
+        const MS = Math.min(4096, renderer.capabilities.maxTextureSize || 4096), SB = 320;
+        this.sbox = SB; this.smap = MS; this.soff = 700;
+        sun.shadow.mapSize.set(MS, MS); Object.assign(sun.shadow.camera, { left: -SB, right: SB, top: SB, bottom: -SB, near: 1, far: 1500 }); sun.shadow.camera.updateProjectionMatrix();
+        sun.shadow.normalBias = 0.12; if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }   // recria o mapa no tamanho novo
+        this.fogFar = Math.max(this.fogFar, this.baseFogFar * 1.15);
+        camera.far = Math.max(camera.far, CFG.CAMERA_FAR || 2300); camera.updateProjectionMatrix();
+        if (sc && sc.fog) { sc.fog.far = this.fogFar; sc.fog.near = this.fogFar * this.fogNearK; }
+      } else if (!on && this._cin) {
+        const C = this._cin; this._cin = null; this.sbox = this.smap = this.soff = 0;
+        sun.shadow.mapSize.set(C.map, C.map); Object.assign(sun.shadow.camera, { left: C.cam.l, right: C.cam.r, top: C.cam.t, bottom: C.cam.b, near: C.cam.n, far: C.cam.f }); sun.shadow.camera.updateProjectionMatrix();
+        sun.shadow.normalBias = C.nb; if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+        this.fogFar = C.fogFar; camera.far = C.far; camera.updateProjectionMatrix();
+        if (sc && sc.fog) { sc.fog.far = this.fogFar; sc.fog.near = this.fogFar * this.fogNearK; }
+      }
+    },
     dayT: 0.35, nightF: 0, SUNDIR: new THREE.Vector3(0.4, 0.7, 0.3).normalize(),
     build(scene, def) {
       this.scene = scene; this.def = def; this.dayT = def.time;
@@ -387,13 +408,13 @@
       const sunI = 0.95 * sm((e + 0.02) / 0.32), moonI = 0.32 * sm((-e - 0.02) / 0.25), sun = this.sun;
       // área de sombra: centrada um pouco À FRENTE da câmera (é onde se olha) e presa à grade de texels do mapa de sombra,
       // para as bordas das sombras não tremerem enquanto o kart anda
-      { const SB = CFG.PERF.SHADOW_BOX, Ld = _sL.copy(this.SUNDIR); if (sunI < moonI) Ld.negate();
+      { const SB = this.sbox || CFG.PERF.SHADOW_BOX, Ld = _sL.copy(this.SUNDIR); if (sunI < moonI) Ld.negate();
         _sF.set(0, 0, -1).applyQuaternion(camera.quaternion); _sF.y = 0; if (_sF.lengthSq() < 1e-4) _sF.set(0, 0, 1); _sF.normalize();
-        const c = _sC.copy(focus).addScaledVector(_sF, SB * 0.4);
+        const c = _sC.copy(focus).addScaledVector(_sF, this.sbox ? 0 : SB * 0.4);   // showcase: caixa grande centrada no que a câmera mira
         _sR.set(0, 1, 0).cross(Ld); if (_sR.lengthSq() < 1e-6) _sR.set(1, 0, 0); _sR.normalize(); _sU.copy(Ld).cross(_sR);
-        const tx = 2 * SB / CFG.PERF.SHADOW_MAP, a = Math.round(c.dot(_sR) / tx) * tx, b = Math.round(c.dot(_sU) / tx) * tx, z = c.dot(Ld);
+        const tx = 2 * SB / (this.smap || CFG.PERF.SHADOW_MAP), a = Math.round(c.dot(_sR) / tx) * tx, b = Math.round(c.dot(_sU) / tx) * tx, z = c.dot(Ld);
         c.copy(_sR).multiplyScalar(a).addScaledVector(_sU, b).addScaledVector(Ld, z);
-        sun.target.position.copy(c); sun.position.copy(c).addScaledVector(Ld, 220); }
+        sun.target.position.copy(c); sun.position.copy(c).addScaledVector(Ld, this.soff || 220); }
       if (sunI >= moonI) { sun.intensity = sunI; dnMix(DN.sun, e, sun.color); }
       else { sun.intensity = moonI; sun.color.set(0x9db4ff); }
       // dentro do túnel a luz do céu cai (suave nas bocas) e os faróis acendem
@@ -467,6 +488,32 @@
   window.Env = Env;
 
   // ================================ JOGO ================================
+  // ================================ PRINT DA PISTA (F9) ================================
+  // Na corrida, F9 tira uma print só do 3D (sem HUD, que é HTML por cima), recorta no formato do cartão (5:3) e baixa
+  // como <id da pista>.webp. Basta colocar o arquivo em assets/tracks/ (config.js: preview) para virar a imagem do cartão.
+  const Shot = {
+    want: false,
+    take(cv, def) {
+      this.want = false;
+      try {
+        const W = 1200, H = 720, sw = cv.width, sh = cv.height, k = Math.min(sw / W, sh / H), cw = W * k, ch = H * k;
+        const out = document.createElement('canvas'); out.width = W; out.height = H;
+        out.getContext('2d').drawImage(cv, (sw - cw) / 2, (sh - ch) / 2, cw, ch, 0, 0, W, H);
+        const name = ((def && def.id) || 'pista') + '.webp';
+        out.toBlob(b => {
+          if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = name;
+          document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+          if (window.UI && UI.toast) UI.toast('Print salva: ' + name + ' (coloque em assets/tracks/)', 2600);
+        }, 'image/webp', 0.9);
+      } catch (e) { console.warn('[print]', e); }
+    }
+  };
+  addEventListener('keydown', e => {
+    if (e.code !== 'F9' || e.repeat) return;
+    if (!window.Game || !Game.scene || !/race|countdown|finish|showcase/.test(Game.state)) return;   // só com a pista na tela
+    e.preventDefault(); Shot.want = true;
+  });
+
   const Game = window.Game = {
     state: 'boot', scene: null, track: null, player: null, bot: null, ai: null, race: null,
     spec: null, trackIdx: 0, mode: 'cup', diff: 'normal', cup: null,
@@ -601,6 +648,7 @@
     // menu principal. fromIntro: a logo desliza da abertura para o canto; da corrida: cortina
     toMenu(fromIntro) {
       const go = () => {
+        if (this.sc || document.body.classList.contains('showcase')) { this.sc = null; Env.cinema(false); document.body.classList.remove('showcase'); clearTimeout(this._scT); if (this.scUI) { this.scUI.bar.classList.remove('on'); this.scUI.fade.style.opacity = '0'; } }   // saiu no meio do showcase
         this.state = 'menu'; UI.screen('menu'); UI.Fairy.hide(); Cine.hide(true); UI.countNum(''); Env.hideFlare(); Podium.stop(); this.dispose(); this.cup = null;
         $('signal').hidden = true; Showroom.setRig('menu'); UI.menuKart(Custom.spec); if (Intro.karts) Intro.dispose();
         try { hibernate(window.Podium && Podium.scene, Showroom.scene); } catch (e) { }   // pódio fora da tela: sai da GPU
@@ -623,12 +671,109 @@
     startRace(trackIdx) {
       const td = CFG.TRACKS[trackIdx]; if (td && td.laps && !this.online) CFG.LAPS = td.laps;   // Vale da Cascata: 1 volta (~7 min)
       this.curTrack = trackIdx; this.load(trackIdx);
-      UI.screen('race'); this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
+      UI.screen('race'); this.cd = { t: 0, step: 0, early: false };
       this.race = { time: 0, endT: 0, position: k => this.racePos(k) };
-      $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); Cine.show();
-      UI.cupInfo('');   // sem "Copa Kartec · x/3" no HUD
+      UI.countNum(''); UI.cupInfo('');   // sem "Copa Kartec · x/3" no HUD
+      if (!this.online && CFG.SHOWCASE !== false) this.startShowcase(td); else this.beginCountdown();
+    },
+    // contagem regressiva (depois do showcase da pista)
+    beginCountdown() {
+      this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
+      $('signal').hidden = false; UI.Fairy.show(); Cine.show();
       PL.request();   // sem o nome da pista na tela: a largada fica livre para a Fatecxie
       $('help').classList.remove('fade'); clearTimeout(this._hf); this._hf = setTimeout(() => $('help').classList.add('fade'), 9000);
+    },
+    // ---------------- SHOWCASE DA PISTA (antes da contagem) ----------------
+    // Câmera fechada (FOV baixo, cara de lente tele) passando por alguns cantos do mapa, com corte suave (piscada preta)
+    // entre as tomadas e uma faixa preta translúcida embaixo com o nome da pista. Não dá para pular (o jogador sempre vê o mapa).
+    // Tomadas: 4 pontos fixos do alto (trecho, panorama, reta, grid de largada); só o shake suave mexe a câmera.
+    startShowcase(def) {
+      const tr = this.track, N = tr.N, si = def.startIdx || 0, ds = (tr.length || N * 4) / N, P = this.player;
+      const wrap = i => ((Math.round(i) % N) + N) % N;
+      // posição e direção INTERPOLADAS entre os nós da pista (antes arredondava para o nó: a câmera andava aos pulinhos)
+      const _s = { x: 0, y: 0, z: 0 }, _t = { x: 0, y: 0, z: 0 };
+      const lerpN = (arr, i, out) => { const u = ((i % N) + N) % N, a = Math.floor(u), f = u - a, A = arr[a], B = arr[(a + 1) % N];
+        out.x = A.x + (B.x - A.x) * f; out.y = (A.y || 0) + ((B.y || 0) - (A.y || 0)) * f; out.z = A.z + (B.z - A.z) * f; return out; };
+      const S = i => ({ ...lerpN(tr.S, i, _s) }), T = i => { const t = lerpN(tr.T, i, _t), l = Math.hypot(t.x, t.z) || 1; return { x: t.x / l, y: 0, z: t.z / l }; };
+      const gy = (x, z, y0) => { let h = tr.heightAt ? tr.heightAt(x, z) : 0; if (!isFinite(h)) h = y0 || 0; return h; };
+      const roadY = i => { if (tr.hAt) return (tr.roadBase || 0) + tr.hAt(((i % N) + N) % N); const p = S(i); return gy(p.x, p.z, p.y || 0); };   // altura do asfalto (relevo + pontes)
+      const side = (i, o) => { const p = S(i), t = T(i); return [p.x + t.z * o, p.z - t.x * o]; };   // ponto ao lado da pista (o > 0: um lado; < 0: o outro)
+      const bestSide = (i, o) => { const a = side(i, o), b = side(i, -o); return gy(a[0], a[1]) <= gy(b[0], b[1]) ? 1 : -1; };   // lado mais baixo (câmera não entra no morro)
+      const m = n => n / ds;                                                               // metros -> nós da pista
+      const V = (x, y, z) => new THREE.Vector3(x, y, z), W = tr.W || 10;
+      const shots = [];
+      // tomadas FIXAS e do alto (sem travelling): só o shake suave mexe a câmera
+      const fixed = (dur, x, z, hUp, look) => { const y = Math.max(gy(x, z), look.y - 2) + hUp, pos = V(x, y, z); return { dur, at: () => [pos, look] }; };
+      { // 1) do alto, ao lado de um trecho, olhando a pista seguir
+        const i0 = si + N * 0.24, sd = bestSide(i0, W + 30), [x, z] = side(i0, sd * (W + 30)), j = i0 + m(40), q = S(j);
+        shots.push(fixed(4.2, x, z, 18, V(q.x, roadY(j) + 1, q.z))); }
+      { // 2) panorama bem alto sobre outro trecho
+        const i0 = si + N * 0.5, sd = bestSide(i0, 95), [x, z] = side(i0, sd * 95), j = i0 + m(55), q = S(j);
+        shots.push(fixed(4.4, x, z, 30, V(q.x, roadY(j) + 8, q.z))); }   // mira acima da pista: aparece a paisagem
+      { // 3) do alto, atrás de uma reta, olhando ao longo dela
+        const i0 = si + N * 0.74, p = S(i0 - m(20)), j = i0 + m(45), q = S(j);
+        shots.push(fixed(4.0, p.x, p.z, 14, V(q.x, roadY(j) + 1, q.z))); }
+      { // 4) grid de largada visto do alto, por trás dos karts: karts na frente e o pórtico da largada ao fundo
+        const pp = P.pos.clone(), t = T(si), sd = bestSide(si, 8), x = pp.x - t.x * 30 + t.z * sd * 8, z = pp.z - t.z * 30 - t.x * sd * 8;
+        shots.push(fixed(4.0, x, z, 12, V(pp.x + t.x * 4, pp.y + 1, pp.z + t.z * 4))); }
+      let acc = 0; shots.forEach(s => { s.t0 = acc; acc += s.dur; });
+      this.sc = { t: 0, shots, total: acc, focus: P.pos.clone(), fov0: camera.fov, fov: CFG.SHOWCASE_FOV || 30, cut: 0 };   // FOV único (sem trocas de zoom)
+      this.state = 'showcase'; document.body.classList.add('showcase'); Cine.hide(true);
+      Env.cinema(true); if (this.fill && this.fill.cinema) this.fill.cinema(true);   // qualidade máxima: sombra no mapa todo, visão longe, cenário todo com sombra
+      // faixa com o nome da pista
+      const ui = this.scUI || (this.scUI = (() => {
+        const st = document.createElement('style'); st.textContent = `
+          body.showcase #hud, body.showcase #help, body.showcase #touch, body.showcase #signal, body.showcase #rivalTag, body.showcase #mini, body.showcase #speedo, body.showcase #pos { visibility: hidden !important; }
+          #scBar { position: fixed; left: 0; right: 0; bottom: 9vh; z-index: 30; pointer-events: none; padding: 1.6vh 0 1.8vh; background: rgba(0, 0, 0, .52);
+            display: flex; flex-direction: column; align-items: center; gap: .3vh; opacity: 0; transform: translateY(14px); transition: opacity .45s ease, transform .55s cubic-bezier(.2, .8, .3, 1); }
+          #scBar.on { opacity: 1; transform: none; }
+          #scBar b { font: 700 clamp(22px, 4.2vw, 54px)/1 'Fredoka', 'Titan One', system-ui, sans-serif; color: #fff; letter-spacing: .04em; text-shadow: 0 2px 10px rgba(0, 0, 0, .45); }
+          #scBar span { font: 800 clamp(11px, 1.25vw, 16px)/1 'Nunito', system-ui, sans-serif; color: rgba(255, 255, 255, .78); letter-spacing: .32em; text-transform: uppercase; }
+          #scBar i { position: absolute; right: 2.2vw; bottom: 1.2vh; font: 700 11px/1 'Nunito', system-ui, sans-serif; font-style: normal; color: rgba(255, 255, 255, .55); letter-spacing: .08em; }
+          #scFade { position: fixed; inset: 0; z-index: 29; background: #000; opacity: 0; pointer-events: none; }`;
+        document.head.appendChild(st);
+        const bar = document.createElement('div'); bar.id = 'scBar'; bar.innerHTML = '<b></b><span></span>'; document.body.appendChild(bar);
+        const fade = document.createElement('div'); fade.id = 'scFade'; document.body.appendChild(fade);
+        return { bar, fade }; })());
+      ui.bar.querySelector('b').textContent = def.name || 'Pista';
+      ui.bar.querySelector('span').textContent = CFG.LAPS + (CFG.LAPS === 1 ? ' volta' : ' voltas');
+      ui.bar.classList.remove('on'); clearTimeout(this._scT); this._scT = setTimeout(() => ui.bar.classList.add('on'), 450);
+      this.showcaseCam(0);
+    },
+    showcaseCam(t) {
+      const S = this.sc; let k = S.shots.length - 1; for (let i = 0; i < S.shots.length; i++) if (t < S.shots[i].t0 + S.shots[i].dur) { k = i; break; }
+      const sh = S.shots[k], u = Math.max(0, Math.min(1, (t - sh.t0) / sh.dur)), e = u * u * (3 - 2 * u) * 0.3 + u * 0.7;   // movimento contínuo e constante, só um pouco suave nas pontas
+      const [pos, look] = sh.at(e);
+      // suavização entre quadros (tira tremidas de desnível do terreno); no corte de tomada vai direto
+      const dt = Math.max(0, Math.min(0.1, t - (S.lastT === undefined ? t : S.lastT))); S.lastT = t;
+      if (!S.cp || k !== S.cut) { S.cp = pos.clone(); S.cl = look.clone(); }
+      else { const a = 1 - Math.exp(-6 * dt); S.cp.lerp(pos, a); S.cl.lerp(look, a); }
+      camera.position.copy(S.cp); camera.up.set(0, 1, 0); camera.lookAt(S.cl);
+      if (camera.fov !== S.fov) { camera.fov = S.fov; camera.updateProjectionMatrix(); }
+      // shake suave e orgânico (câmera na mão): soma de senos lentos de frequências "quebradas", em posição e rotação
+      const w = t + 7.3;
+      camera.translateX(0.05 * Math.sin(w * 0.9) + 0.025 * Math.sin(w * 2.3 + 1.7));
+      camera.translateY(0.04 * Math.sin(w * 1.1 + 0.6) + 0.02 * Math.sin(w * 2.9 + 2.2));
+      camera.rotateX(0.0035 * Math.sin(w * 1.3 + 0.3) + 0.0015 * Math.sin(w * 3.1 + 1.1));
+      camera.rotateY(0.0045 * Math.sin(w * 0.8 + 2.0) + 0.0015 * Math.sin(w * 2.6));
+      camera.rotateZ(0.0025 * Math.sin(w * 0.7 + 0.9));
+      if (k !== S.cut) { S.cut = k; if (UI.Sfx && UI.Sfx.tone) UI.Sfx.tone(260, 110, 0.28, 'sine', 0.035); }   // "vush" baixinho no corte
+      S.focus.copy(S.cl);
+      // piscada preta nos cortes (e saindo da tela de carregar / indo para a contagem)
+      const tin = t - sh.t0, tout = sh.t0 + sh.dur - t, F = 0.3;
+      const a = Math.max(k === 0 ? 0 : 1 - tin / F, 1 - tout / F, 0);
+      this.scUI.fade.style.opacity = Math.min(1, a).toFixed(3);
+    },
+    showcaseStep(dt) {
+      const S = this.sc; S.t += dt;
+      if (S.t >= S.total) this.endShowcase();                                              // sem pular: o showcase vai até o fim
+    },
+    endShowcase() {
+      const ui = this.scUI; document.body.classList.remove('showcase'); clearTimeout(this._scT);
+      if (ui) { ui.bar.classList.remove('on'); ui.fade.style.transition = 'opacity .3s ease'; ui.fade.style.opacity = '0'; setTimeout(() => { ui.fade.style.transition = ''; }, 350); }
+      if (this.sc) { camera.fov = this.sc.fov0; camera.updateProjectionMatrix(); }
+      Env.cinema(false); if (this.fill && this.fill.cinema) this.fill.cinema(false);
+      this.sc = null; this.beginCountdown();
     },
     racePos(k) {
       const ks = this.karts, score = x => x.finished ? 1e9 - x.finishTime : x.progress;
@@ -717,9 +862,10 @@
       const racing = this.state === 'race' || this.state === 'finish', ON = this.online;
       if (ON) Net.tick();
       if (this.state === 'countdown') this.countdown(dt);
+      else if (this.state === 'showcase' && this.sc) this.showcaseStep(dt);   // showcase: o resto do quadro roda igual à contagem (karts, pilotos, motores, som)
       if (racing) this.race.time = ON ? Math.max(0, Net.raceTime()) : this.race.time + dt;
       // menu aberto (pausa/configurações) no online: a corrida segue, mas o kart não recebe comandos
-      const inP = this.state === 'finish' || this.state === 'waiting' || P.finished || UI.modal ? { up: false, down: false, steer: 0, drift: false } : Input.read();
+      const inP = this.state === 'finish' || this.state === 'waiting' || this.state === 'showcase' || P.finished || UI.modal ? { up: false, down: false, steer: 0, drift: false } : Input.read();
       this.inP = inP;   // o velocímetro 3D usa a direção e o drift deste quadro
       const K = this.karts;
       if (ON) {
@@ -744,13 +890,13 @@
       if (!this.scene || this.state === 'round' || this.state === 'podium') return;   // a corrida acabou neste quadro
       tr.update(dt, performance.now() / 1000);
       Fx.step(dt);
-      Env.step(dt, P.pos, tr, this.karts);
+      Env.step(dt, this.state === 'showcase' && this.sc ? this.sc.focus : P.pos, tr, this.karts);   // no showcase: sombras/luz onde a câmera está olhando
       if (this.fill) this.fill.update(dt, camera.position, Env.fogFar);
       this.kartLod(dt);
       UI.Fairy.step(dt, camera); Cine.step(dt, camera);
       UI.hud(P, this.rivals, this.race);
       UI.Sfx.step(P, true, this.rivals);
-      this.updateCamera(dt);
+      if (this.state === 'showcase' && this.sc) this.showcaseCam(this.sc.t); else this.updateCamera(dt);
     },
     // vácuo: colado atrás do outro por ~1 s = empurrão
     // ---------------- online ----------------
@@ -883,7 +1029,7 @@
       const cp = camera.position, P = this.player;
       this.karts.forEach(k => {
         if (!k._outl) { k._outl = []; k.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) k._outl.push(o); }); }
-        const d2 = k.pos.distanceToSquared(cp), near = !this.lite && (k === this.player || d2 < 55 * 55);
+        const d2 = k.pos.distanceToSquared(cp), cine = this.state === 'showcase', near = cine || (!this.lite && (k === this.player || d2 < 55 * 55));   // showcase: contorno em todos
         if (k._near !== near) { k._near = near; k._outl.forEach(o => o.visible = near); }
         // visibilidade dos rivais: kartCull (todo quadro, antes de desenhar)
       });
@@ -997,7 +1143,7 @@
         const d2 = k.pos.distanceToSquared(cp); S.center.copy(k.pos);
         const show = all || d2 < 900 || F.intersectsSphere(S);
         if (k.m.group.visible !== show) k.m.group.visible = show;
-        k.m.lod = !show ? 3 : d2 > 8100 ? 2 : d2 > 2025 ? 1 : 0; }
+        k.m.lod = !show ? 3 : all || this.state === 'showcase' ? 0 : d2 > 8100 ? 2 : d2 > 2025 ? 1 : 0; }   // showcase: piloto animado todo quadro
     },
     // culling por distância dos blocos da pista: o que passa do fim da névoa fica invisível (4x por segundo).
     // O frustum culling do Three.js já cuida do que está fora do campo de visão.
@@ -1008,7 +1154,7 @@
       for (const m of ms) {
         const bs = m.geometry.boundingSphere; if (!bs) continue;
         const dx = bs.center.x - cp.x, dz = bs.center.z - cp.z, mt = m.material;
-        const off = this.lite && mt && mt.userData && mt.userData.outline;   // modo leve: contornos continuam escondidos
+        const off = this.lite && this.state !== 'showcase' && mt && mt.userData && mt.userData.outline;   // modo leve: contornos continuam escondidos
         m.visible = !off && Math.sqrt(dx * dx + dz * dz) - bs.radius < lim;
       }
     },
@@ -1020,9 +1166,10 @@
       else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
       else if (this.scene) { this.cullTrack(); this.kartCull();
-        if (postFX && this.player) { camera.updateMatrixWorld(); const e = camera.matrixWorld.elements, p = this.player.pos;   // foco do desfoque: profundidade do seu kart na tela
+        if (postFX && this.player) { camera.updateMatrixWorld(); const e = camera.matrixWorld.elements, p = this.state === 'showcase' && this.sc ? this.sc.focus : this.player.pos;   // foco do desfoque: seu kart (no showcase: o ponto que a câmera mira)
           postFX.focus = Math.max(4, -((p.x - e[12]) * e[8] + (p.y - e[13]) * e[9] + (p.z - e[14]) * e[10])); }
-        if (postFX && postFX.ok && !this.lite && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag(); }
+        if (postFX && postFX.ok && (!this.lite || this.state === 'showcase') && !(window.Settings && Settings.postfxMode() === 'off')) postFX.render(this.scene, camera); else renderer.render(this.scene, camera); this.drawSpeedo(); this.rivalTag();
+        if (Shot.want) Shot.take(renderer.domElement, CFG.TRACKS[this.curTrack]); }   // F9: print da pista (logo depois de desenhar, antes do quadro ser apagado)
       if (!this.scene || this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby' || this.state === 'podium') { const t = $('rivalTag'); if (t && !t.hidden) t.hidden = true; }
     },
     // placa (posição + nome) acima do piloto que está logo à frente de você; só ele tem placa
@@ -1340,7 +1487,7 @@
   // resolução adaptativa: mede o tempo médio de quadro e ajusta o pixelRatio entre DPR_MIN e DPR_MAX.
   // Só reage a lentidão SEGUIDA (2 janelas de 2 s) e ignora travadinhas isoladas e o tempo com a aba escondida;
   // quando o aparelho volta a dar conta, a resolução sobe de novo (e o modo leve sai sozinho).
-  let lastDraw = 0, last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0, slowWin = 0, fastWin = 0, liteOffAt = -1e9;
+  let cineDpr = 0, lastDraw = 0, last = performance.now(), errs = 0, dpr = Math.min(devicePixelRatio, 1.25), acc = 0, cnt = 0, slowWin = 0, fastWin = 0, liteOffAt = -1e9;
   renderer.setPixelRatio(dpr);
   const resetPerf = () => { last = performance.now(); acc = 0; cnt = 0; slowWin = 0; fastWin = 0; };
   document.addEventListener('visibilitychange', resetPerf);   // trocar de aba/voltar não conta como "jogo lento"
@@ -1356,7 +1503,11 @@
     try { inkFixTick(1 / 60); } catch (e) { }
     const raw = Math.max(0, (now - last) / 1000) || 0, dt = Math.min(0.05, raw); last = now;
     // quadros muito longos (aba escondida, travada de carregamento) não entram na média; os demais valem no máximo 50 ms
-    if (Game.scene && !document.hidden && raw < 0.25) { acc += Math.min(raw, 0.05); cnt++;
+    // showcase (cutscene): resolução no máximo permitido, sem a adaptação baixar; depois volta ao que estava
+    if (Game.state === 'showcase') { if (!cineDpr) { cineDpr = dpr; const mx = Math.min(window.Settings ? Settings.dprMax() : CFG.PERF.DPR_MAX, devicePixelRatio), fx = window.Settings ? Settings.fixedDpr() : 0;
+        dpr = fx || mx; renderer.setPixelRatio(dpr); resetPerf(); } }
+    else if (cineDpr) { dpr = cineDpr; cineDpr = 0; renderer.setPixelRatio(dpr); resetPerf(); }
+    if (Game.scene && !document.hidden && raw < 0.25 && Game.state !== 'showcase') { acc += Math.min(raw, 0.05); cnt++;
       if (acc > 2) { const avg = acc / cnt * 1000; acc = 0; cnt = 0;
         const bud = cap ? Math.max(16.7, 1000 / cap) : 16.7;   // com limite de FPS, "lento" é em relação ao limite
         slowWin = avg > bud * 1.44 ? slowWin + 1 : 0; fastWin = avg < bud * 1.05 ? fastWin + 1 : 0;

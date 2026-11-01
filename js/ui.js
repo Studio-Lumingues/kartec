@@ -559,9 +559,6 @@
       this.h = h;
       SpeedLines.init();
       HudFx.init();
-      // efeito gelatina em qualquer botão ou bolinha de cor
-      document.addEventListener('pointerdown', e => { const b = e.target.closest && e.target.closest('button, .swatch, .trackCard'); if (!b) return; b.classList.remove('jelly'); void b.offsetWidth; b.classList.add('jelly'); });
-      document.addEventListener('animationend', e => { if (e.animationName === 'jelly') e.target.classList.remove('jelly'); });
       // logo única (abertura -> canto do menu)
       const tpl = $('logoTpl'); if (tpl && tpl.content) $('brand').appendChild(tpl.content.cloneNode(true));
       // modo e dificuldade (controle segmentado)
@@ -581,7 +578,11 @@
       const tl = $('trackList'); this.cards = [];
       CFG.TRACKS.forEach((t, i) => {
         const card = document.createElement('button'); card.type = 'button'; card.className = 'trackCard';
-        const cv = document.createElement('canvas'); cv.width = 208; cv.height = 124; trackPreview(cv, t);
+        let cv;
+        if (t.preview) {   // imagem pronta do mapa (config.js: preview); se não carregar, volta para o desenho do traçado
+          cv = document.createElement('img'); cv.alt = ''; cv.decoding = 'async'; cv.src = t.preview;
+          cv.addEventListener('error', () => { const c = document.createElement('canvas'); c.width = 208; c.height = 124; trackPreview(c, t); cv.replaceWith(c); }, { once: true });
+        } else { cv = document.createElement('canvas'); cv.width = 208; cv.height = 124; trackPreview(cv, t); }
         const num = document.createElement('div'); num.className = 'num'; num.textContent = String(((CFG.CUP && CFG.CUP.order) || []).indexOf(i) + 1);
         const nm = document.createElement('strong'); nm.textContent = t.name; const ds = document.createElement('span'); ds.textContent = t.desc; const rec = document.createElement('em');
         card.append(cv, num, nm, ds, rec);
@@ -596,6 +597,9 @@
       });
       // botões
       $('btnPlay').addEventListener('click', () => { Sfx.unlock(); this.openModal('setup'); });
+      $('menu').addEventListener('pointerover', e => { const b = e.pointerType === 'mouse' && e.target.closest && e.target.closest('.modeTile, .utilBtn'); if (b && document.activeElement !== b) b.focus({ preventScroll: true }); });
+      addEventListener('pointerdown', () => document.body.classList.remove('padMode'), true);
+      this.padInit();
       $('btnGarage').addEventListener('click', () => { Sfx.unlock(); h.onGarage(); });
       $('btnHow').addEventListener('click', () => this.openModal('howModal'));
       $('btnRace').addEventListener('click', () => { Sfx.unlock(); this.closeModal(true); h.onStart(); });
@@ -609,15 +613,77 @@
       $('btnMenu').addEventListener('click', () => h.onMenu());
       $('menuBtn').addEventListener('click', () => h.onMenu());
       addEventListener('keydown', e => {
+        if (e.isTrusted) document.body.classList.remove('padMode');
+        // setas: navegação de console nos menus (o foco anda para o botão mais próximo naquela direção)
+        if (/^Arrow/.test(e.code)) {
+          const t = e.target, range = t && t.type === 'range', vert = e.code === 'ArrowUp' || e.code === 'ArrowDown';
+          const typing = t && /INPUT|TEXTAREA|SELECT/.test(t.tagName);
+          if ((!typing || (range && vert)) && (this.modal || document.body.dataset.screen === 'menu') && this.navMove(e.code)) e.preventDefault();
+          return;
+        }
         if (e.repeat) return;
         const typing = e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
         if (e.code === 'Escape') { if (this.modal) this.closeModal(); else h.onEscape && h.onEscape(); return; }
-        if (e.code === 'Enter' && !typing) { e.preventDefault(); Sfx.unlock(); if (this.modal === 'setup') { this.closeModal(true); h.onStart(); } else if (this.modal) this.closeModal(); else h.onEnter && h.onEnter(); return; }
+        if (e.code === 'Enter' && !typing) { e.preventDefault(); Sfx.unlock(); if (this.modal === 'setup') { this.closeModal(true); h.onStart(); } else if (this.modal) this.closeModal();
+          else if (document.body.dataset.screen === 'menu' && document.activeElement && document.activeElement.closest && document.activeElement.closest('#menu button')) document.activeElement.click();   // Enter = o botão em foco
+          else h.onEnter && h.onEnter(); return; }
         if (typing) return;
         if (e.code === 'KeyM') { Sfx.setOn(!Sfx.on); this.toast(Sfx.on ? 'Som ligado' : 'Som desligado'); }
         if (e.code === 'KeyR' && h.onRestart) h.onRestart();
         if (e.code === 'KeyN' && h.onNextHour) h.onNextHour();
       });
+    },
+    // ---------- navegação por setas / controle (menus e janelas) ----------
+    // escolhe o botão visível mais próximo na direção pedida (prefere os que estão na mesma linha/coluna).
+    // Nos grupos de opção (modo, rival, pistas) andar para os lados já escolhe a opção; no seletor de voltas, ← diminui e → aumenta.
+    navMove(code) {
+      const scope = this.modal ? ($(this.modal).querySelector('.sheet') || $(this.modal)) : $('menu'); if (!scope) return false;
+      const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[code]; if (!dir) return false;
+      const [dx, dy] = dir, cur = document.activeElement;
+      const items = [...scope.querySelectorAll('button:not([disabled]), [tabindex="0"], input:not([type="hidden"]), select, summary')]
+        .filter(el => el.tabIndex >= 0 && !el.closest('[hidden]') && el.getClientRects().length && el.getBoundingClientRect().width > 0);
+      if (!cur || !items.includes(cur)) { const f = scope.querySelector('.modeTile, .seg button.on, .trackCard.on, .cta') || items[0]; if (f) f.focus(); return !!f; }
+      const step = dx && cur.closest('.stepper');
+      if (step) { const b = step.querySelector('[data-d="' + dx + '"]'); if (b) { b.click(); b.focus(); } return true; }
+      const c = cur.getBoundingClientRect(), cx = c.left + c.width / 2, cy = c.top + c.height / 2;
+      let best = null, bs = 1e9;
+      items.forEach(el => {
+        if (el === cur) return; const r = el.getBoundingClientRect(), ex = r.left + r.width / 2, ey = r.top + r.height / 2;
+        const along = (ex - cx) * dx + (ey - cy) * dy; if (along <= 4) return;
+        const overlap = dx ? (r.top < c.bottom && r.bottom > c.top) : (r.left < c.right && r.right > c.left);
+        const score = along + (overlap ? 0 : (dx ? Math.abs(ey - cy) : Math.abs(ex - cx)) * 2.5);
+        if (score < bs) { bs = score; best = el; }
+      });
+      if (!best) return true;   // na borda: fica onde está
+      best.focus();
+      const grp = el => el.closest('.seg, #trackList');
+      if (dx && grp(cur) && grp(cur) === grp(best)) best.click();
+      return true;
+    },
+    // controle (gamepad) só nos menus: direcional/analógico = setas, A = escolher, B = voltar, Start = Enter.
+    // Vira teclas "de mentira", então tudo o que funciona no teclado funciona no controle.
+    padInit() {
+      if (!navigator.getGamepads) return;
+      const st = { held: {}, next: {}, btn: {} };
+      const send = code => (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { code, key: code.replace('Arrow', ''), bubbles: true, cancelable: true }));
+      const loop = now => {
+        requestAnimationFrame(loop);
+        const p = [...navigator.getGamepads()].find(g => g && g.connected); if (!p) return;
+        if (document.body.dataset.screen === 'race' && !this.modal) { st.held = {}; st.btn = {}; return; }   // na corrida o controle não mexe no menu
+        const b = i => !!(p.buttons[i] && p.buttons[i].pressed), ax = p.axes[0] || 0, ay = p.axes[1] || 0;
+        const dirs = { ArrowUp: b(12) || ay < -0.5, ArrowDown: b(13) || ay > 0.5, ArrowLeft: b(14) || ax < -0.5, ArrowRight: b(15) || ax > 0.5 };
+        let used = false;
+        for (const k in dirs) {
+          if (!dirs[k]) { st.held[k] = false; continue; }
+          if (!st.held[k] || now >= st.next[k]) { send(k); st.next[k] = now + (st.held[k] ? 110 : 380); st.held[k] = true; used = true; }
+        }
+        const edge = i => { const on = b(i), was = st.btn[i]; st.btn[i] = on; return on && !was; };
+        if (edge(0)) { used = true; const a = document.activeElement; if (a && a !== document.body && a.closest && a.closest('#menu, .modal')) a.click(); else send('Enter'); }
+        if (edge(1)) { used = true; send('Escape'); }
+        if (edge(9)) { used = true; send('Enter'); }
+        if (used) document.body.classList.add('padMode');
+      };
+      requestAnimationFrame(loop);
     },
     // ---------- modais (abrem com escala + fade; foco vai para o primeiro controle) ----------
     // opts.back: modal para onde voltar ao fechar este (ex.: Configurações aberta pela Pausa volta para a Pausa)
@@ -626,7 +692,8 @@
       const m = $(id); m.hidden = false; m.classList.remove('closing'); this.modal = id; this._lastFocus = document.activeElement;
       this._back = (opts && opts.back) || null;
       if (id === 'setup') { this.refreshTracks(); this.h.onSetupOpen && this.h.onSetupOpen(); }
-      requestAnimationFrame(() => { const f = m.querySelector('.cta, button'); f && f.focus({ preventScroll: true }); });
+      // foco na ação principal (Correr, Pronto…); sem ela, no primeiro botão
+      requestAnimationFrame(() => { const f = m.querySelector('.cta') || m.querySelector('button'); f && f.focus({ preventScroll: true }); });
       Sfx.tone(520, 780, 0.12, 'triangle', 0.06);
     },
     closeModal(instant) {
@@ -672,7 +739,8 @@
       if (name !== 'menu' && this.modal) this.closeModal(true);
       if (name === 'menu') { this.refreshTracks(); this.layoutMenu();
         // entrada animada dos botões só ao chegar no menu; a classe sai no fim -> nada reinicia depois
-        if (prev !== 'menu') { const nav = document.querySelector('#menu .mainNav'); if (nav) { nav.classList.remove('enter'); void nav.offsetWidth; nav.classList.add('enter'); clearTimeout(this._navT); this._navT = setTimeout(() => nav.classList.remove('enter'), 1500); } } }
+        if (prev !== 'menu') { const nav = document.querySelector('#menu .mainNav'); if (nav) { nav.classList.remove('enter'); void nav.offsetWidth; nav.classList.add('enter'); clearTimeout(this._navT); this._navT = setTimeout(() => nav.classList.remove('enter'), 1500); }
+          clearTimeout(this._focT); this._focT = setTimeout(() => { if (!this.modal && document.body.dataset.screen === 'menu' && !$('menu').contains(document.activeElement)) $('btnPlay').focus({ preventScroll: true }); }, 700); } }
     },
     // cortina: escurece, troca a cena por baixo e revela (as trocas de cena 3D ficam invisíveis)
     transition(fn) {

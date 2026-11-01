@@ -249,7 +249,7 @@
         im.position.set(cx, 0, cz); im.castShadow = k.shadow && items.some(i => i.near); im.receiveShadow = !!k.recv; if (k.order) im.renderOrder = k.order;   // folhas: depois do chão (não gravam profundidade)
         if (k.variants) im.customDepthMaterial = Pines.depthMaterial();   // sombra com o modelo certo de cada árvore
         im.userData.noOutline = true; im.matrixAutoUpdate = false; im.updateMatrix();
-        group.add(im); chunks.push({ im, cx, cz, R, cull: k.cull || 0 }); total += items.length;
+        group.add(im); chunks.push({ im, cx, cz, R, cull: k.cull || 0, cast: im.castShadow, canCast: !!(k.shadow || k.id === 'pineFar') });   // canCast: tem sombra própria (usada no showcase) total += items.length;
       });
       // os maiores objetos também bloqueiam o lens flare (teste barato por esfera)
       Object.values(kinds).forEach(k => { if (k.id === 'hill' || k.id === 'forest' || k.id === 'pineFar' || k.id === 'pine') k.list.forEach((it, n) => { if (n % 3 === 0) tr.blockers.push({ x: it.x, y: 10, z: it.z, r: k.r }); }); });
@@ -263,6 +263,8 @@
           const lim = fogFar + 30;
           for (const c of chunks) { const dx = c.cx - cam.x, dz = c.cz - cam.z; c.im.visible = Math.sqrt(dx * dx + dz * dz) - c.R < (c.cull ? Math.min(lim, c.cull) : lim); }
         },
+        // showcase (cutscene): todas as árvores do mapa projetam sombra (não só as perto da pista); off devolve
+        cinema(on) { for (const c of chunks) c.im.castShadow = on ? c.canCast : c.cast; t = 0; },
         dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || ((k.id === 'bush' || k.id === 'leaves' || k.id === 'leavesNear') && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/pines.js; arbusto: window.Bush)
           k.geo.dispose(); if (k.geoLo) k.geoLo.dispose(); }); }
       };

@@ -164,6 +164,7 @@ window.CFG = {
     {
       id: 'classic', name: 'Circuito Clássico',
       desc: 'Onze curvas para segurar o drift, subidas, descidas e cristas, rio com duas pontes e cachoeira.',
+      preview: 'assets/tracks/classic.webp',   // imagem do mapa no cartão da pista (sem ela, o menu desenha só o traçado)
       W: 20, N: 870, startIdx: 45, time: 0.34,
       // rework 2026: sem chicanas em zigue-zague; 11 curvas (2 grampos, 1 dupla, varridas longas) ligadas por retas
       segs: [['S',308.1],['L',140,97],['S',197.6],['L',80,78],['S',195.2],['R',110,98],['S',195.5],['L',60,144],['S',48.3],['R',115,101],['S',130.4],['L',85,100],['S',54.0],['L',110,76],['S',119.5],['R',90,94],['S',117.5],['L',65,167],['S',188.1],['R',130,97],['S',201.5],['L',100,88],['S',94.0]],
