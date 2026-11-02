@@ -133,8 +133,9 @@ window.CFG = {
 
   // ---------- personalização: estado inicial (corBase, modeloKart, decalque, corDecalque, piloto) ----------
   // Números na lataria e acessórios do piloto foram removidos do jogo.
+  // pilot: personagem do piloto ('menino' ou 'menina').
   DEFAULT_SPEC: { model: 'gt', color: '#e8302a', decal: 'flames', decalColor: '#ffc928',
-                  suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
+                  pilot: 'menino', suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
 
   // ---------- cores disponíveis para o kart ----------
   KART_COLORS: [

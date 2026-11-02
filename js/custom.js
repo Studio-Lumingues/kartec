@@ -1,7 +1,7 @@
 // =====================================================================================
 // custom.js — estado da personalização (o "spec" do kart do jogador) + registro de atributos
 //
-// spec = { model, color, decal, decalColor, suit, helmet, skin }
+// spec = { model, color, decal, decalColor, pilot, suit, helmet, skin }
 // SLOTS descreve cada atributo editável na Garagem: em qual aba aparece, que tipo de controle usa
 // e como é aplicado no modelo 3D. O modelo (kart/moto) é escolhido pelo carrossel da Garagem, sem aba.
 // Para adicionar um atributo novo de cor no futuro:
@@ -31,6 +31,10 @@
       apply: (m, v) => m.setDecal(v) },
     { id: 'decalColor', tab: 'decals', label: 'Cor do adesivo', type: 'color', custom: true, options: () => swatches(CFG.DECAL_COLORS),
       apply: (m, v) => m.setDecalColor(v) },
+    // personagem (menino ou menina): o piloto é trocado no próprio kart, sem remontar o modelo
+    { id: 'pilot', tab: 'pilot', label: 'Personagem', type: 'choice',
+      options: () => (window.Pilot ? Pilot.characters : []).map(c => ({ value: c.id, name: c.name })),
+      apply: (m, v) => m.setPilot({ pilot: v }) },
     { id: 'suit', tab: 'pilot', label: 'Macacão', type: 'color', custom: true, options: () => swatches(CFG.SUIT_COLORS),
       apply: (m, v) => m.setPilot({ suit: v }) },
     { id: 'helmet', tab: 'pilot', label: 'Capacete', type: 'color', custom: true, options: () => swatches(CFG.SUIT_COLORS.concat(['#ffc928'])),
@@ -48,6 +52,8 @@
       // ou, se nem o padrão existir, para o primeiro modelo da lista (Kartec GT). Já grava a correção.
       const valid = id => KartModels.list().some(m => m.id === id);
       if (!valid(this.spec.model)) { this.spec.model = valid(CFG.DEFAULT_SPEC.model) ? CFG.DEFAULT_SPEC.model : KartModels.list()[0].id; this.save(); }
+      // personagem salvo que não existe (ou spec de antes dos pilotos novos): volta para o padrão
+      if (window.Pilot && !Pilot.characters.some(c => c.id === this.spec.pilot)) { this.spec.pilot = CFG.DEFAULT_SPEC.pilot; this.save(); }
       // número e acessório saíram do jogo: some com o que estiver salvo de versões antigas
       if ('number' in this.spec || 'accessory' in this.spec) { delete this.spec.number; delete this.spec.accessory; this.save(); }
       return this.spec;
@@ -64,7 +70,8 @@
     onChange(fn) { this.listeners.push(fn); },
     // aplica um atributo num modelo já montado; devolve false se o modelo precisa ser reconstruído
     applyTo(model, id) { const s = this.slot(id); if (!s || s.rebuild || !s.apply) return false; s.apply(model, this.spec[id], this.spec); return true; },
-    // visual do rival: modelo sorteado entre os disponíveis (kart ou moto), cor contrastante e piloto combinando.
+    // visual do rival: modelo sorteado entre os disponíveis (kart ou moto), cor contrastante e piloto combinando
+    // (personagem sorteado: menino ou menina).
     // Com só 2 modelos, excluir o do jogador deixaria TODOS os rivais iguais; então o sorteio usa a lista toda.
     rivalFor(spec, colorHex) {
       const models = KartModels.list().map(m => m.id);
@@ -72,7 +79,7 @@
       const pick = a => a[Math.floor(Math.random() * a.length)];
       const decalColor = pick(CFG.DECAL_COLORS.filter(c => c.toLowerCase() !== colorHex.toLowerCase()));
       return { model: pick(models), color: colorHex, decal: pick(pats), decalColor,
-        suit: colorHex, helmet: decalColor, skin: pick(CFG.SKIN_TONES) };
+        pilot: pick((window.Pilot ? Pilot.characters : [{ id: CFG.DEFAULT_SPEC.pilot }]).map(c => c.id)), suit: colorHex, helmet: decalColor, skin: pick(CFG.SKIN_TONES) };
     }
   };
   window.Custom = Custom;

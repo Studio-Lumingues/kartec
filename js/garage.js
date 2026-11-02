@@ -5,7 +5,8 @@
 //    A troca é animada na vitrine 3D (Showroom.setSpec com direção): o veículo atual sai girando para um
 //    lado e o próximo entra pelo outro. A placa com o nome desliza junto, no mesmo sentido.
 //  * DOCA: barra baixa no pé da tela com as abas (Custom.tabs) e UMA fileira de cores por vez.
-//    Abas com mais de um atributo (Piloto: macacão, capacete, pele) ganham chips para escolher qual pintar.
+//    Abas com mais de um atributo (Piloto: personagem, macacão, capacete, pele) ganham chips para escolher qual mudar;
+//    o chip "Personagem" mostra Menino / Menina no lugar das cores.
 //    Abas marcadas com soon: true (Adesivos) aparecem desativadas com o selo "Em breve".
 // Nada é escrito "na mão": abas e cores vêm de Custom.tabs / Custom.slots. Cada mudança vai para
 // Custom.set(); a vitrine 3D escuta e atualiza o veículo na hora.
@@ -26,7 +27,7 @@
         if (t.soon) { b.disabled = true; b.setAttribute('aria-disabled', 'true'); b.appendChild(el('em', 'soonBadge', 'Em breve')); b.title = t.label + ': em breve'; }
         else b.addEventListener('click', () => { this.show(t.id); this.blip(760); });
         tabs.appendChild(b);
-        this.part[t.id] = (Custom.slots.find(s => s.tab === t.id && s.type === 'color') || {}).id;
+        this.part[t.id] = (Custom.slots.find(s => s.tab === t.id && (s.type === 'color' || s.type === 'choice')) || {}).id;
       });
       // carrossel
       $('gPrev').addEventListener('click', () => this.go(-1));
@@ -82,7 +83,7 @@
       this.renderBody();
     },
     renderBody() {
-      const body = $('garageBody'), slots = Custom.slots.filter(s => s.tab === this.tab && s.type === 'color');
+      const body = $('garageBody'), slots = Custom.slots.filter(s => s.tab === this.tab && (s.type === 'color' || s.type === 'choice'));
       body.innerHTML = ''; body.classList.remove('swap'); void body.offsetWidth; body.classList.add('swap');
       if (!slots.length) return;
       // chips (só quando a aba tem mais de um atributo de cor)
@@ -96,6 +97,12 @@
         body.appendChild(row);
       }
       const s = slots.find(x => x.id === this.part[this.tab]) || slots[0]; this.part[this.tab] = s.id;
+      if (s.type === 'choice') {   // escolha por nome (personagem): botões no lugar das bolinhas de cor
+        const row = el('div', 'gSwatches'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', s.label);
+        s.options().forEach(o => { const b = el('button', 'gPart gChoice', o.name); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.choice = o.value;
+          b.addEventListener('click', () => { Custom.set(s.id, o.value); this.blip(880); }); row.appendChild(b); });
+        body.appendChild(row); this._custom = null; this.syncSwatches(); return;
+      }
       const row = el('div', 'gSwatches'); row.setAttribute('role', 'radiogroup'); row.setAttribute('aria-label', s.label);
       s.options().forEach(o => {
         const b = el('button', 'gSwatch'); b.type = 'button'; b.setAttribute('role', 'radio'); b.dataset.v = o.hex;
@@ -116,7 +123,8 @@
       const id = this.part[this.tab]; if (!id) return; const v = String(Custom.spec[id] || '').toLowerCase();
       let match = false;
       document.querySelectorAll('#garageBody .gSwatch[data-v]').forEach(b => { const on = b.dataset.v.toLowerCase() === v; match = match || on; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
-      document.querySelectorAll('#garageBody .gPart').forEach(c => { const on = c.dataset.slot === id; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      document.querySelectorAll('#garageBody .gChoice').forEach(b => { const on = b.dataset.choice.toLowerCase() === v; b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); });
+      document.querySelectorAll('#garageBody .gParts .gPart').forEach(c => { const on = c.dataset.slot === id; c.classList.toggle('on', on); c.setAttribute('aria-checked', on ? 'true' : 'false'); });
       if (this._custom) { this._custom.inp.value = v || '#ffffff'; this._custom.lab.classList.toggle('on', !match && !!v); this._custom.lab.style.setProperty('--c', !match && v ? v : 'transparent'); }
     },
     blip(f) { try { UI.Sfx.tone(f, 0, 0.05, 'triangle', 0.05); } catch (e) { } },
