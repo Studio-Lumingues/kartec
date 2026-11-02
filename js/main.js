@@ -540,7 +540,7 @@
       const dens = window.Settings ? Settings.sceneryDensity() * (this.lite && Settings.autoPerf() ? 0.6 : 1) : (this.lite ? CFG.FILL.LITE_DENSITY : CFG.FILL.DENSITY);
       this.fill = Toon.during(() => Scenery.build(this.track, def, root, { density: dens }));
       Fx.init(scene);
-      if (window.Items) Items.build(scene, this.track, def, { enabled: !(opts && opts.online) });   // caixas de item (só offline)
+      if (window.Items) Items.build(scene, this.track, def, { enabled: true });   // caixas de item (solo e online; no online os eventos vão pela rede)
       scene.add(camera); Fx.cam = camera; UI.Fairy.build(camera); Cine.build(camera); Cine.hide(true);
       if (opts && opts.online) {
         // ONLINE: os rivais são os outros jogadores (karts de rede: só animam o estado recebido; sem IA)
@@ -601,8 +601,7 @@
       if (this.fill) { this.fill.dispose(); this.fill = null; }
       if (this.track && this.track.dispose) this.track.dispose();      // texturas de reflexo/refração da água da pista (render targets)
       const keep = new Set([Fx.glowTex(), Fx.softTex(), Fx.puffTex(), Fx.starTex(), Toon.gradient()].concat(window.Smoke ? Smoke.textures() : []));   // texturas da fumaça são reaproveitadas entre corridas
-      if (this.player) this.player.m.group.traverse(o => { if (o.material && o.material.map) keep.add(o.material.map); if (o.material && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); });
-      (this.rivals || []).forEach(b => b.m.group.traverse(o => { if (o.material && o.material.userData && o.material.userData.decalUniforms) keep.add(o.material.userData.decalUniforms.uDecal.value); }));
+      if (this.player) this.player.m.group.traverse(o => { if (o.material && o.material.map) keep.add(o.material.map); });
       [Pilot.tpl && Pilot.tpl.map, Pilot.tpl && Pilot.tpl.normalMap, KartMats.tread(false), KartMats.tread(true)].forEach(t => t && keep.add(t));
       // dispose completo: todas as texturas do material (normalMap, alphaMap, uniforms...), não só map/emissiveMap.
       // Texturas de render target (mapa de ambiente dos karts, reflexo) nunca: não dá para reenviá-las.
@@ -687,7 +686,8 @@
     // Câmera fechada (FOV baixo, cara de lente tele) passando por alguns cantos do mapa, com corte suave (piscada preta)
     // entre as tomadas e uma faixa preta translúcida embaixo com o nome da pista. Não dá para pular (o jogador sempre vê o mapa).
     // Tomadas: 4 pontos fixos do alto (trecho, panorama, reta, grid de largada); só o shake suave mexe a câmera.
-    startShowcase(def) {
+    // syncLeft (online): segundos até o fim da pré-visualização pelo relógio do servidor (todos veem a mesma tomada juntos)
+    startShowcase(def, syncLeft) {
       const tr = this.track, N = tr.N, si = def.startIdx || 0, ds = (tr.length || N * 4) / N, P = this.player;
       const wrap = i => ((Math.round(i) % N) + N) % N;
       // posição e direção INTERPOLADAS entre os nós da pista (antes arredondava para o nó: a câmera andava aos pulinhos)
@@ -718,6 +718,7 @@
         shots.push(fixed(4.0, x, z, 12, V(pp.x + t.x * 4, pp.y + 1, pp.z + t.z * 4))); }
       let acc = 0; shots.forEach(s => { s.t0 = acc; acc += s.dur; });
       this.sc = { t: 0, shots, total: acc, focus: P.pos.clone(), fov0: camera.fov, fov: CFG.SHOWCASE_FOV || 30, cut: 0 };   // FOV único (sem trocas de zoom)
+      if (syncLeft !== undefined && this.online) { this.sc.sync = this.online.startAt - 3600; this.sc.t = Math.max(0, acc - syncLeft); }   // quem chega atrasado entra no meio
       this.state = 'showcase'; document.body.classList.add('showcase'); Cine.hide(true);
       Env.cinema(true); if (this.fill && this.fill.cinema) this.fill.cinema(true);   // qualidade máxima: sombra no mapa todo, visão longe, cenário todo com sombra
       // faixa com o nome da pista
@@ -738,7 +739,7 @@
       ui.bar.querySelector('b').textContent = def.name || 'Pista';
       ui.bar.querySelector('span').textContent = CFG.LAPS + (CFG.LAPS === 1 ? ' volta' : ' voltas');
       ui.bar.classList.remove('on'); clearTimeout(this._scT); this._scT = setTimeout(() => ui.bar.classList.add('on'), 450);
-      this.showcaseCam(0);
+      this.showcaseCam(this.sc.t);
     },
     showcaseCam(t) {
       const S = this.sc; let k = S.shots.length - 1; for (let i = 0; i < S.shots.length; i++) if (t < S.shots[i].t0 + S.shots[i].dur) { k = i; break; }
@@ -765,7 +766,7 @@
       this.scUI.fade.style.opacity = Math.min(1, a).toFixed(3);
     },
     showcaseStep(dt) {
-      const S = this.sc; S.t += dt;
+      const S = this.sc; if (S.sync) S.t = Math.max(S.t, S.total - (S.sync - Net.serverNow()) / 1000); else S.t += dt;   // online: tempo do servidor
       if (S.t >= S.total) this.endShowcase();                                              // sem pular: o showcase vai até o fim
     },
     endShowcase() {
@@ -941,8 +942,17 @@
     onlineGo(m) {
       if (!this.online || m.raceId !== this.online.raceId) return;
       this.online.startAt = m.startAt; Net.resetRace(m.startAt, m.raceId);
-      const go = () => { this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false }; };
+      const go = () => this.onlineIntro();
       if (this.state === 'waiting') go(); else setTimeout(() => { if (this.state === 'waiting') go(); }, 300);
+    },
+    // pré-visualização da pista no online: o MESMO showcase do modo solo (tomadas, faixa com o nome, piscadas) e a mesma
+    // contagem da Fatecxie. O servidor reserva o tempo antes da largada; a apresentação termina exatamente 3,6 s antes do
+    // "VAI!" (início da contagem). Sem tempo suficiente (servidor antigo, chegou muito atrasado): direto para a contagem.
+    onlineIntro() {
+      const O = this.online; if (!O || !O.startAt) { this.beginCountdown(); return; }
+      const left = (O.startAt - 3600 - Net.serverNow()) / 1000, td = CFG.TRACKS[this.curTrack];
+      if (CFG.SHOWCASE !== false && td && this.player && left > 1.5) { UI.Fairy.hide(); this.startShowcase(td, left); }
+      else this.beginCountdown();
     },
     // volta para uma corrida JÁ EM ANDAMENTO (página recarregada/aba reaberta): mesma pista e grid, relógio da
     // largada do servidor e o kart no último ponto que o servidor recebeu (mesma volta, mesma posição na pista)
@@ -958,8 +968,7 @@
         const P = this.player, mine = (m.finished || []).find(f => f[0] === Net.id);
         if (m.me) { try { this.restoreKart(P, m.me); } catch (e) { console.error('[resume]', e); } }
         if (Net.serverNow() < m.startAt) {                                   // ainda na contagem: ela continua sincronizada
-          this.state = 'countdown'; this.cd = { t: 0, step: 0, early: false };
-          $('signal').hidden = false; UI.countNum(''); UI.Fairy.show(); Cine.show();
+          UI.countNum(''); this.onlineIntro();                               // pré-visualização (se ainda der tempo) ou contagem
         } else {                                                             // já largou: direto para a corrida
           this.state = 'race'; this.cd = { t: 99, step: 4, early: true };
           $('signal').hidden = true; UI.countNum(''); Cine.hide(true); this.race.time = Math.max(0, Net.raceTime());

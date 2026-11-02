@@ -29,6 +29,7 @@ const SERVE_STATIC = process.env.SERVE_STATIC !== '0';
 const ROOT = path.resolve(__dirname, '..');
 const PROTOCOL = 1, MAX_PLAYERS = 8, MAX_ROOMS = 200, TRACK_COUNT = 3;
 const FINISH_GRACE_MS = 45000, LOAD_TIMEOUT_MS = 20000, COUNTDOWN_MS = 3600, START_MARGIN_MS = 900;
+const PREVIEW_MS = 16600;   // pré-visualização da pista antes da contagem (mesma duração do showcase do cliente)
 // reconexão: quem cai (F5, aba fechada, wi-fi) tem RECONNECT_MS para voltar com o mesmo token; depois sai da sala de vez.
 // O batimento curto garante que uma conexão morta sem aviso (4G caiu) seja percebida em no máximo 2x HEARTBEAT_MS.
 const RECONNECT_MS = 15000, HEARTBEAT_MS = 4000;
@@ -89,7 +90,7 @@ function cleanSpec(s) {
   s = s && typeof s === 'object' ? s : {};
   const str = (v, d) => (typeof v === 'string' && /^[a-z0-9_-]{1,16}$/i.test(v)) ? v : d;
   const col = (v, d) => (typeof v === 'string' && HEX.test(v)) ? v : d;
-  return { model: str(s.model, 'gt'), color: col(s.color, '#e8302a'), decal: str(s.decal, 'none'), decalColor: col(s.decalColor, '#ffc928'),
+  return { model: str(s.model, 'gt'), color: col(s.color, '#e8302a'),
     number: Math.max(0, Math.min(99, s.number | 0)), suit: col(s.suit, '#e8302a'), helmet: col(s.helmet, '#e8302a'), skin: col(s.skin, '#f2b48a'), accessory: str(s.accessory, 'none'), pilot: str(s.pilot, 'menino') };
 }
 function hashPass(pass, salt) { return crypto.scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 }); }
@@ -140,7 +141,7 @@ function startRace(r) {
 }
 function go(r) {
   if (!r.race || r.state !== 'loading') return; clearTimeout(r.race.timer);
-  r.state = 'racing'; r.race.startAt = now() + COUNTDOWN_MS + START_MARGIN_MS;     // "VAI!" exatamente aqui (relógio do servidor)
+  r.state = 'racing'; r.race.startAt = now() + PREVIEW_MS + COUNTDOWN_MS + START_MARGIN_MS;     // "VAI!" exatamente aqui (relógio do servidor)
   broadcast(r, { t: 'go', raceId: r.race.id, startAt: r.race.startAt, serverTime: now() });
   pushRoom(r);
 }
@@ -241,6 +242,15 @@ function onJson(p, m) {
       broadcast(r, { t: 'finished', id: p.id, time: r.race.finish.get(p.id) });
       if (!r.race.firstFinish) { r.race.firstFinish = now(); clearTimeout(r.race.timer); r.race.timer = setTimeout(() => endRace(r), FINISH_GRACE_MS); }
       checkRace(r); return; }
+    case 'item': {   // caixas e itens: repassa aos outros jogadores da corrida (pegou caixa, soltou banana, escorregou, turbo)
+      if (!r || !r.race || r.state !== 'racing' || m.raceId !== r.race.id) return;
+      const k = ['box', 'banana', 'hitb', 'dino'].includes(m.k) ? m.k : null; if (!k) return;
+      const o = { t: 'item', k, from: p.id, raceId: r.race.id }, num = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : undefined;
+      if (k === 'box') o.i = Math.max(0, Math.min(511, m.i | 0));
+      if (typeof m.id === 'string') o.id = m.id.slice(0, 24);
+      if (k === 'banana') { o.x = num(m.x); o.y = num(m.y); o.z = num(m.z); if (o.x === undefined || o.z === undefined || !o.id) return; }
+      if (k === 'hitb' && !o.id) return;
+      broadcast(r, o, p); return; }
     case 'bump': {
       if (!r || r.state !== 'racing') return; const to = players.get(m.to); if (!to || to.room !== r.id) return;
       const f = v => Math.max(-40, Math.min(40, Number(v) || 0));

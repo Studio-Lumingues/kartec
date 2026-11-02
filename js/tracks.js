@@ -948,9 +948,6 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         grp.userData.dynamic = true; grp.add(ledTop, ledGlow);
         const gl = glowSpr(new THREE.Color(PB.ON).getHex(), 13, 0.4); gl.scale.set(w * 0.9, 4, 1); gl.position.set(c.x + fx * len / 2, base + h + 0.8, c.z + fz * len / 2); padGlows.push(gl);
         pads.push({ x: c.x + fx * len / 2, z: c.z + fz * len / 2, fx: Math.sin(th), fz: Math.cos(th), hl: len / 2 + 0.5, hw }); }
-      // setas de aviso no asfalto antes da rampa
-      const ar = new THREE.Mesh(new THREE.PlaneGeometry(w, 3), new THREE.MeshLambertMaterial({ map: TX.get('stripes', w / 4, 1), polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -3 }));
-      ar.rotation.x = -Math.PI / 2; const ga = new THREE.Group(); ga.position.copy(side(i - 3, o, 0.07 + hAt(i - 3))); ga.rotation.y = th; ga.add(ar); add(ga);
       ramps.push({ x: c.x, z: c.z, fx, fz, hw, len, h, base, grade });
     });
     const rampAt = (p) => { let best = null; for (const r of ramps) { const dx = p.x - r.x, dz = p.z - r.z, a = dx * r.fx + dz * r.fz, l = dx * r.fz - dz * r.fx;

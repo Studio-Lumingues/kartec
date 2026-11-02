@@ -131,10 +131,10 @@ window.CFG = {
     NAME: 'Bot Turbo'
   },
 
-  // ---------- personalização: estado inicial (corBase, modeloKart, decalque, corDecalque, piloto) ----------
+  // ---------- personalização: estado inicial (corBase, modeloKart, piloto) ----------
   // Números na lataria e acessórios do piloto foram removidos do jogo.
   // pilot: personagem do piloto ('menino' ou 'menina').
-  DEFAULT_SPEC: { model: 'gt', color: '#e8302a', decal: 'flames', decalColor: '#ffc928',
+  DEFAULT_SPEC: { model: 'gt', color: '#e8302a',
                   pilot: 'menino', suit: '#e8302a', helmet: '#e8302a', skin: '#f2b48a' },
 
   // ---------- cores disponíveis para o kart ----------
@@ -150,7 +150,6 @@ window.CFG = {
     { name: 'Branco',   hex: '#eef0f4' },
     { name: 'Ciano',    hex: '#19c8e8' }
   ],
-  DECAL_COLORS: ['#ffc928', '#ffffff', '#14183f', '#19e3ff', '#ff3d47', '#3ee05a', '#ff7ae0', '#ff8a00', '#8a3ae0', '#c0c4cc'],
   SUIT_COLORS: ['#e8302a', '#2a5ce8', '#2cb84a', '#f2c418', '#8a3ae0', '#ff7a1a', '#ff4fb0', '#2a2c34', '#eef0f4', '#19c8e8'],
   SKIN_TONES: ['#f6cfae', '#f2b48a', '#d99a6c', '#b87a4e', '#8a5634', '#5e3a22'],
 

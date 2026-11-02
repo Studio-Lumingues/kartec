@@ -56,6 +56,7 @@
       Net.on('left', m => { if (Game.online) Game.onlineLeft(m.id); });
       Net.on('results', m => Game.onlineResults(m.rows, m.cup));
       Net.on('bump', m => Game.netBump(m));
+      Net.on('item', m => { if (Game.online && window.Items) Items.onNet(m, id => (Game.rivals || []).find(k => k.netId === id && !k.gone)); });   // caixas e itens dos outros
       Net.on('kicked', () => { Net.room = null; Net.forget(); UI.toast('Você foi removido da sala', 2500); Game.leaveOnline(true); });
       Net.on('drop', () => this.onDrop());
       this.bootResume();
@@ -214,7 +215,7 @@
     },
     // ---------- sair / Esc ----------
     leave(force) {
-      const racing = Game.online && ['waiting', 'countdown', 'race', 'finish'].includes(Game.state);
+      const racing = Game.online && ['waiting', 'showcase', 'countdown', 'race', 'finish'].includes(Game.state);
       if (racing && !force) { if (window.Pause) Pause.open(); return; }          // nunca sai direto da corrida: abre a Pausa
       Net.send({ t: 'leave' }); Net.room = null; Net.forget(); Game.leaveOnline(true);
     },

@@ -1,7 +1,7 @@
 // =====================================================================================
 // custom.js — estado da personalização (o "spec" do kart do jogador) + registro de atributos
 //
-// spec = { model, color, decal, decalColor, pilot, suit, helmet, skin }
+// spec = { model, color, pilot, suit, helmet, skin }   (adesivos foram removidos dos veículos)
 // SLOTS descreve cada atributo editável na Garagem: em qual aba aparece, que tipo de controle usa
 // e como é aplicado no modelo 3D. O modelo (kart/moto) é escolhido pelo carrossel da Garagem, sem aba.
 // Para adicionar um atributo novo de cor no futuro:
@@ -26,11 +26,6 @@
       options: () => KartModels.list().map(m => ({ value: m.id, name: m.name, desc: m.desc })) },
     { id: 'color', tab: 'paint', label: 'Lataria', type: 'color', custom: true, options: () => swatches(CFG.KART_COLORS),
       apply: (m, v) => m.setColor(v) },
-    { id: 'decal', tab: 'decals', label: 'Estampa', type: 'cards',
-      options: () => Livery.patterns.map(p => ({ value: p.id, name: p.name, icon: p.icon })),
-      apply: (m, v) => m.setDecal(v) },
-    { id: 'decalColor', tab: 'decals', label: 'Cor do adesivo', type: 'color', custom: true, options: () => swatches(CFG.DECAL_COLORS),
-      apply: (m, v) => m.setDecalColor(v) },
     // personagem (menino ou menina): o piloto é trocado no próprio kart, sem remontar o modelo
     { id: 'pilot', tab: 'pilot', label: 'Personagem', type: 'choice',
       options: () => (window.Pilot ? Pilot.characters : []).map(c => ({ value: c.id, name: c.name })),
@@ -75,11 +70,10 @@
     // Com só 2 modelos, excluir o do jogador deixaria TODOS os rivais iguais; então o sorteio usa a lista toda.
     rivalFor(spec, colorHex) {
       const models = KartModels.list().map(m => m.id);
-      const pats = Livery.patterns.map(p => p.id).filter(id => id !== 'none');
       const pick = a => a[Math.floor(Math.random() * a.length)];
-      const decalColor = pick(CFG.DECAL_COLORS.filter(c => c.toLowerCase() !== colorHex.toLowerCase()));
-      return { model: pick(models), color: colorHex, decal: pick(pats), decalColor,
-        pilot: pick((window.Pilot ? Pilot.characters : [{ id: CFG.DEFAULT_SPEC.pilot }]).map(c => c.id)), suit: colorHex, helmet: decalColor, skin: pick(CFG.SKIN_TONES) };
+      const accent = pick(CFG.SUIT_COLORS.concat(['#ffc928']).filter(c => c.toLowerCase() !== colorHex.toLowerCase()));   // capacete contrastando
+      return { model: pick(models), color: colorHex,
+        pilot: pick((window.Pilot ? Pilot.characters : [{ id: CFG.DEFAULT_SPEC.pilot }]).map(c => c.id)), suit: colorHex, helmet: accent, skin: pick(CFG.SKIN_TONES) };
     }
   };
   window.Custom = Custom;

@@ -14,6 +14,8 @@
 // Cada modelo de kart informa banco, pegadores, pés e a postura (COCKPIT); o piloto se ajusta.
 // Cores: o shader troca o vermelho da roupa (corpo) e do capacete (cabeça) e o tom de pele mantendo o
 // sombreado da textura. O cabelo da menina fica de fora.
+// Cabelo da menina: cada maria-chiquinha tem base e ponta (dobra como chicote). O vento joga o cabelo para trás
+// conforme a velocidade (e de lado no drift), ele tremula em alta velocidade e balança com curvas, freadas e saltos.
 // Visual: material toon de 3 tons + contorno de tinta (Toon.outline acompanha o esqueleto).
 // Se o arquivo não carregar, entra um piloto procedural simples com a mesma interface.
 // =====================================================================================
@@ -199,9 +201,13 @@
       bf.quaternion.copy(q2).invert().multiply(_L.qf.setFromAxisAngle(AX, cp.footPitch || 0));   // sola acompanhando o pedal
       b1.updateMatrixWorld(true);
     }
-    // ---------- marias-chiquinhas: mola amortecida (gravidade + inércia da cabeça + vento) ----------
+    // ---------- marias-chiquinhas: cabelo com física (base + ponta, molas amortecidas) ----------
+    // A mecha aponta para a soma gravidade + vento (contrário ao movimento): parada ela pende; andando, o vento a joga
+    // para trás cada vez mais (quase na horizontal na velocidade máxima) e, no drift, também de lado. Tremula com a
+    // velocidade, a ponta atrasa em relação à base (efeito chicote) e a inércia da cabeça entra nas freadas e curvas.
     pigStep(dt) {
-      const B = this.bones, head = B.head, S = this.pig || (this.pig = { th: [new THREE.Vector2(), new THREE.Vector2()], w: [new THREE.Vector2(), new THREE.Vector2()], prev: new THREE.Vector3(), vel: new THREE.Vector3(), acc: new THREE.Vector3(), vf: new THREE.Vector3(), ok: false });
+      const B = this.bones, head = B.head, V2 = () => new THREE.Vector2();
+      const S = this.pig || (this.pig = { th: [V2(), V2()], w: [V2(), V2()], th2: [V2(), V2()], w2: [V2(), V2()], prev: new THREE.Vector3(), vel: new THREE.Vector3(), acc: new THREE.Vector3(), vf: new THREE.Vector3(), ok: false });
       head.getWorldPosition(_P.p);
       if (!S.ok || dt <= 0 || dt > 0.25) { S.prev.copy(_P.p); S.vel.set(0, 0, 0); S.acc.set(0, 0, 0); S.vf.set(0, 0, 0); S.ok = dt > 0; }
       else {
@@ -210,16 +216,29 @@
         S.acc.lerp(_P.a, Math.min(1, dt * 18)); S.vel.copy(_P.v); S.prev.copy(_P.p);
         if (_P.v.lengthSq() > 120 * 120) _P.v.setLength(120); S.vf.lerp(_P.v, Math.min(1, dt * 10));
       }
-      head.getWorldQuaternion(_P.q).invert();
+      head.getWorldQuaternion(_P.q).invert();                                           // tudo no espaço da cabeça
       _P.l.copy(S.acc).applyQuaternion(_P.q); _P.vl.copy(S.vf).applyQuaternion(_P.q); _P.g.set(0, -1, 0).applyQuaternion(_P.q);
-      // alvo: pendurada na direção da gravidade, jogada para trás pelo vento e pela aceleração
-      const gx = Math.asin(Math.max(-1, Math.min(1, -_P.g.z))) * 0.85, gz = Math.asin(Math.max(-1, Math.min(1, _P.g.x))) * 0.85;
-      const tx = gx + 0.006 * _P.l.z + 0.012 * Math.max(0, _P.vl.z), tz = gz - 0.006 * _P.l.x;
+      const sp = _P.vl.length(), k = Math.min(6, Math.pow(sp / 22, 1.5)), iv = sp > 1e-3 ? k / sp : 0;
+      const dx = _P.g.x - _P.vl.x * iv, dy = _P.g.y - _P.vl.y * iv, dz = _P.g.z - _P.vl.z * iv;   // para onde a mecha aponta
+      const ax = Math.atan2(-dz, -dy), az = Math.atan2(dx, Math.hypot(dy, dz)), f = Math.min(1, sp / 35), t = this.t;
       const n = dt > 1 / 45 ? 3 : 1, h = dt / n;
-      ['pig_L', 'pig_R'].forEach((nm, i) => { const th = S.th[i], w = S.w[i], bone = B[nm]; if (!bone) return;
-        for (let s = 0; s < n; s++) { w.x += (60 * (tx - th.x) - 7 * w.x) * h; w.y += (60 * (tz - th.y) - 7 * w.y) * h; th.x += w.x * h; th.y += w.y * h; }
-        th.x = Math.max(-1, Math.min(1, th.x)); th.y = Math.max(-1, Math.min(1, th.y));
-        bone.rotation.set(th.x, 0, th.y); });
+      ['pig_L', 'pig_R'].forEach((nm, i) => {
+        const b1 = B[nm], b2 = B[nm + '2']; if (!b1) return;
+        const sd = i === 0 ? 1 : -1, ph = i * 2.1, th = S.th[i], w = S.w[i], th2 = S.th2[i], w2 = S.w2[i];
+        // alvo da base (80% da direção) e da ponta (+30%, continua a curva), com tremulação e inércia
+        const tx = ax * 0.8 + 0.004 * _P.l.z + 0.06 * f * Math.sin(t * 21 + ph);
+        let tz = az * 0.8 - 0.004 * _P.l.x + 0.05 * f * Math.sin(t * 16.5 + ph * 1.3);
+        const ux = ax * 0.3 + 0.12 * f * Math.sin(t * 27 + ph + 1.1);
+        let uz = az * 0.3 + 0.09 * f * Math.sin(t * 19 + ph * 0.7);
+        tz = sd > 0 ? Math.max(-0.25, tz) : Math.min(0.25, tz); uz = sd > 0 ? Math.max(-0.3, uz) : Math.min(0.3, uz);   // não entra no capacete
+        for (let s = 0; s < n; s++) {
+          w.x += (45 * (tx - th.x) - 6.5 * w.x) * h; w.y += (45 * (tz - th.y) - 6.5 * w.y) * h; th.x += w.x * h; th.y += w.y * h;
+          w2.x += (35 * (ux - 0.08 * w.x - th2.x) - 5 * w2.x) * h; w2.y += (35 * (uz - 0.08 * w.y - th2.y) - 5 * w2.y) * h; th2.x += w2.x * h; th2.y += w2.y * h;
+        }
+        th.x = Math.max(-0.7, Math.min(1.45, th.x)); th.y = Math.max(sd > 0 ? -0.25 : -1.2, Math.min(sd > 0 ? 1.2 : 0.25, th.y));
+        th2.x = Math.max(-0.6, Math.min(0.9, th2.x)); th2.y = Math.max(sd > 0 ? -0.3 : -0.8, Math.min(sd > 0 ? 0.8 : 0.3, th2.y));
+        b1.rotation.set(th.x, 0, th.y); if (b2) b2.rotation.set(th2.x, 0, th2.y);
+      });
     }
     dispose() { if (this.root.parent) this.root.parent.remove(this.root); this.mat.dispose(); }
   }
@@ -259,16 +278,22 @@
     Object.keys(pigMesh).forEach(pn => { const o = pigMesh[pn], pv = V3().setFromMatrixPosition(o.parent.matrixWorld).applyMatrix4(R_GLB);
       parts.push({ b: GLBAssets.bake(o, new THREE.Matrix4().multiplyMatrices(R_GLB, o.matrixWorld), map), pig: pv.x > 0 ? 'pig_L' : 'pig_R', pivot: pv }); });
     GLBAssets.plainMap(map); map.generateMipmaps = true;
+    // eixo de cada maria-chiquinha: do ponto de amarração até a ponta mais distante (base e ponta são 2 ossos)
+    parts.forEach(p => { if (!p.pig) return; let far = 0; const Q = p.b.P;
+      for (let i = 0; i < Q.length; i += 3) { const d = Math.hypot(Q[i] - p.pivot.x, Q[i + 1] - p.pivot.y, Q[i + 2] - p.pivot.z); if (d > far) { far = d; p.tip = V3(Q[i], Q[i + 1], Q[i + 2]); } }
+      p.len = far || 0.1; p.axis = p.tip ? p.tip.clone().sub(p.pivot).normalize() : V3(0, -1, 0); });
     // junta tudo numa malha só, com índices de osso / pesos / "não recolorir"
     let nv = 0, ni = 0; parts.forEach(p => { nv += p.b.P.length / 3; ni += p.b.I.length; });
     const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), I = new Uint32Array(ni), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4), KP = new Float32Array(nv);
-    const boneCount = BONES.length + (parts.length > 1 ? 2 : 0);
+    const boneCount = BONES.length + (parts.length > 1 ? 4 : 0);
     let ov = 0, oi = 0;
     parts.forEach(p => {
       const n = p.b.P.length / 3; P.set(p.b.P, ov * 3); N.set(p.b.N, ov * 3); U.set(p.b.U, ov * 2);
       for (let k = 0; k < p.b.I.length; k++) I[oi + k] = p.b.I[k] + ov;
       for (let i = 0; i < n; i++) { const j = ov + i;
-        if (p.pig) { SI[j * 4] = p.pig === 'pig_L' ? BONES.length : BONES.length + 1; SW[j * 4] = 1; KP[j] = 1; continue; }
+        if (p.pig) {   // cabelo: base -> ponta ao longo do comprimento da mecha
+          const sx = ((P[j * 3] - p.pivot.x) * p.axis.x + (P[j * 3 + 1] - p.pivot.y) * p.axis.y + (P[j * 3 + 2] - p.pivot.z) * p.axis.z) / p.len, w2 = sstep(0.3, 0.62, sx), bi = BONES.length + (p.pig === 'pig_L' ? 0 : 2);
+          SI[j * 4] = bi; SW[j * 4] = 1 - w2; SI[j * 4 + 1] = bi + 1; SW[j * 4 + 1] = w2; KP[j] = 1; continue; }
         const x = P[j * 3 + 2], y = P[j * 3 + 1], z = -P[j * 3];                             // volta para o espaço do .glb
         const ws = vertexWeights(x, y, z, lm).sort((a, b) => b[1] - a[1]).slice(0, 4), tot = ws.reduce((s, w) => s + w[1], 0) || 1;
         if (!ws.length) { SI[j * 4] = BI.chest; SW[j * 4] = 1; continue; }
@@ -283,8 +308,9 @@
     const pos = {}, bones = [], byName = {};
     BONES.forEach(([name, parent, mk, sd]) => { const a = lm[mk]; pos[name] = toP([a[0], a[1], sd ? sd * Math.abs(a[2]) : a[2]]);
       const b = new THREE.Bone(); b.name = name; b.position.copy(pos[name]); if (parent) { b.position.sub(pos[parent]); byName[parent].add(b); } byName[name] = b; bones.push(b); });
-    parts.filter(p => p.pig).sort((a, b) => (a.pig > b.pig ? 1 : -1)).forEach(p => { const b = new THREE.Bone(); b.name = p.pig; b.position.copy(p.pivot).sub(pos.head); byName.head.add(b); byName[p.pig] = b; pos[p.pig] = p.pivot.clone(); });
-    if (parts.length > 1) { bones.push(byName.pig_L || new THREE.Bone()); bones.push(byName.pig_R || new THREE.Bone()); }
+    parts.filter(p => p.pig).sort((a, b) => (a.pig > b.pig ? 1 : -1)).forEach(p => { const b = new THREE.Bone(); b.name = p.pig; b.position.copy(p.pivot).sub(pos.head); byName.head.add(b); byName[p.pig] = b; pos[p.pig] = p.pivot.clone();
+      const b2 = new THREE.Bone(); b2.name = p.pig + '2'; b2.position.copy(p.axis).multiplyScalar(p.len * 0.46); b.add(b2); byName[p.pig + '2'] = b2; });
+    if (parts.length > 1) ['pig_L', 'pig_L2', 'pig_R', 'pig_R2'].forEach(nm => bones.push(byName[nm] || new THREE.Bone()));
     const root = new THREE.Group(); root.add(byName.hips);
     const mesh = new THREE.SkinnedMesh(geo, new THREE.MeshBasicMaterial({ skinning: true })); root.add(mesh);
     root.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton(bones), mesh.matrixWorld);

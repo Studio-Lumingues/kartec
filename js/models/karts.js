@@ -1,10 +1,10 @@
 // =====================================================================================
 // models/karts.js — modelos de kart (registro expansível) + montagem completa
 //
-// buildKartModel(spec, opts) monta: veículo 3D (assets/kart.glb ou assets/motoca.glb) + pintura (com adesivos)
+// buildKartModel(spec, opts) monta: veículo 3D (assets/kart.glb ou assets/motoca.glb) + pintura
 // + rodas + volante animado (kart) / guidão (moto) + piloto sentado. spec = {
 //   model: 'gt' (kart) | 'moto' (Motoca)   <- únicos modelos disponíveis,
-//   color (corBase), decal (estampa), decalColor (corDecalque),
+//   color (corBase),
 //   pilot ('menino' | 'menina'), suit, helmet, skin      <- piloto (sem números na lataria e sem acessórios)
 // }
 // Os .glb (carregados pelo models/glb.js durante a tela de carregamento) são convertidos UMA vez por modelo para o
@@ -12,9 +12,9 @@
 // rodas (pivô no cubo), volante recortado do chassi (gira com a direção e leva as mãos junto), manoplas, banco,
 // pedais/pedaleiras, escapamentos (chama do turbo) e faróis. Cada kart da pista só cria materiais e grupos:
 // as geometrias são compartilhadas.
-// Pintura: o shader troca o vermelho da textura pela cor escolhida mantendo o sombreado da textura, e os
-// adesivos (Livery) só pegam na lataria pintada.
-// Cada modelo devolve (como antes) cockpit, decal, rear, shadow e lean; KartModels.register continua valendo.
+// Pintura: o shader troca o vermelho da textura pela cor escolhida mantendo o sombreado da textura.
+// Adesivos/decalques não existem nos veículos: nenhum carregamento, textura, mapeamento ou projeção nas malhas
+// (kart e motoca sempre começam neutros, só com a pintura). Cada modelo devolve cockpit, rear, shadow e lean.
 // =====================================================================================
 (function () {
   const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -41,36 +41,19 @@
       lightAuto: true, lightR: 0.03, lean: 0.42, moto: true }
   };
 
-  // ---------------- pintura: troca do vermelho + adesivos (mesmos uniforms do Livery/KartMats) ----------------
+  // ---------------- pintura: troca do vermelho da textura pela cor escolhida ----------------
   const HSV = 'vec3 kHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x); }';
-  const PAINT_VS = 'varying vec3 vDecalP;\nvarying vec3 vDecalN;\n';
-  const PAINT_FS_HEAD = [
-    'uniform vec3 uPaint; uniform float uRefV;',
-    'uniform sampler2D uDecal; uniform vec3 uDecalColor; uniform vec3 uInk; uniform float uDecalOn;',
-    'uniform vec4 uSide; uniform vec4 uTop; uniform vec4 uNumSide; uniform vec4 uNumTop;',
-    'varying vec3 vDecalP; varying vec3 vDecalN;', HSV,
-    'vec3 dMask(vec2 uv, vec2 o, vec2 s) { if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) return vec3(0.0); return texture2D(uDecal, o + uv * s).rgb; }'
-  ].join('\n');
+  const PAINT_FS_HEAD = ['uniform vec3 uPaint; uniform float uRefV;', HSV].join('\n');
   // wP = quanto o texel é "lataria vermelha"; kv = luz embutida na textura (mantida na cor nova)
   const PAINT_FS_BODY = [
     '{ vec3 hv = kHsv(texelColor.rgb); float dr = min(hv.x, 1.0 - hv.x);',
     '  float wP = (1.0 - smoothstep(0.045, 0.075, dr)) * smoothstep(0.35, 0.5, hv.y) * smoothstep(0.05, 0.14, hv.z);',
     '  float kv = hv.z / uRefV; float sh = min(kv, 1.0); vec3 hi = vec3(max(kv - 1.0, 0.0) * 0.5);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, uPaint * sh + hi, wP);',
-    '  if (uDecalOn > 0.5 && wP > 0.01) {',
-    '    vec3 n = normalize(vDecalN); float wS = smoothstep(0.3, 0.62, abs(n.x)); float wT = smoothstep(0.35, 0.7, n.y) * (1.0 - wS);',
-    '    vec2 uvS = vec2((vDecalP.z - uSide.x) / (uSide.y - uSide.x), (vDecalP.y - uSide.z) / (uSide.w - uSide.z));',
-    '    vec2 uvT = vec2((uTop.y - vDecalP.x) / (uTop.y - uTop.x), (vDecalP.z - uTop.z) / (uTop.w - uTop.z));',
-    '    vec3 m = (dMask(uvS, vec2(0.0, 0.5), vec2(1.0, 0.5)) * wS + dMask(uvT, vec2(0.0, 0.0), vec2(0.5, 0.5)) * wT) * wP;',
-    '    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(sh) + hi, clamp(m.g, 0.0, 1.0));',
-    '    diffuseColor.rgb = mix(diffuseColor.rgb, uDecalColor * sh + hi, clamp(m.r, 0.0, 1.0));',
-    '    diffuseColor.rgb = mix(diffuseColor.rgb, uInk, clamp(m.b, 0.0, 1.0));',
-    '  } }'
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, uPaint * sh + hi, wP); }'
   ].join('\n');
   function paintMat(map, u) {
     const m = Toon.mat({ color: 0xffffff, map }, { gloss: 0.45, rim: 0.3, sat: 0, key: 'veh-paint', hook: sh => {
       Object.assign(sh.uniforms, u);
-      sh.vertexShader = PAINT_VS + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvDecalP = position; vDecalN = normal;');
       sh.fragmentShader = PAINT_FS_HEAD + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + PAINT_FS_BODY);
     } });
     m.userData.unique = true; return m;
@@ -132,9 +115,8 @@
     if (d.lightAuto) { const p = tpl.bodyGeo.attributes.position; let best = null;   // ponta do bico (moto): vértice mais à frente perto do eixo
       for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); if (Math.abs(x) < 0.12 * S * 0.25 && y > 0.4 * S && y < 0.6 * S && (!best || z > best.z)) best = V(x, y, z); }
       if (best) tpl.lights.push({ pos: best.addScaledVector(fwd, 0.006 * S), r: d.lightR * S }); }
-    // ----- caixas dos adesivos, sombra, rodas de trás -----
+    // ----- sombra e rodas de trás -----
     const bb = tpl.bodyGeo.boundingBox, sz = bb.getSize(V());
-    tpl.decal = { side: [bb.min.z - 0.1, bb.max.z + 0.1, bb.min.y, bb.max.y + 0.1], top: [bb.min.x - 0.1, bb.max.x + 0.1, bb.min.z - 0.1, bb.max.z + 0.1], numSide: [0, 0, 1, 0], numTop: [0, 0, 1, 0] };
     tpl.shadow = [Math.max(sz.x * 0.47, 0.9), sz.z * 0.46];
     const rears = tpl.wheels.filter(w => w.steer === 0);
     tpl.rear = rears.length > 1 ? { x: Math.abs(rears[0].hub.x), z: rears[0].hub.z } : { x: 0.45, z: rears.length ? rears[0].hub.z : -1.95 };
@@ -155,21 +137,15 @@
   // =====================================================================================
   function buildKartModel(spec, opts) {
     opts = opts || {};
-    // number: 0 e accessory: 'none' são forçados: números na lataria e acessórios do piloto foram removidos
-    // (vale também para specs antigos que chegam pela rede ou ficaram salvos no navegador)
+    // number: 0 e accessory: 'none' são forçados e decal/decalColor são apagados: números na lataria, acessórios do piloto
+    // e adesivos foram removidos (vale também para specs antigos da rede ou salvos no navegador): estado sempre neutro
     spec = Object.assign({}, CFG.DEFAULT_SPEC, typeof spec === 'string' ? { color: spec } : spec, { number: 0, accessory: 'none' });
+    delete spec.decal; delete spec.decalColor;
     const def = byId(spec.model), tpl = prepVehicle(def);
     if (!tpl) return fallbackModel(spec, opts, def);
-    const decal = Livery.build(spec, tpl.decal);
-    const u = {
-      uPaint: { value: new THREE.Color(spec.color) }, uRefV: { value: tpl.refV },
-      uDecal: { value: decal.texture }, uDecalColor: { value: new THREE.Color(decal.color) }, uInk: { value: new THREE.Color(Toon.INK) }, uDecalOn: { value: decal.on ? 1 : 0 },
-      uSide: { value: new THREE.Vector4().fromArray(decal.side) }, uTop: { value: new THREE.Vector4().fromArray(decal.top) },
-      uNumSide: { value: new THREE.Vector4().fromArray(decal.numSide) }, uNumTop: { value: new THREE.Vector4().fromArray(decal.numTop) }
-    };
-    const paint = paintMat(tpl.map, u); paint.userData.decalUniforms = u;
-    const parts = paintMat(tpl.map, Object.assign({}, u, { uDecalOn: { value: 0 } }));   // rodas e volante: mesma cor, sem adesivo
-    paint.side = parts.side = tpl.side;                                              // a moto vem com faces dos dois lados no .glb
+    const u = { uPaint: { value: new THREE.Color(spec.color) }, uRefV: { value: tpl.refV } };
+    const paint = paintMat(tpl.map, u), parts = paint;                               // carroceria, rodas e volante: um material só
+    paint.side = tpl.side;                                                           // a moto vem com faces dos dois lados no .glb
     const group = new THREE.Group(), pivot = new THREE.Group(), body = new THREE.Group(); group.add(pivot); pivot.add(body);
     body.add(new THREE.Mesh(tpl.bodyGeo, paint));
     // rodas
@@ -223,12 +199,9 @@
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
-      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint, parts }, paint,
+      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint }, paint,
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; },
-      setDecalColor(hex) { u.uDecalColor.value.set(hex); spec.decalColor = hex; },
-      setDecal(id) { spec.decal = id; spec.number = 0; const d = Livery.build(spec, tpl.decal);
-        u.uDecal.value = d.texture; u.uDecalOn.value = d.on ? 1 : 0; u.uNumSide.value.w = 0; u.uNumTop.value.w = 0; },
       // troca de cores do piloto ou do personagem (menino/menina): o personagem novo é montado no mesmo lugar
       setPilot(s) { const before = spec.pilot; Object.assign(spec, s, { accessory: 'none' });
         if (!this.pilot) return;
@@ -274,7 +247,7 @@
     if (opts.pilot !== false && window.Pilot) { pilot = Pilot.create(spec); pilot.attach(body, { seat: V(0, 1.9, -0.6), scale: 1.6, hands, feet }); pilot.update(0, {}); }
     return { group, pivot, body, blob, headL: null, headGlows: [], spec, pilot, def, fw, rolls, flames: [], headLens: [], neons: [],
       rear: { x: moto ? 0.45 : 1.6, z: -1.8 }, lean: moto ? 0.42 : -0.12, moto, steerRig: null, mats: { paint }, paint,
-      setColor(hex) { paint.color.set(hex); spec.color = hex; }, setDecalColor(hex) { spec.decalColor = hex; }, setDecal(id) { spec.decal = id; },
+      setColor(hex) { paint.color.set(hex); spec.color = hex; },
       setPilot(s) { Object.assign(spec, s, { accessory: 'none' }); if (pilot) pilot.setColors(spec); },
       animate(dt, st) { if (pilot && (this.lod || 0) < 3) pilot.update(dt, st); },
       setNight() { }, dispose() { if (pilot) pilot.dispose(); disposeTree(group); } };
