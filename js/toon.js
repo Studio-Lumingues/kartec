@@ -69,11 +69,19 @@
 
   // ---------- contorno (casco invertido) ----------
   const outlineMats = {};
+  // O casco é empurrado para trás (para longe da câmera) por OUT_PUSH vezes a própria espessura. Nas dobras para dentro
+  // (olhos em relevo, borda da viseira, encaixes entre peças) ele deixava de aparecer POR CIMA da superfície: somem os
+  // anéis e manchas de tinta dentro do desenho. Na silhueta (contra o fundo ou objetos mais distantes) nada muda.
+  const OUT_PUSH = 1.35;
+  const OUTLINE_PUSH = ['{ vec4 oW = vec4(oE, 0.0);', '#ifdef USE_INSTANCING', 'oW = instanceMatrix * oW;', '#endif',
+    'mvPosition.xyz += normalize(mvPosition.xyz) * length((modelViewMatrix * oW).xyz) * ' + OUT_PUSH.toFixed(2) + ';',
+    'gl_Position = projectionMatrix * mvPosition; }'].join('\n');
   function outlineMat(t, skinned, color) {
     const col = color === undefined ? INK : color, key = t + (skinned ? 's' : '') + ':' + col;
     if (outlineMats[key]) return outlineMats[key];
     const m = new THREE.MeshBasicMaterial({ color: col, side: THREE.BackSide, skinning: !!skinned });
-    m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed += normalize(normal) * ' + t.toFixed(4) + ';'); };
+    m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 oE = normalize(normal) * ' + t.toFixed(4) + ';\ntransformed += oE;')
+        .replace('#include <project_vertex>', '#include <project_vertex>\n' + OUTLINE_PUSH); };
     m.customProgramCacheKey = () => 'outline-' + key;
     m.userData.outline = true;
     return outlineMats[key] = m;

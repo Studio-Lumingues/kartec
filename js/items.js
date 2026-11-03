@@ -539,7 +539,8 @@
     CFG: ITEMS_CFG,
     preload,
 
-    // chamado em Game.load (depois de a cena existir). enabled=false no online.
+    // chamado em Game.load (depois de a cena existir). No online as caixas também existem: pegar caixa, soltar banana,
+    // escorregar e usar o turbo viajam pela rede como eventos (mensagens 'item' repassadas pelo servidor; ver onNet).
     build(scene, tr, def, opts) {
       this.dispose(); ensureHud(); this.on = !(opts && opts.enabled === false); if (!this.on) return;
       preload(); this.scene = scene; this.tr = tr; this.t = 0; this.wantUse = false;
@@ -570,6 +571,35 @@
       });
       if (window.PostFX) PostFX.sharpN = this.boxes.length;   // liga a máscara de "sempre nítido" do postfx.js
     },
+    // ---------- online: eventos de item ----------
+    // Cada jogador simula as caixas e as bananas na própria tela; só os EVENTOS viajam (o servidor valida e repassa):
+    //   box (pegou a caixa i) · banana (soltou, com id/posição) · hitb (escorregou na banana id) · dino (usou o turbo).
+    // Karts de outros jogadores nunca pegam caixa nem escorregam aqui (k.remote): isso chega pela rede.
+    _seq: 0,
+    netOn() { return !!(window.Game && Game.online && window.Net && Net.connected); },
+    netSend(o) { if (!this.netOn()) return; o.t = 'item'; o.raceId = Game.online.raceId; Net.send(o); },
+    onNet(m, kartOf) {
+      if (!this.on || !this.group || !m || !window.Game || !Game.online || m.raceId !== Game.online.raceId) return;
+      const k = kartOf ? kartOf(m.from) : null;
+      if (m.k === 'box') { const b = this.boxes[m.i | 0]; if (b && b.visible) this.takeBox(b); }
+      else if (m.k === 'banana') { if (k && isFinite(m.x) && isFinite(m.z) && typeof m.id === 'string' && !this.bananas.some(o => o.id === m.id)) this.dropBanana(k, m.x, m.z, m.id, isFinite(m.y) ? m.y : k.pos.y); }
+      else if (m.k === 'hitb') { if (typeof m.id === 'string') this.removeBanana(m.id); if (k && !(k.spinT > 0)) { k.hitBy = 'banana'; this.hit(k); } }
+      else if (m.k === 'dino') { if (k) this.dinoFx(k); }
+    },
+    takeBox(b) { b.visible = false; b.userData.shd.visible = false; b.userData.respawn = C.BOX_RESPAWN; this.shatter(b); },
+    // banana no chão: um "suporte" com a sombra; o modelo dentro dele flutua um pouquinho e gira. id igual em todas as telas
+    dropBanana(k, x, z, id, y) {
+      if (!this.group) return;
+      if (this.bananas.length >= C.BANANA.MAX) { const o = this.bananas.shift(); o.mesh.parent && o.mesh.parent.remove(o.mesh); }
+      let h; try { h = this.tr.groundAt({ x, y: y === undefined ? k.pos.y : y, z }, k.idx, k.ang).h; } catch (e) { h = NaN; }
+      if (!isFinite(h)) h = (y === undefined ? k.pos.y : y);
+      const mesh = new THREE.Group(); mesh.position.set(x, h + 0.05, z); this.group.add(mesh);
+      const model = make('banana'); model.rotation.y = Math.random() * 6.28; mesh.add(model);
+      let sh = null; if (this.shGeo && this.shMat) { sh = new THREE.Mesh(this.shGeo, this.shMat); sh.position.y = 0.01; sh.scale.setScalar(C.BANANA.SIZE * 0.95 / C.BOX_SIZE); sh.renderOrder = -1; mesh.add(sh); }
+      this.bananas.push({ mesh, model, sh, x, z, owner: k, age: 0, ph: Math.random() * 6.28, id });
+    },
+    removeBanana(id) { const i = this.bananas.findIndex(o => o.id === id); if (i < 0) return; const o = this.bananas[i]; o.mesh.parent && o.mesh.parent.remove(o.mesh); this.bananas.splice(i, 1); },
+    dinoFx(k) { for (let n = 0; n < 14; n++) Fx.spark(k.pos.x, k.pos.y + 0.6, k.pos.z, (Math.random() - 0.5) * 8, 2 + Math.random() * 4, (Math.random() - 0.5) * 8, n % 2 ? 0x2ee6a8 : 0xffd23f, 0.24, 0.45); },
     // ---------- caixa estilhaçando: cacos de vidro voando, girando, quicando no chão e sumindo ----------
     shatter(b) {
       const u = b.userData, S = C.BOX_SIZE, hue = u.gm ? u.gm.userData.U.uHue.value : Math.random();
@@ -643,17 +673,14 @@
       const kind = k.item; k.item = null; k.itemWait = 0;
       const tr = this.tr, fx = Math.sin(k.ang), fz = Math.cos(k.ang);
       if (kind === 'banana') {
-        if (this.bananas.length >= C.BANANA.MAX) { const o = this.bananas.shift(); o.mesh.parent && o.mesh.parent.remove(o.mesh); }
-        const x = k.pos.x - fx * C.BANANA.DROP_BACK, z = k.pos.z - fz * C.BANANA.DROP_BACK, h = tr.groundAt({ x, y: k.pos.y, z }, k.idx, k.ang).h;
-        // a banana fica num "suporte" no chão (com a sombra); o modelo dentro dele flutua um pouquinho e gira
-        const mesh = new THREE.Group(); mesh.position.set(x, h + 0.05, z); this.group.add(mesh);
-        const model = make('banana'); model.rotation.y = Math.random() * 6.28; mesh.add(model);
-        let sh = null; if (this.shGeo && this.shMat) { sh = new THREE.Mesh(this.shGeo, this.shMat); sh.position.y = 0.01; sh.scale.setScalar(C.BANANA.SIZE * 0.95 / C.BOX_SIZE); sh.renderOrder = -1; mesh.add(sh); }
-        this.bananas.push({ mesh, model, sh, x, z, owner: k, age: 0, ph: Math.random() * 6.28 });
+        const x = k.pos.x - fx * C.BANANA.DROP_BACK, z = k.pos.z - fz * C.BANANA.DROP_BACK, id = (window.Net && Net.id != null ? Net.id : 'l') + ':' + (++this._seq);
+        this.dropBanana(k, x, z, id, k.pos.y);
+        if (k.isPlayer) this.netSend({ k: 'banana', id, x, z, y: k.pos.y });   // online: a banana aparece para todos no mesmo lugar
       } else {
         // dinossauro = turbo (o mesmo turbo das plataformas coloridas, por mais tempo)
         k.dinoT = C.DINO.BOOST; k.boostT = Math.max(k.boostT || 0, C.DINO.BOOST);
-        for (let n = 0; n < 14; n++) Fx.spark(k.pos.x, k.pos.y + 0.6, k.pos.z, (Math.random() - 0.5) * 8, 2 + Math.random() * 4, (Math.random() - 0.5) * 8, n % 2 ? 0x2ee6a8 : 0xffd23f, 0.24, 0.45);
+        this.dinoFx(k);
+        if (k.isPlayer) this.netSend({ k: 'dino' });
       }
       if (k.isPlayer) { try { tearBag(kind); } catch (e) { } }
       if (k.isPlayer && UI.Sfx && UI.Sfx.boost) try { UI.Sfx.boost(); } catch (e) { }
@@ -682,8 +709,8 @@
       karts.forEach(k => { if (k.remote || k.item || k.itemRoll > 0 || k.finished) return;
         for (const b of this.boxes) { if (!b.visible) continue; const dx = b.position.x - k.pos.x, dz = b.position.z - k.pos.z;
           if (dx * dx + dz * dz < R2 && Math.abs(b.position.y - k.pos.y) < 4) {
-            b.visible = false; b.userData.shd.visible = false; b.userData.respawn = C.BOX_RESPAWN;
-            this.shatter(b);   // a caixa estilhaça
+            this.takeBox(b);   // a caixa estilhaça (e volta depois de um tempo)
+            if (k.isPlayer) this.netSend({ k: 'box', i: this.boxes.indexOf(b) });   // online: some para todos
             const w = C.WEIGHTS; k.itemNext = Math.random() < w.banana / (w.banana + w.dino) ? 'banana' : 'dino'; k.itemRoll = C.ROLL_TIME;
             if (k.isPlayer && UI.Sfx && UI.Sfx.boost) try { UI.Sfx.boost(); } catch (e) { }
             break; } } });
@@ -701,7 +728,7 @@
       for (let i = this.bananas.length - 1; i >= 0; i--) { const b = this.bananas[i]; b.age += dt; let dead = b.age > C.BANANA.LIFE;
         if (b.model) { const fl = Math.sin(b.age * 2.4 + b.ph); b.model.position.y = C.BANANA.FLOAT + fl * C.BANANA.BOB; b.model.rotation.y += C.BANANA.SPIN * dt;   // flutua e gira
           if (b.sh) { const k2 = 1 - (fl + 1) * 0.08; b.sh.scale.setScalar(C.BANANA.SIZE * 0.95 / C.BOX_SIZE * k2); } }
-        if (!dead) for (const k of karts) { if (k.remote || (k === b.owner && b.age < C.BANANA.GRACE)) continue; if (Math.hypot(k.pos.x - b.x, k.pos.z - b.z) < C.BANANA.RADIUS && Math.abs(k.pos.y - b.mesh.position.y) < 2.5 && !k.air) { k.hitBy = 'banana'; this.hit(k); dead = true; break; } }
+        if (!dead) for (const k of karts) { if (k.remote || (k === b.owner && b.age < C.BANANA.GRACE)) continue; if (Math.hypot(k.pos.x - b.x, k.pos.z - b.z) < C.BANANA.RADIUS && Math.abs(k.pos.y - b.mesh.position.y) < 2.5 && !k.air) { k.hitBy = 'banana'; if (k.isPlayer && b.id) this.netSend({ k: 'hitb', id: b.id }); this.hit(k); dead = true; break; } }
         if (dead) { b.mesh.parent && b.mesh.parent.remove(b.mesh); this.bananas.splice(i, 1); } }
       // giro da banana e turbo do dinossauro (aplicados todo quadro)
       karts.forEach(k => {
@@ -722,6 +749,7 @@
           setSpin(k, yaw, hop, 0.06 * Math.sin(el * 11) * wn, lean + shake * 0.5, sq);   // só o modelo se mexe; direção do kart e câmera ficam como estão
           updateGhosts(k, w);   // blur proporcional à velocidade do giro
           spinSmoke(k, w, dt);  // fumaça saindo das rodas
+          if (!k.remote) {   // kart de outro jogador (online): só a animação do giro; posição e velocidade vêm da rede
           k.speed = 0; k.yawV = 0; k.boostT = 0; k.drifting = false;      // sem acelerar nem derrapar enquanto gira
           // deslize com o embalo, freando até parar; não deixa sair da pista
           const f = Math.exp(-S.SLIDE * dt); k.slideX *= f; k.slideZ *= f;
@@ -729,7 +757,7 @@
           if (tr.side && k.idx !== undefined) { const i = ((k.idx % N) + N) % N, c = tr.side(i, 0, 0), q = tr.side(i, 1, 0), ux = q.x - c.x, uz = q.z - c.z, L = Math.hypot(ux, uz) || 1;
             const lat = ((nx - c.x) * ux + (nz - c.z) * uz) / L, lim = tr.W - 1.4;
             if (Math.abs(lat) > lim) { const d = (Math.abs(lat) - lim) * Math.sign(lat); nx -= ux / L * d; nz -= uz / L * d; k.slideX *= 0.4; k.slideZ *= 0.4; } }
-          k.pos.x = nx; k.pos.z = nz;
+          k.pos.x = nx; k.pos.z = nz; }
           if (k.spinT <= 0) { k.spinT = 0; setSpin(k, 0); clearGhosts(k); spinning.delete(k); k.slideX = k.slideZ = 0; }
         } else if (k.dinoT > 0) { k.dinoT -= dt; k.boostT = Math.max(k.boostT || 0, k.dinoT); }
       });

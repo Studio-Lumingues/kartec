@@ -113,9 +113,8 @@
       const seenIdx = list.findIndex(n => this.id(n) === last);
       $('notesList').innerHTML = list.map((n, i) => {
         const iso = this.iso(n), fresh = !last || (seenIdx >= 0 ? i < seenIdx : legacy !== null ? this.time(n) > legacy : true);
-        const tip = iso ? (fixed(n) ? '' : ' title="Hora do deploy: ' + esc(new Date(iso).toISOString().replace('.000', '')) + '"') : '';
         return '<article class="pnote' + (fresh ? ' fresh' : '') + '">' +
-          '<header><time datetime="' + esc(iso || '') + '"' + tip + '>' + (iso ? when(iso) : 'agora há pouco') + '</time>' + (i === 0 ? '<span class="tagNew">Atual</span>' : '') + '</header>' +
+          '<header><time datetime="' + esc(iso || '') + '">' + (iso ? when(iso) : 'agora há pouco') + '</time>' + (i === 0 ? '<span class="tagNew">Atual</span>' : '') + '</header>' +
           '<h3>' + esc(n.title) + '</h3><ul>' + n.items.map(t => '<li>' + esc(t) + '</li>').join('') + '</ul></article>';
       }).join('');
       const d = this.deploy, liveIso = (d && d.deployedAt) || this.iso(list[0]);

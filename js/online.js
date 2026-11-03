@@ -14,7 +14,7 @@
       // opções de pista/voltas/jogadores
       const fill = (sel, items) => { sel.innerHTML = ''; items.forEach(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); }); };
       const tracks = CFG.TRACKS.map((t, i) => [i, t.name]), laps = CFG.LAPS_OPTIONS.map(n => [n, n + (n > 1 ? ' voltas' : ' volta')]);
-      fill($('onTrack'), tracks); fill($('lobbyTrack'), tracks); fill($('onLaps'), laps); fill($('lobbyLaps'), laps); fill($('onMax'), [2, 3, 4, 5, 6, 7, 8].map(n => [n, n + ' jogadores']));
+      fill($('onTrack'), tracks); fill($('onLaps'), laps); fill($('onMax'), [2, 3, 4, 5, 6, 7, 8].map(n => [n, n + ' jogadores']));
       $('onLaps').value = 3; $('onMax').value = 8;
       try { $('onName').value = localStorage.getItem(KEY()) || ''; } catch (e) { }
       $('onServer').value = Net.defaultUrl(); if (/^https?:$/.test(location.protocol) || Net.configured()) $('onServer').closest('details').hidden = true;
@@ -30,7 +30,14 @@
       $('onSearch').addEventListener('input', () => this.renderRooms(this.rooms));
       $('onSearch').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); const first = this.filtered()[0]; if (first) this.pick(first); } });
       $('onMode').addEventListener('change', () => { $('onTrackField').hidden = $('onMode').value === 'cup'; });
-      $('lobbyMode').addEventListener('change', e => Net.send({ t: 'settings', mode: e.target.value }));
+      // sala: pista (setas), modo e voltas no mesmo formato da tela "Preparar corrida"; só o anfitrião muda.
+      // A tela mostra a escolha na hora; a confirmação volta do servidor na próxima atualização da sala.
+      const mine = () => Net.room && Net.room.host === Net.id && Net.room.state === 'lobby', tick = () => UI.Sfx.tone(700, 0, 0.05, 'triangle', 0.06);
+      const setTrack = d => { if (!mine() || CFG.TRACKS.length < 2) return; const r = Net.room, n = CFG.TRACKS.length, t = (((r.track | 0) + d) % n + n) % n; r.track = t; this.paintLobbySetup(r); Net.send({ t: 'settings', track: t }); tick(); };
+      $('lobbyTrackPrev').addEventListener('click', () => setTrack(-1)); $('lobbyTrackNext').addEventListener('click', () => setTrack(1));
+      $('lobbyModeSeg').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (!mine() || b.disabled || b.classList.contains('on')) return; Net.send({ t: 'settings', mode: b.dataset.v }); tick(); }));
+      $('lobbyLapStep').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (!mine()) return; const r = Net.room, o = CFG.LAPS_OPTIONS, i = Math.max(0, Math.min(o.length - 1, o.indexOf(r.laps) + (+b.dataset.d)));
+        if (o[i] === r.laps) return; r.laps = o[i]; this.paintLobbySetup(r); Net.send({ t: 'settings', laps: o[i] }); tick(); }));
       // lista se atualiza sozinha enquanto a aba "Entrar" está aberta
       setInterval(() => { if (UI.modal === 'onlineModal' && this.tab === 'join' && Net.connected && !Net.room) this.refresh(); }, 4000);
       [['onPass', () => this.join()], ['onRoomPass', () => this.create()], ['onRoomName', () => $('onRoomPass').focus()]].forEach(([id, fn]) =>
@@ -39,8 +46,6 @@
       $('lobbyReady').addEventListener('click', () => { const me = this.me(); Net.send({ t: 'ready', v: !(me && me.ready) }); UI.Sfx.tone(660, 990, 0.08, 'square', 0.06); });
       $('lobbyStart').addEventListener('click', () => { Net.send({ t: 'start' }); });
       $('lobbyLeave').addEventListener('click', () => this.leave(true));
-      $('lobbyTrack').addEventListener('change', e => Net.send({ t: 'settings', track: +e.target.value }));
-      $('lobbyLaps').addEventListener('change', e => Net.send({ t: 'settings', laps: +e.target.value }));
       // visual do kart muda na garagem -> os outros veem na hora
       Custom.onChange(() => { if (Net.connected) Net.send({ t: 'spec', spec: Custom.spec }); });
       // eventos da rede
@@ -56,6 +61,7 @@
       Net.on('left', m => { if (Game.online) Game.onlineLeft(m.id); });
       Net.on('results', m => Game.onlineResults(m.rows, m.cup));
       Net.on('bump', m => Game.netBump(m));
+      Net.on('item', m => { if (Game.online && window.Items) Items.onNet(m, id => (Game.rivals || []).find(k => k.netId === id && !k.gone)); });   // caixas e itens dos outros
       Net.on('kicked', () => { Net.room = null; Net.forget(); UI.toast('Você foi removido da sala', 2500); Game.leaveOnline(true); });
       Net.on('drop', () => this.onDrop());
       this.bootResume();
@@ -148,7 +154,7 @@
         const busy = r.state !== 'lobby', cup = r.mode === 'cup';
         const b = document.createElement('button'); b.type = 'button'; b.className = 'roomItem' + (this.selected === r.id ? ' on' : '') + (busy ? ' busy' : '') + (r.locked ? ' locked' : '');
         const where = cup ? CFG.CUP.name + ' · 3 pistas' : (CFG.TRACKS[r.track] ? CFG.TRACKS[r.track].name : '');
-        b.innerHTML = '<span class="lock" title="' + (r.locked ? 'Com senha' : 'Pública') + '">' + Icon.svg(r.locked ? 'lock' : 'online') + '</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(where) + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (busy ? ' · correndo' : r.locked ? ' · com senha' : ' · pública') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span>';
+        b.innerHTML = '<span class="lock" role="img" aria-label="' + (r.locked ? 'Com senha' : 'Pública') + '">' + Icon.svg(r.locked ? 'lock' : 'online') + '</span><span class="rn"><strong>' + esc(r.name) + '</strong><small>' + esc(where) + ' · ' + r.laps + (r.laps > 1 ? ' voltas' : ' volta') + (busy ? ' · correndo' : r.locked ? ' · com senha' : ' · pública') + '</small></span><span class="rp">' + r.players + '/' + r.max + '</span>';
         b.dataset.id = r.id; b.addEventListener('click', () => this.pick(r));
         box.appendChild(b);
       });
@@ -189,6 +195,24 @@
     toLobby() {
       UI.transition(() => { Podium.stop(); Game.online = null; Game.dispose(); Game.state = 'lobby'; UI.screen('lobby'); Showroom.setRig('menu'); this.renderLobby(Net.room); });
     },
+    // configuração da sala: cartão da pista com a MESMA imagem da tela "Preparar corrida" (foto ou traçado desenhado),
+    // modo em cartões e voltas com - / +. Quem não é o anfitrião vê tudo em modo leitura (sem setas nem - / +).
+    paintLobbySetup(r) {
+      const host = r.host === Net.id && r.state === 'lobby', cup = r.mode === 'cup', N = CFG.TRACKS.length, ti = Math.max(0, Math.min(N - 1, r.track | 0)), t = CFG.TRACKS[ti] || {};
+      $('lobbySetup').classList.toggle('ro', !host); $('lobbyStage').hidden = cup;
+      if (this._lbT !== ti) {
+        this._lbT = ti; const th = $('lobbyTrackThumb'), old = th.querySelector('img, canvas'); if (old) old.remove();
+        const src = UI.cards && UI.cards[ti] && UI.cards[ti].card.querySelector('img, canvas'); let pic = null;
+        if (src && src.tagName === 'CANVAS') { pic = document.createElement('canvas'); pic.width = src.width; pic.height = src.height; pic.getContext('2d').drawImage(src, 0, 0); }
+        else if (src || t.preview) { pic = document.createElement('img'); pic.alt = ''; pic.decoding = 'async'; pic.src = src ? (src.currentSrc || src.src) : t.preview; }
+        if (pic) th.prepend(pic);
+        $('lobbyTrackName').textContent = t.name || ''; $('lobbyTrackDesc').textContent = t.desc || '';
+      }
+      ['lobbyTrackPrev', 'lobbyTrackNext'].forEach(id => { $(id).hidden = !host || N < 2; });
+      $('lobbyModeSeg').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (cup ? 'cup' : 'single'); b.classList.toggle('on', on); b.setAttribute('aria-checked', on ? 'true' : 'false'); if (!b.classList.contains('soon')) b.tabIndex = host ? 0 : -1; });
+      $('lobbyLapVal').textContent = r.laps;
+      $('lobbyLapStep').querySelectorAll('button').forEach(b => { b.hidden = !host; });
+    },
     renderLobby(r) {
       if (!r) return; Net.room = r;
       const cup = r.mode === 'cup';
@@ -199,12 +223,11 @@
         li.innerHTML = '<i style="background:' + esc(p.spec.color) + '"></i><span class="pn">' + esc(p.name) + (p.id === Net.id ? ' <small>(você)</small>' : '') + '</span>' +
           (p.id === r.host ? '<span class="tag host">' + Icon.svg('crown') + ' anfitrião</span>' : '<span class="tag ' + (p.ready ? 'ok' : '') + '">' + (p.ready ? Icon.svg('check') + ' pronto' : 'esperando') + '</span>') +
           '<span class="ping">' + (p.away ? 'reconectando…' : (p.ping ? p.ping + ' ms' : '')) + '</span>';
-        if (host && p.id !== Net.id) { const k = document.createElement('button'); k.type = 'button'; k.className = 'kick'; k.innerHTML = Icon.svg('close'); k.title = 'Remover ' + p.name; k.addEventListener('click', () => Net.send({ t: 'kick', id: p.id })); li.appendChild(k); }
+        if (host && p.id !== Net.id) { const k = document.createElement('button'); k.type = 'button'; k.className = 'kick'; k.innerHTML = Icon.svg('close'); k.setAttribute('aria-label', 'Remover ' + p.name); k.addEventListener('click', () => Net.send({ t: 'kick', id: p.id })); li.appendChild(k); }
         ul.appendChild(li);
       });
       const free = r.max - r.players.length; if (free > 0) { const li = document.createElement('li'); li.className = 'free'; li.innerHTML = '<i></i><span class="pn">' + free + (free > 1 ? ' vagas livres' : ' vaga livre') + '</span>'; ul.appendChild(li); }
-      $('lobbyMode').value = cup ? 'cup' : 'single'; $('lobbyTrackField').hidden = cup;
-      $('lobbyTrack').value = r.track; $('lobbyLaps').value = r.laps; $('lobbyTrack').disabled = $('lobbyLaps').disabled = $('lobbyMode').disabled = !host;
+      this.paintLobbySetup(r);
       $('lobbyStart').textContent = cup ? 'Iniciar Copa' : 'Iniciar corrida';
       const others = r.players.filter(p => p.id !== r.host), allReady = others.every(p => p.ready);
       $('lobbyStart').hidden = !host; $('lobbyReady').hidden = host;
@@ -214,7 +237,7 @@
     },
     // ---------- sair / Esc ----------
     leave(force) {
-      const racing = Game.online && ['waiting', 'countdown', 'race', 'finish'].includes(Game.state);
+      const racing = Game.online && ['waiting', 'showcase', 'countdown', 'race', 'finish'].includes(Game.state);
       if (racing && !force) { if (window.Pause) Pause.open(); return; }          // nunca sai direto da corrida: abre a Pausa
       Net.send({ t: 'leave' }); Net.room = null; Net.forget(); Game.leaveOnline(true);
     },

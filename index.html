@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202610304600">
+<link rel="stylesheet" href="style.css?v=202611051400">
 <style>
   /* abertura do estúdio: fundo preto, logo centralizada (aparece rápido, some em fade out) */
   #boot.studio { background: #000; z-index: 40; }
@@ -80,7 +80,7 @@
   <div class="hudTR">
     <div id="clock" class="pill small"></div>
     <div class="hudBtns">
-      <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações" title="Configurações"><span class="ic" data-ic="gear"></span></button>
+      <button id="setBtn" class="pill btn icon" type="button" aria-label="Configurações"><span class="ic" data-ic="gear"></span></button>
       <button id="menuBtn" class="pill btn" type="button">Menu</button>
     </div>
   </div>
@@ -251,10 +251,32 @@
       <div><p class="eyebrow" id="lobbyEyebrow">Sala online</p><h2 id="lobbyName"></h2></div>
     </header>
     <ul id="lobbyPlayers" class="lobbyPlayers"></ul>
-    <div class="lobbySettings">
-      <label class="field"><span>Modo</span><select id="lobbyMode"><option value="single" selected>Corrida única</option><option value="cup" disabled>Copa Kartec — Em breve</option></select></label>
-      <label class="field" id="lobbyTrackField"><span>Pista</span><select id="lobbyTrack"></select></label>
-      <label class="field"><span>Voltas</span><select id="lobbyLaps"></select></label>
+    <!-- configuração da sala: o mesmo formato da tela "Preparar corrida" (pista com imagem, modo e voltas).
+         Só o anfitrião muda; os outros veem as escolhas dele (online.js: paintLobbySetup) -->
+    <div class="lobbySetup" id="lobbySetup">
+      <section class="trackStage lobbyStage" id="lobbyStage" aria-labelledby="lobbyTrackLbl">
+        <h3 id="lobbyTrackLbl" class="stageLbl">Pista</h3>
+        <div class="trackCard on lobbyTrackCard" id="lobbyTrackCard">
+          <div class="lbThumb" id="lobbyTrackThumb">
+            <button type="button" class="ghost lbArrow prev" id="lobbyTrackPrev" aria-label="Pista anterior">‹</button>
+            <button type="button" class="ghost lbArrow next" id="lobbyTrackNext" aria-label="Próxima pista">›</button>
+          </div>
+          <strong id="lobbyTrackName"></strong><span id="lobbyTrackDesc"></span>
+        </div>
+      </section>
+      <section class="optPanel lobbyOpts" aria-label="Regras da sala">
+        <div class="optRow">
+          <h3>Modo</h3>
+          <div class="seg" id="lobbyModeSeg" role="radiogroup" aria-label="Modo de jogo">
+            <button type="button" data-v="single" class="on" role="radio" aria-checked="true"><strong>Corrida única</strong><span>Uma pista, sem pressa</span></button>
+            <button type="button" data-v="cup" class="soon" role="radio" aria-checked="false" aria-disabled="true" disabled tabindex="-1"><strong>Copa Kartec <em class="soonBadge">Em breve</em></strong><span>3 pistas, menor tempo somado</span></button>
+          </div>
+        </div>
+        <div class="optRow">
+          <h3>Voltas</h3>
+          <div class="stepper" id="lobbyLapStep"><button type="button" class="ghost" data-d="-1" aria-label="Menos voltas">−</button><output id="lobbyLapVal">3</output><button type="button" class="ghost" data-d="1" aria-label="Mais voltas">+</button></div>
+        </div>
+      </section>
     </div>
     <p id="lobbyHint" class="note"></p>
     <div class="actions">
@@ -270,12 +292,12 @@
   <div class="sheet">
     <header><h2 id="setTitle">Configurações</h2><button class="close" type="button" data-close aria-label="Fechar"><span class="ic" data-ic="close"></span></button></header>
     <div class="seg mini" id="setTabs" role="tablist" aria-label="Configurações">
-      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true"><span class="ic" data-ic="sound"></span> Som</button>
-      <button type="button" data-v="gfx" role="tab" aria-selected="false"><span class="ic" data-ic="monitor"></span> Gráficos</button>
+      <button type="button" data-v="vol" class="on" role="tab" aria-selected="true" aria-label="Som"><span class="ic" data-ic="sound"></span></button>
+      <button type="button" data-v="gfx" role="tab" aria-selected="false" aria-label="Gráficos"><span class="ic" data-ic="monitor"></span></button>
     </div>
     <div id="setVol" class="block setPane"></div>
     <div id="setGfx" class="block setPane" hidden></div>
-    <div class="actions"><button class="cta" type="button" data-close>Pronto</button><button id="setReset" class="ghost" type="button">Restaurar padrão</button></div>
+    <div class="actions"><button id="setReset" class="ghost" type="button">Restaurar padrão</button><button class="cta" type="button" data-close>Pronto</button></div>
   </div>
 </div>
 
@@ -290,8 +312,8 @@
       <button id="pauseLeave" class="danger pauseAct" type="button" data-label="Sair da corrida">Sair da corrida</button>
       <!-- acesso secundário: só ajustes -->
       <div class="pauseSec">
-        <button id="pauseSettings" class="ghost" type="button"><span class="ic" data-ic="gear"></span> Configurações</button>
-        <button id="pauseHow" class="ghost" type="button"><span class="ic" data-ic="gamepad"></span> Como jogar</button>
+        <button id="pauseSettings" class="ghost" type="button">Configurações</button>
+        <button id="pauseHow" class="ghost" type="button">Como jogar</button>
       </div>
     </nav>
   </div>
@@ -462,7 +484,9 @@
     if (wb.length >= 4) { const s = wb.slice().sort((a, b) => a.c.z - b.c.z), lo = s.slice(0, 2), hi = s.slice(-2), rr = l => (l[0].r + l[1].r) / 2;
       frontZ = rr(hi) <= rr(lo) ? 1 : -1; }
     const camX = frontZ > 0 ? 1 : -1;                                    // câmera em +x: +z aparece à esquerda
-    const near = wb.filter(o => Math.sign(o.c.x) === camX || Math.abs(o.c.x) < 1e-3);
+    // rodas no eixo do meio (moto: uma trilha só) também ficam do lado da câmera; a caixa de cada roda não é
+    // perfeitamente simétrica (centro em x ≈ -0,0015) e a tolerância antiga (0,001) descartava a roda de trás
+    const near = wb.filter(o => Math.sign(o.c.x) === camX || Math.abs(o.c.x) < 0.25);
     // enquadramento: caixa do kart inteiro
     const B = new THREE.Box3(); g.traverse(o => { if (o.isMesh && o.visible) B.expandByObject(o); });
     const C = B.getCenter(new THREE.Vector3()), S = B.getSize(new THREE.Vector3()), pad = 1.08, hw = S.z / 2 * pad, hh = S.y / 2 * pad;
@@ -582,39 +606,39 @@
   check();
 })();
 </script>
-<script src="js/config.js?v=202610311838"></script>
+<script src="js/config.js?v=202611030900"></script>
 <script src="js/icons.js?v=202610300000"></script>
 <script src="js/audio.js?v=202610300000"></script>
 <script src="js/textures.js?v=202610312900"></script>
-<script src="js/toon.js?v=202610301500"></script>
-<script src="js/kart.js?v=202610313000"></script>
-<script src="js/models/materials.js?v=202610300000"></script>
-<script src="js/models/livery.js?v=202610300000"></script>
-<script src="js/models/pilot.js?v=202610300000"></script>
-<script src="js/models/karts.js?v=202610311600"></script>
-<script src="js/custom.js?v=202610301600"></script>
+<script src="js/toon.js?v=202611021300"></script>
+<script src="js/kart.js?v=202611030900"></script>
+<script src="js/models/materials.js?v=202611030900"></script>
+<script src="js/models/glb.js?v=202611020900"></script>   <!-- carrega os modelos novos: kart, motoca, menino e menina (assets/*.glb) -->
+<script src="js/models/pilot.js?v=202611021300"></script>
+<script src="js/models/karts.js?v=202611030900"></script>
+<script src="js/custom.js?v=202611030900"></script>
 <script src="js/ai.js?v=202610300000"></script>
-<script src="js/tracks.js?v=202610311850"></script>
+<script src="js/tracks.js?v=202611030900"></script>
 <script src="js/pines.js?v=202610312300"></script>
 <script src="js/props.js?v=202610310300"></script>
 <script src="js/scenery.js?v=202610311950"></script>
 <script src="js/net.js?v=202610300000"></script>
-<script src="js/online.js?v=202610301200"></script>
+<script src="js/online.js?v=202611051000"></script>
 <script src="js/logo.js?v=202610300000"></script>
 <script src="js/logo3d.js?v=202610310300"></script>   <!-- KARTEC da logo em 3D (assets/karttec_logo.glb) -->
 <script src="js/opening.js?v=202611010200"></script>   <!-- cutscene de abertura: drift em dupla, salto em câmera lenta e logo KARTEC -->
 <script src="js/ui.js?v=202610311500"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
 <script src="js/settings.js?v=202610311740"></script>
-<script src="js/patchnotes.js?v=202610300000"></script>
+<script src="js/patchnotes.js?v=202611051000"></script>
 <script src="js/showroom.js?v=202610301800"></script>   <!-- vitrine + garagem 3D (assets/garagem.glb) -->
-<script src="js/garage.js?v=202610301600"></script>
+<script src="js/garage.js?v=202611051000"></script>
 <script src="js/intro.js?v=202610300000"></script>
 <script src="js/podium.js?v=202610300000"></script>
 <script src="js/smoke.js?v=202610305800"></script>   <!-- fumaça fofa realista do jogo todo (escapamento, drift, poeira, giro da banana) -->
-<script src="js/items.js?v=202610311845"></script>   <!-- caixas de item, banana e dinossauro (tecla E) -->
+<script src="js/items.js?v=202611030900"></script>   <!-- caixas de item, banana e dinossauro (tecla E) -->
 <script src="js/postfx.js?v=202610311905"></script>   <!-- acabamento da imagem da corrida (contorno, brilho, cor, FXAA) -->
-<script src="js/main.js?v=202610311950"></script>
-<script src="js/cursor.js?v=202610300000"></script>
+<script src="js/main.js?v=202611030900"></script>
+<script src="js/cursor.js?v=202611051000"></script>
 </body>
 </html>

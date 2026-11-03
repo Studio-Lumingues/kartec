@@ -393,26 +393,20 @@ body[data-screen="lobby"] #brand { opacity: 0; }
 #touch .wh { display: none; }
 body.moto #touch .wh { display: inline-flex; align-items: center; justify-content: center; }
 
-/* ======================= CURSOR PERSONALIZADO =======================
-   Imagens 32 px + versão 2x para telas de alta densidade (image-set). O ponto ativo fica na ponta da seta
-   (3,2) e no centro do volante/texto (16,16). Se o navegador não aceitar uma forma, vale a anterior. */
-html, body, body > canvas, #trackList.cup .trackCard, .row, .card, .sheet, .lobbyCard { cursor: url("assets/cursors/arrow.png?v=202610290007") 3 2, default !important; cursor: -webkit-image-set(url("assets/cursors/arrow.png?v=202610290007") 1x, url("assets/cursors/arrow@2x.png?v=202610290007") 2x) 3 2, default !important; cursor: image-set(url("assets/cursors/arrow.png?v=202610290007") 1x, url("assets/cursors/arrow@2x.png?v=202610290007") 2x) 3 2, default !important; }
+/* ======================= CURSORES: pacote Windows 11 na cor da logo do Kartec =======================
+   As mesmas formas dos cursores do Windows 11 no modo "cor personalizada": preenchimento no vermelho da logo
+   (#E8213A) com contorno preto. Imagens 32 px + versão 2x para telas de alta densidade (image-set).
+   Ponto que clica: ponta da seta (2,2; seta sem rabinho e com cantos arredondados), ponta do dedo (8,1), meio do I (8,11), centro do proibido e do mover (11,11).
+   Se o navegador não aceitar uma forma, vale a anterior (e, no fim, o cursor do sistema). */
+html, body, body > canvas, #trackList.cup .trackCard, .row, .card, .sheet, .lobbyCard { cursor: url("assets/cursores/arrow.png?v=202611051400") 2 2, default !important; cursor: -webkit-image-set(url("assets/cursores/arrow.png?v=202611051400") 1x, url("assets/cursores/arrow@2x.png?v=202611051400") 2x) 2 2, default !important; cursor: image-set(url("assets/cursores/arrow.png?v=202611051400") 1x, url("assets/cursores/arrow@2x.png?v=202611051400") 2x) 2 2, default !important; }
 button, a, select, summary, label, [role="button"], [role="tab"], [role="radio"], .navBtn, .cta, .ghost, .gCard, .swatch, .tab, .gSwatch, .gArrow,
-.roomItem, .close, .kick, .code, .custom, input[type="color"], input[type="range"], input[type="checkbox"], .trackCard, #touch button { cursor: url("assets/cursors/hand.png?v=202610290007") 3 2, pointer !important; cursor: -webkit-image-set(url("assets/cursors/hand.png?v=202610290007") 1x, url("assets/cursors/hand@2x.png?v=202610290007") 2x) 3 2, pointer !important; cursor: image-set(url("assets/cursors/hand.png?v=202610290007") 1x, url("assets/cursors/hand@2x.png?v=202610290007") 2x) 3 2, pointer !important; }
-input[type="text"], input[type="password"], input[type="number"], input[type="search"], input:not([type]), textarea { cursor: url("assets/cursors/text.png?v=202610290007") 16 16, text !important; cursor: -webkit-image-set(url("assets/cursors/text.png?v=202610290007") 1x, url("assets/cursors/text@2x.png?v=202610290007") 2x) 16 16, text !important; cursor: image-set(url("assets/cursors/text.png?v=202610290007") 1x, url("assets/cursors/text@2x.png?v=202610290007") 2x) 16 16, text !important; }
-button:disabled, select:disabled, input:disabled, [aria-disabled="true"], .roomItem.busy { cursor: url("assets/cursors/no.png?v=202610290007") 3 2, not-allowed !important; cursor: -webkit-image-set(url("assets/cursors/no.png?v=202610290007") 1x, url("assets/cursors/no@2x.png?v=202610290007") 2x) 3 2, not-allowed !important; cursor: image-set(url("assets/cursors/no.png?v=202610290007") 1x, url("assets/cursors/no@2x.png?v=202610290007") 2x) 3 2, not-allowed !important; }
-body.dragging, body.dragging * { cursor: url("assets/cursors/grabbing.png?v=202610290007") 16 16, grabbing !important; cursor: -webkit-image-set(url("assets/cursors/grabbing.png?v=202610290007") 1x, url("assets/cursors/grabbing@2x.png?v=202610290007") 2x) 16 16, grabbing !important; cursor: image-set(url("assets/cursors/grabbing.png?v=202610290007") 1x, url("assets/cursors/grabbing@2x.png?v=202610290007") 2x) 16 16, grabbing !important; }
+.roomItem, .close, .kick, .code, .custom, input[type="color"], input[type="range"], input[type="checkbox"], .trackCard, #touch button { cursor: url("assets/cursores/link.png?v=202611051400") 8 1, pointer !important; cursor: -webkit-image-set(url("assets/cursores/link.png?v=202611051400") 1x, url("assets/cursores/link@2x.png?v=202611051400") 2x) 8 1, pointer !important; cursor: image-set(url("assets/cursores/link.png?v=202611051400") 1x, url("assets/cursores/link@2x.png?v=202611051400") 2x) 8 1, pointer !important; }
+.trackCard.lobbyTrackCard { cursor: url("assets/cursores/arrow.png?v=202611051400") 2 2, default !important; cursor: -webkit-image-set(url("assets/cursores/arrow.png?v=202611051400") 1x, url("assets/cursores/arrow@2x.png?v=202611051400") 2x) 2 2, default !important; cursor: image-set(url("assets/cursores/arrow.png?v=202611051400") 1x, url("assets/cursores/arrow@2x.png?v=202611051400") 2x) 2 2, default !important; }   /* cartão da pista no lobby: só mostra, não é clicável */
+input[type="text"], input[type="password"], input[type="number"], input[type="search"], input:not([type]), textarea { cursor: url("assets/cursores/text.png?v=202611051400") 8 11, text !important; cursor: -webkit-image-set(url("assets/cursores/text.png?v=202611051400") 1x, url("assets/cursores/text@2x.png?v=202611051400") 2x) 8 11, text !important; cursor: image-set(url("assets/cursores/text.png?v=202611051400") 1x, url("assets/cursores/text@2x.png?v=202611051400") 2x) 8 11, text !important; }
+button:disabled, select:disabled, input:disabled, [aria-disabled="true"], .roomItem.busy { cursor: url("assets/cursores/unavailable.png?v=202611051400") 11 11, not-allowed !important; cursor: -webkit-image-set(url("assets/cursores/unavailable.png?v=202611051400") 1x, url("assets/cursores/unavailable@2x.png?v=202611051400") 2x) 11 11, not-allowed !important; cursor: image-set(url("assets/cursores/unavailable.png?v=202611051400") 1x, url("assets/cursores/unavailable@2x.png?v=202611051400") 2x) 11 11, not-allowed !important; }
+body.dragging, body.dragging * { cursor: url("assets/cursores/move.png?v=202611051400") 11 11, move !important; cursor: -webkit-image-set(url("assets/cursores/move.png?v=202611051400") 1x, url("assets/cursores/move@2x.png?v=202611051400") 2x) 11 11, move !important; cursor: image-set(url("assets/cursores/move.png?v=202611051400") 1x, url("assets/cursores/move@2x.png?v=202611051400") 2x) 11 11, move !important; }   /* Garagem: arrastando o kart */
 /* durante a corrida o cursor some sozinho depois de 2 s parado (volta ao mexer o mouse) */
 body.cursorIdle, body.cursorIdle * { cursor: none !important; }
-
-/* clique: anel + faíscas na ponta do cursor (camada do compositor, não depende do quadro do jogo) */
-.cBurst { position: fixed; z-index: 10000; width: 0; height: 0; pointer-events: none; }
-.cBurst i { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--c, #ff4d9a); box-shadow: 0 0 0 2px #fff; animation: cRing .42s cubic-bezier(.2, .8, .3, 1) forwards; }
-.cBurst b { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 2px; background: var(--c, #ffd23f); box-shadow: 0 0 0 1.5px #0c0c0e; transform: rotate(var(--a)) translateY(-6px);
-  animation: cSpark .5s cubic-bezier(.15, .7, .3, 1) forwards; }
-@keyframes cRing { from { transform: scale(.25); opacity: 1; } to { transform: scale(1.25); opacity: 0; } }
-@keyframes cSpark { from { transform: rotate(var(--a)) translateY(-6px) scale(1); opacity: 1; } to { transform: rotate(var(--a)) translateY(-24px) scale(.3); opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .cBurst { display: none; } }
 
 /* ======================= CONFIGURAÇÕES ======================= */
 #setTabs { margin: 2px 0 12px; }
@@ -657,11 +651,11 @@ body { -webkit-touch-callout: none; }
    GARAGEM — carrossel de veículos + doca de cores
    Mesma linguagem dos botões do menu principal: papel (#fff -> #f6f5f2), tinta #000417, contorno de 4 px,
    cantos de 12 px, sombra "dura" para baixo, aba de cor que desliza no hover, sobe ao passar o mouse e
-   afunda ao clicar. Cor de destaque = amarelo do botão Garagem no menu (#FFC21A).
+   afunda ao clicar. Cor de destaque = vermelho da logo do Kartec (#E8213A).
    O veículo fica livre no centro: só as setas nas laterais e uma doca baixa no pé da tela.
    ===================================================================================== */
 #garage {
-  --ink: #000417; --ink-2: #4b4f63; --paper: #f6f5f2; --paper-hi: #ffffff; --accent: #FFC21A;
+  --ink: #000417; --ink-2: #4b4f63; --paper: #f6f5f2; --paper-hi: #ffffff; --accent: #E8213A;
   --g-r: 12px; --g-line: 4px solid var(--ink); --g-pop: 0 6px 0 var(--ink);
   --g-ease: cubic-bezier(.2, .9, .3, 1.15); --g-out: cubic-bezier(.55, 0, .7, .2); --g-t: .24s;
   position: fixed; inset: 0; z-index: 10; pointer-events: none; color: var(--ink); font-family: var(--ui);
@@ -742,7 +736,7 @@ body { -webkit-touch-callout: none; }
 }
 .gTab:not(:disabled):hover, .gTab:not(:disabled):focus-visible { translate: 0 -2px; box-shadow: 0 6px 0 var(--ink); }
 .gTab:not(:disabled):active { translate: 0 3px; box-shadow: 0 1px 0 var(--ink); transition-duration: .06s; }
-.gTab.on { background: var(--accent); }
+.gTab.on { background: var(--accent); color: #fff; }
 .gTab:disabled { background: #e9e9ee; color: #8a8c9c; border-color: #8a8c9c; box-shadow: 0 3px 0 #8a8c9c; }
 .gTab .soonBadge { padding: 2px 7px; font-size: 9.5px; letter-spacing: .4px; background: var(--ink); color: var(--paper-hi); }
 
@@ -752,7 +746,7 @@ body { -webkit-touch-callout: none; }
 .gParts { display: flex; justify-content: center; gap: 6px; margin-bottom: 9px; }
 .gPart { padding: 3px 12px 4px; border: 2.5px solid var(--ink); border-radius: 8px; background: transparent; color: var(--ink); font: 800 13px var(--ui);
   transition: background .18s ease, color .18s ease, translate var(--g-t) var(--g-ease); }
-.gPart:hover { translate: 0 -1px; background: rgba(255, 194, 26, .25); }
+.gPart:hover { translate: 0 -1px; background: rgba(232, 33, 58, .16); }
 .gPart.on { background: var(--ink); color: var(--paper-hi); }
 
 .gSwatches { display: flex; flex-wrap: wrap; justify-content: center; gap: 9px; }
@@ -1078,3 +1072,167 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 #menu .utilDock { transition: opacity .2s; }
 /* toque/celular: sem teclas na legenda dos botões */
 @media (hover: none), (max-width: 820px) { .setupFoot kbd, .modeTile .mtGo { display: none; } }
+
+/* =====================================================================================
+   PADRÃO ÚNICO DE BOTÕES: o mesmo dos botões da Garagem, em todas as telas (destaque = vermelho da logo, #E8213A)
+   Duas famílias, exatamente como na Garagem:
+   * AÇÃO (= .gBtn/.gArrow): papel branco, borda de tinta de 4px, cantos de 12px e sombra sólida. Ao passar o mouse
+     (ou focar pelo teclado/controle) ele sobe e a aba amarela desliza da direita; ao clicar ele afunda.
+     Menu principal (Jogar, Online, Garagem e utilitários), Configurações, Pausa, Online/Lobby, modais, fim de
+     corrida/pódio, "Pular" e botões do HUD. Botões pequenos de ícone usam o traço de 3px (como as abas da Garagem).
+   * OPÇÃO (= .gTab): mesma família com borda de 3px; a opção escolhida fica amarela.
+     Modo de jogo, dificuldade, abas (Online, Configurações), cartões de pista e salas do lobby.
+   As propriedades VISUAIS levam !important de propósito: o tema "vidro" dos modais/lobby usa seletores com força de ID
+   (:is(.modal, #lobby, ...)) e a tela de preparação usa #setup; sem isso cada tela continuaria com um botão diferente.
+   Tamanho e posição de cada botão continuam os de antes (a posição entra com especificidade zero; a animação usa
+   "translate", que soma com o "transform" que já existir). Ficam de fora os controles de toque da corrida (#touch),
+   as amostras de cor e a própria Garagem (a referência).
+   ===================================================================================== */
+:root {
+  --b-ink: #000417; --b-ink-2: #4b4f63; --b-paper: #f6f5f2; --b-paper-hi: #ffffff; --b-accent: #E8213A; --b-off: #8a8c9c;
+  --b-ease: cubic-bezier(.2, .9, .3, 1.15); --b-t: .24s;
+  --b-face: linear-gradient(180deg, var(--b-paper-hi), var(--b-paper));
+}
+/* ---------- AÇÃO ---------- */
+:where(.cta, .ghost, .danger, .skip, .modeTile, .utilBtn, .pill.btn, .close, .lobbyPlayers .kick, .lobbyCard .code) { position: relative; }
+.cta, .ghost, .danger, .skip, .modeTile, .utilBtn, .pill.btn, .close, .lobbyPlayers .kick, .lobbyCard .code {
+  isolation: isolate; color: var(--b-ink) !important; text-shadow: none !important; -webkit-text-stroke: 0 !important; filter: none !important;
+  background: var(--b-face) !important; border: 4px solid var(--b-ink) !important; border-radius: 12px !important; box-shadow: 0 6px 0 var(--b-ink) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; translate: 0 0;
+  transition: translate var(--b-t) var(--b-ease), box-shadow var(--b-t) var(--b-ease), background .2s ease, color .2s ease !important;
+}
+.ghost, .danger, .skip { font-family: var(--display); font-weight: 700; }
+.pill.btn, .close, .lobbyPlayers .kick, .lobbyCard .code { border-width: 3px !important; border-radius: 10px !important; box-shadow: 0 4px 0 var(--b-ink) !important; }
+/* aba amarela que desliza para dentro (fica atrás do texto) */
+.cta::after, .ghost::after, .danger::after, .skip::after, .modeTile::after, .utilBtn::after, .pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after {
+  content: "" !important; display: block !important; position: absolute !important; top: 0 !important; bottom: 0 !important; right: 0 !important; left: auto !important; width: 10px !important; height: auto !important;
+  z-index: -1 !important; opacity: 1 !important; pointer-events: none; background: var(--b-accent) !important; border: 0 !important; border-left: 3px solid var(--b-ink) !important;
+  border-radius: 0 8px 8px 0 !important; box-shadow: none !important; transform: scaleX(0) !important; transform-origin: right center !important; transition: transform var(--b-t) var(--b-ease) !important;
+}
+.pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { width: 7px !important; border-left-width: 2.5px !important; border-radius: 0 7px 7px 0 !important; }
+.modeTile::before, .mt-play .mtText::after { display: none !important; }   /* sem faixas e brilho de plástico: papel liso como na Garagem */
+/* sobe e mostra a aba (mouse, teclado e controle) */
+.cta:hover, .ghost:hover, .danger:hover, .skip:hover, .modeTile:hover, .utilBtn:hover, .cta:focus-visible, .ghost:focus-visible, .danger:focus-visible, .skip:focus-visible, .modeTile:focus-visible, .utilBtn:focus-visible { translate: 0 -3px !important; box-shadow: 0 9px 0 var(--b-ink) !important; background: var(--b-face) !important; }
+.pill.btn:hover, .close:hover, .lobbyPlayers .kick:hover, .lobbyCard .code:hover, .pill.btn:focus-visible, .close:focus-visible, .lobbyPlayers .kick:focus-visible, .lobbyCard .code:focus-visible { translate: 0 -2px !important; box-shadow: 0 6px 0 var(--b-ink) !important; background: var(--b-face) !important; }
+.cta:hover::after, .ghost:hover::after, .danger:hover::after, .skip:hover::after, .modeTile:hover::after, .utilBtn:hover::after, .pill.btn:hover::after, .close:hover::after, .lobbyPlayers .kick:hover::after, .lobbyCard .code:hover::after, .cta:focus-visible::after, .ghost:focus-visible::after, .danger:focus-visible::after, .skip:focus-visible::after, .modeTile:focus-visible::after, .utilBtn:focus-visible::after, .pill.btn:focus-visible::after, .close:focus-visible::after, .lobbyPlayers .kick:focus-visible::after, .lobbyCard .code:focus-visible::after { transform: scaleX(1) !important; }
+/* afunda no clique */
+.cta:active, .ghost:active, .danger:active, .skip:active, .modeTile:active, .utilBtn:active { translate: 0 3px !important; box-shadow: 0 2px 0 var(--b-ink) !important; transition-duration: .06s !important; }
+.pill.btn:active, .close:active, .lobbyPlayers .kick:active, .lobbyCard .code:active { translate: 0 3px !important; box-shadow: 0 1px 0 var(--b-ink) !important; transition-duration: .06s !important; }
+/* estes animavam o hover/clique com transform: agora é o mesmo translate da Garagem (sem somar os dois) */
+.cta:hover, .cta:focus-visible, .cta:active, .ghost:hover, .ghost:focus-visible, .ghost:active, .danger:hover, .danger:active { transform: none !important; }
+/* desativado (igual à aba desativada da Garagem) */
+.cta:disabled, .ghost:disabled, .danger:disabled, .skip:disabled, .modeTile:disabled, .utilBtn:disabled, .pill.btn:disabled, .close:disabled, .lobbyPlayers .kick:disabled, .lobbyCard .code:disabled, .cta[aria-disabled="true"], .ghost[aria-disabled="true"], .danger[aria-disabled="true"], .skip[aria-disabled="true"], .modeTile[aria-disabled="true"], .utilBtn[aria-disabled="true"], .pill.btn[aria-disabled="true"], .close[aria-disabled="true"], .lobbyPlayers .kick[aria-disabled="true"], .lobbyCard .code[aria-disabled="true"] {
+  background: #e9e9ee !important; color: var(--b-off) !important; border-color: var(--b-off) !important; box-shadow: 0 3px 0 var(--b-off) !important; translate: 0 0 !important;
+}
+.cta:disabled::after, .ghost:disabled::after, .danger:disabled::after, .skip:disabled::after, .modeTile:disabled::after, .utilBtn:disabled::after, .pill.btn:disabled::after, .close:disabled::after, .lobbyPlayers .kick:disabled::after, .lobbyCard .code:disabled::after, .cta[aria-disabled="true"]::after, .ghost[aria-disabled="true"]::after, .danger[aria-disabled="true"]::after, .skip[aria-disabled="true"]::after, .modeTile[aria-disabled="true"]::after, .utilBtn[aria-disabled="true"]::after, .pill.btn[aria-disabled="true"]::after, .close[aria-disabled="true"]::after, .lobbyPlayers .kick[aria-disabled="true"]::after, .lobbyCard .code[aria-disabled="true"]::after { display: none !important; }
+/* textos e teclas que eram brancos sobre cor passam a ser tinta sobre papel */
+.cta kbd, .ghost kbd, .skip kbd, .modeTile kbd { background: rgba(0, 4, 23, .08) !important; border-bottom-color: rgba(0, 4, 23, .3) !important; color: var(--b-ink) !important; text-shadow: none !important; }
+.modeTile strong, .mt-garage strong { color: var(--b-ink) !important; text-shadow: none !important; -webkit-text-stroke: 0 !important; }
+.modeTile small { color: var(--b-ink-2) !important; opacity: 1; }
+.danger { color: var(--red-deep, #c0122c) !important; }   /* ação destrutiva: o mesmo botão, só o texto em vermelho */
+/* confirmação com 2º toque (pausa / partida): tingida enquanto pisca */
+.ghost.pauseAct.armed, .danger.pauseAct.armed, .ghost.matchBtn.armed { background: #ffd9df !important; }
+
+/* ---------- OPÇÃO ---------- */
+.seg button, .tab, .trackCard, .roomItem {
+  color: var(--b-ink) !important; background: var(--b-paper-hi) !important; border: 3px solid var(--b-ink) !important; border-radius: 10px !important; box-shadow: 0 4px 0 var(--b-ink) !important;
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; text-shadow: none !important; translate: 0 0; animation: none !important; filter: none !important;
+  transition: translate var(--b-t) var(--b-ease), box-shadow var(--b-t) var(--b-ease), background .2s ease !important;
+}
+.seg button:not(:disabled):not(.soon):hover, .seg button:not(:disabled):not(.soon):focus-visible, .tab:hover, .tab:focus-visible,
+.trackCard:hover, .trackCard:focus-visible, .roomItem:hover, .roomItem:focus-visible {
+  transform: none !important; translate: 0 -2px !important; box-shadow: 0 6px 0 var(--b-ink) !important; background: var(--b-paper-hi) !important; outline: none;
+}
+.seg button:not(:disabled):not(.soon):active, .tab:active, .trackCard:active, .roomItem:active { transform: none !important; translate: 0 3px !important; box-shadow: 0 1px 0 var(--b-ink) !important; transition-duration: .06s !important; }
+.seg button.on, .tab.on, .trackCard.on, .roomItem.on, .seg button.on:hover, .tab.on:hover, .trackCard.on:hover, .roomItem.on:hover,
+.seg button.on:focus-visible, .trackCard.on:focus-visible { background: var(--b-accent) !important; color: #fff !important; animation: none !important; }
+.seg button.on span, .seg button.on strong, .trackCard.on strong, .trackCard.on span, .trackCard.on em, .roomItem.on, .roomItem.on small { color: #fff !important; }
+.seg button.on span, .trackCard.on span, .roomItem.on small { color: rgba(255, 255, 255, .86) !important; }
+.seg button.soon, .seg button:disabled { background: #e9e9ee !important; color: var(--b-off) !important; border-color: var(--b-off) !important; box-shadow: 0 3px 0 var(--b-off) !important; filter: none !important; translate: 0 0 !important; }
+.roomItem.busy { opacity: .6; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cta, .ghost, .danger, .skip, .modeTile, .utilBtn, .pill.btn, .close, .lobbyPlayers .kick, .lobbyCard .code, .seg button, .tab, .trackCard, .roomItem { transition: none !important; }
+  .cta::after, .ghost::after, .danger::after, .skip::after, .modeTile::after, .utilBtn::after, .pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { transition: none !important; }
+}
+
+/* =====================================================================================
+   AJUSTES DE UI: pausa, configurações e ícones
+   ===================================================================================== */
+/* botões pequenos e de ícone (canto do menu, X, HUD, expulsar, código da sala): sem a aba colorida
+   (continuam subindo no hover e afundando no clique) */
+.utilBtn::after, .close::after, .pill.btn::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { display: none !important; }
+
+/* ícones do canto do menu no MESMO desenho dos blocos Jogar/Online/Garagem (traço preto, miolo branco);
+   o botão de configurações do HUD segue igual */
+.utilBtn .ic, #setBtn .ic { display: inline-block; flex: none; vertical-align: middle; background: center / contain no-repeat; }
+.utilBtn .ic > *, #setBtn .ic > * { display: none !important; }
+.utilBtn .ic { width: 34px; height: 34px; }
+#setBtn .ic { width: 22px; height: 22px; }
+#btnSettings .ic, #setBtn .ic { background-image: url("assets/configuracoes.png?v=202611031200"); }
+#btnNotes .ic { background-image: url("assets/patchnotes.png?v=202611031200"); }
+#btnHow .ic { background-image: url("assets/comojogar.png"); }
+
+/* pausa: todos os botões do tamanho do "Continuar" (mesma caixa, mesma fonte, texto à esquerda) */
+#pauseModal .pauseNav > button, #pauseModal .pauseSec > button {
+  box-sizing: border-box; width: 100%; min-height: 76px; margin: 0; padding: 12px 26px 14px;
+  display: flex; align-items: center; justify-content: flex-start; gap: 14px; text-align: left; white-space: normal;
+  font: 700 clamp(22px, 7.2vw, 32px)/1.15 var(--display); letter-spacing: .5px;
+}
+#pauseModal #pauseResume { justify-content: space-between; }
+
+/* configurações: abas só com ícone (o nome fica no title/aria-label), no mesmo desenho de traço preto do jogo */
+#setTabs button { justify-content: center; align-items: center; min-height: 54px; padding: 8px; gap: 0; }
+#setTabs .ic { display: block; width: 34px; height: 34px; background: center / contain no-repeat; }
+#setTabs .ic > * { display: none !important; }
+#setTabs [data-v="vol"] .ic { background-image: url("assets/som.svg?v=202611041000"); }
+#setTabs [data-v="gfx"] .ic { background-image: url("assets/graficos.svg?v=202611041000"); }
+
+/* configurações: barra de volume numa cor só (vermelho da logo) e a bolinha sem cortar nas bordas do painel */
+.slider { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) 48px; min-width: 0; }
+.slider input[type="range"] { box-sizing: border-box; width: 100%; min-width: 0; margin: 7px 0;
+  background: linear-gradient(var(--b-accent), var(--b-accent)) 0 0 / var(--p, 50%) 100% no-repeat, #fff; }
+.slider input[type="range"]:focus-visible { box-shadow: 0 0 0 4px rgba(232, 33, 58, .3); }
+.setPane { padding: 8px 14px 12px 6px; overflow-x: hidden; }
+
+/* configurações: "Restaurar padrão" (à esquerda) e "Pronto" (à direita) com o mesmo tamanho */
+#settingsModal .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
+#settingsModal .actions > button {
+  box-sizing: border-box; width: 100%; min-width: 0; min-height: 66px; margin: 0; padding: 10px 14px 12px; flex: none;
+  display: flex; align-items: center; justify-content: center; text-align: center; white-space: normal;
+  font: 700 clamp(16px, 1.9vw, 24px)/1.1 var(--display); letter-spacing: .4px;
+}
+
+/* botão de remover jogador (lobby): X no centro exato */
+.lobbyPlayers .kick { display: grid !important; place-items: center; padding: 0 !important; line-height: 0; }
+.lobbyPlayers .kick .icn { display: block; width: 16px; height: 16px; margin: 0; }
+
+/* =====================================================================================
+   LOBBY ONLINE: configuração da sala no mesmo formato da tela "Preparar corrida"
+   (pista com imagem à esquerda; modo e voltas à direita; em tela estreita, um embaixo do outro)
+   ===================================================================================== */
+.lobbyCard { width: min(820px, 100%); }
+.lobbySetup { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(250px, 1fr); gap: 14px; margin: 6px 0 2px; align-items: start; }
+.lobbySetup .lobbyStage { gap: 8px; }
+.lobbySetup .lobbyStage[hidden] { display: none; }
+.lobbyTrackCard { display: grid; grid-template-columns: 1fr; gap: 4px; padding: 10px 10px 14px !important; border-radius: 18px !important; text-align: left; cursor: default; }
+.lobbyTrackCard:hover { translate: 0 0 !important; box-shadow: 0 4px 0 var(--b-ink) !important; }
+.lbThumb { position: relative; width: 100%; aspect-ratio: 5 / 3; margin-bottom: 8px; border-radius: 10px; overflow: hidden;
+  background: rgba(255, 255, 255, .35); box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9), 0 6px 18px rgba(16, 14, 60, .22); }
+.lbThumb img, .lbThumb canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
+.lobbyTrackCard strong { padding: 0 6px; font: 700 24px/1.05 var(--display); letter-spacing: .3px; }
+.lobbyTrackCard span { padding: 0 6px; font-size: 13px; line-height: 1.35; font-weight: 700; }
+.lbArrow { position: absolute !important; top: calc(50% - 22px); z-index: 2; width: 44px; height: 44px; padding: 0 !important;
+  display: grid; place-items: center; font: 700 30px/1 var(--display) !important; }
+.lbArrow.prev { left: 10px; } .lbArrow.next { right: 10px; }
+.lbArrow[hidden] { display: none !important; }
+.lobbyOpts { gap: 10px; }
+.lobbySetup .optRow h3 { margin: 0 0 8px; font: 700 18px var(--display); color: var(--ink); }
+.lobbySetup .seg button strong { font-size: 17px; }
+.lobbySetup .stepper { justify-content: space-between; gap: 12px; }
+.lobbySetup .stepper .ghost { width: 52px; height: 52px; font-size: 26px; }
+.lobbySetup .stepper .ghost[hidden] { display: none !important; }
+.lobbySetup .stepper output { flex: 1; text-align: center; font: 700 40px/1 var(--display); color: var(--ink); }
+.lobbySetup.ro .seg button { pointer-events: none; }                 /* quem não é o anfitrião só vê as escolhas */
+.lobbySetup.ro .stepper { justify-content: center; }
+@media (max-width: 760px) { .lobbySetup { grid-template-columns: minmax(0, 1fr); } .lobbyTrackCard strong { font-size: 20px; } }

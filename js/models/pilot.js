@@ -1,131 +1,95 @@
 // =====================================================================================
-// models/pilot.js — piloto 3D (modelo "meshy-model" otimizado e com esqueleto)
+// models/pilot.js — pilotos 3D: Menino e Menina (assets/menino.glb e assets/menina.glb)
 //
-// O arquivo original (430 mil triângulos, 3 texturas 2048², 17,8 MB, sem esqueleto) passou por um
-// pipeline offline: decimação que preserva as UVs (18 mil triângulos), texturas reduzidas (1024/512)
-// e um esqueleto de 14 ossos com pesos suavizados (quadril, coluna, peito, cabeça, braços e pernas).
-// Resultado: assets/pilot.glb (~1 MB). Para rodar abrindo o index.html direto (file://), onde o
-// fetch() é bloqueado, existe a cópia assets/pilot.glb.js (o mesmo arquivo em base64).
+// Os arquivos vêm em pose T e SEM esqueleto. Ao carregar, cada personagem ganha um esqueleto de 18 ossos
+// (+ 2 nas marias-chiquinhas da menina) montado sobre as medidas da própria malha (ombro, cotovelo, punho,
+// dedos, quadril, joelho, tornozelo, pescoço) e pesos suaves calculados por região do corpo. Os .glb não
+// são alterados: tudo acontece aqui, uma vez por personagem.
 //
-// Pose: o modelo é "em pé"; a pose sentada é montada em tempo real com IK de dois ossos:
-//   mãos -> pegadores do volante/guidão (giram junto com o volante) | pés -> pedais/pedaleiras.
-// Cada modelo de kart informa onde ficam assento, volante e pedais (COCKPIT); o piloto se ajusta.
-// Cores: o shader troca o vermelho da roupa (corpo) e do capacete (cabeça) e o tom de pele.
+// Pose sentada montada em tempo real com IK de dois ossos:
+//   mãos -> pegadores do volante (giram junto com o volante) / manoplas da moto | pés -> pedais / pedaleiras.
+// Pegada "certinha": a mão é orientada pela barra (polegar ao longo do aro ou da manopla, punho reto seguindo
+// o antebraço), o ponto do punho é calculado para o centro da mão fechada cair EXATAMENTE na barra, a torção
+// sobra para o antebraço (o punho não entorta) e os dedos fecham em volta da barra.
+// Cada modelo de kart informa banco, pegadores, pés e a postura (COCKPIT); o piloto se ajusta.
+// Cores: o shader troca o vermelho da roupa (corpo) e do capacete (cabeça) e o tom de pele mantendo o
+// sombreado da textura. O cabelo da menina fica de fora.
+// Cabelo da menina: cada maria-chiquinha tem base e ponta (dobra como chicote). O vento joga o cabelo para trás
+// conforme a velocidade (e de lado no drift), ele tremula em alta velocidade e balança com curvas, freadas e saltos.
 // Visual: material toon de 3 tons + contorno de tinta (Toon.outline acompanha o esqueleto).
 // Se o arquivo não carregar, entra um piloto procedural simples com a mesma interface.
 // =====================================================================================
 (function () {
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
-  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _q = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _m = new THREE.Matrix4();
-  // temporários do IK (reaproveitados em todo quadro)
-  // física da antena: constantes (rigidez K, amortecimento C, ganho da inércia G...) e vetores reaproveitados
-  // D = arrasto do vento (proporcional a v²): com o kart andando, a haste deita para trás; FLUT = tremidinha com a velocidade
-  const ANT = { K: 70, C: 6.5, G: 0.55, D: 0.026, FLUT: 0.9, MAX: 0.9, WHIP: 0.03, MAXA: 140, FILTER: 18 };
-  const _ant = { p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), l: new THREE.Vector3(), vl: new THREE.Vector3(), q: new THREE.Quaternion() };
-  const _L = { S: new THREE.Vector3(), T: new THREE.Vector3(), E: new THREE.Vector3(), pole: new THREE.Vector3(), pq: new THREE.Quaternion(), rq: new THREE.Quaternion(), q1: new THREE.Quaternion(), q2: new THREE.Quaternion() };
+  const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _m = new THREE.Matrix4(), _mb = new THREE.Matrix4();
+  const _L = { S: new THREE.Vector3(), G: new THREE.Vector3(), W: new THREE.Vector3(), E: new THREE.Vector3(), t: new THREE.Vector3(), d: new THREE.Vector3(), f: new THREE.Vector3(), bk: new THREE.Vector3(), x: new THREE.Vector3(), pole: new THREE.Vector3(),
+    q: new THREE.Quaternion(), rq: new THREE.Quaternion(), rqi: new THREE.Quaternion(), pq: new THREE.Quaternion(), q1: new THREE.Quaternion(), q2: new THREE.Quaternion(), qh: new THREE.Quaternion(), qi: new THREE.Quaternion(), tw: new THREE.Quaternion(), qf: new THREE.Quaternion() };
+  const _P = { p: new THREE.Vector3(), v: new THREE.Vector3(), a: new THREE.Vector3(), l: new THREE.Vector3(), g: new THREE.Vector3(), vl: new THREE.Vector3(), q: new THREE.Quaternion() };
+  const AX = V3(1, 0, 0), AZ = V3(0, 0, 1), QI = new THREE.Quaternion();
+  const ACCESSORIES = [{ id: 'none', name: 'Nenhum', icon: 'none' }];   // acessórios saíram do jogo (interface mantida)
 
-  // ---------- acessórios (registro expansível: cada item monta sua malha presa ao osso da cabeça) ----------
-  // coordenadas no espaço do modelo em pé (medidas no GLB): topo do capacete em (0; 0,95; 0,05),
-  // testa do capacete em y ≈ 0,68 com a superfície em z ≈ 0,50 (centro aproximado da cúpula em (0; 0,4; 0))
+  // ---------- medidas de cada personagem (espaço do .glb: frente +x, cima +y, direita do personagem +z) ----------
+  // sh/el/wr/kn = ombro, cotovelo, punho, base dos dedos | grip = centro da mão fechada (onde passa a barra)
+  // hip/knee/ank = quadril, joelho, tornozelo | head = pescoço (pivô da cabeça) | armR = raio do braço
+  const CHARS = {
+    menino: { name: 'Menino', node: 'Menino', lm: {
+      hips: [0, -0.19, 0], spine: [0, -0.12, 0], chest: [0, -0.05, 0], head: [0, 0.04, 0],
+      sh: [0, -0.03, 0.145], el: [0, -0.033, 0.228], wr: [0, -0.035, 0.31], kn: [0, -0.035, 0.395], grip: [0.005, -0.06, 0.385],
+      hip: [0, -0.2, 0.065], knee: [0, -0.29, 0.075], ank: [0, -0.385, 0.085], armR: 0.05 } },
+    menina: { name: 'Menina', node: 'Corpo', pigs: ['MariaChiquinha_L', 'MariaChiquinha_R'], lm: {
+      hips: [0.03, -0.19, 0], spine: [0.03, -0.12, 0], chest: [0.03, -0.05, 0], head: [0.03, 0.04, 0],
+      sh: [0.028, -0.02, 0.145], el: [0.028, -0.022, 0.225], wr: [0.028, -0.025, 0.3], kn: [0.03, -0.025, 0.383], grip: [0.035, -0.05, 0.375],
+      hip: [0.012, -0.2, 0.07], knee: [0.012, -0.29, 0.08], ank: [0.015, -0.385, 0.09], armR: 0.05 } }
+  };
+  const CHAR_IDS = Object.keys(CHARS);
+  // ossos: [nome, pai, marco, lado no .glb (-1 = esquerda do personagem = -z)]
+  const BONES = [['hips', null, 'hips'], ['spine', 'hips', 'spine'], ['chest', 'spine', 'chest'], ['head', 'chest', 'head'],
+    ['upperarm_L', 'chest', 'sh', -1], ['forearm_L', 'upperarm_L', 'el', -1], ['hand_L', 'forearm_L', 'wr', -1], ['fingers_L', 'hand_L', 'kn', -1],
+    ['upperarm_R', 'chest', 'sh', 1], ['forearm_R', 'upperarm_R', 'el', 1], ['hand_R', 'forearm_R', 'wr', 1], ['fingers_R', 'hand_R', 'kn', 1],
+    ['thigh_L', 'hips', 'hip', -1], ['shin_L', 'thigh_L', 'knee', -1], ['foot_L', 'shin_L', 'ank', -1],
+    ['thigh_R', 'hips', 'hip', 1], ['shin_R', 'thigh_R', 'knee', 1], ['foot_R', 'shin_R', 'ank', 1]];
+  const BI = {}; BONES.forEach((b, i) => BI[b[0]] = i);
+  const CURL = 1.3, TWIST = 0.85;      // fechamento dos dedos (rad) e fração da torção da mão que vai para o antebraço
+  // .glb (frente +x, direita +z) -> espaço do piloto/kart (frente +z, esquerda +x)
+  const R_GLB = new THREE.Matrix4().set(0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+  const toP = a => V3(-a[2], a[1], a[0]);
+  const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
-  // mapa de ambiente minúsculo (cubo 32² desenhado em canvas: céu claro, faixa de horizonte e chão escuro),
-  // compartilhado por todas as lentes espelhadas -> reflexo convincente sem PMREM nem render-to-cube
-  let mirrorEnv = null;
-  function getMirrorEnv() {
-    if (mirrorEnv) return mirrorEnv;
-    const face = kind => { const c = TX.cvs(32, 32), g = c.getContext('2d');
-      if (kind === 'top') { g.fillStyle = '#eaf6ff'; g.fillRect(0, 0, 32, 32); }
-      else if (kind === 'bottom') { g.fillStyle = '#1c2230'; g.fillRect(0, 0, 32, 32); }
-      else { const gr = g.createLinearGradient(0, 0, 0, 32); gr.addColorStop(0, '#9fd4ff'); gr.addColorStop(0.45, '#ffffff'); gr.addColorStop(0.52, '#3a4660'); gr.addColorStop(1, '#141a26'); g.fillStyle = gr; g.fillRect(0, 0, 32, 32); }
-      return c; };
-    mirrorEnv = new THREE.CubeTexture([face('side'), face('side'), face('top'), face('bottom'), face('side'), face('side')]);
-    mirrorEnv.needsUpdate = true; return mirrorEnv;
+  // pesos de um vértice (coordenadas do .glb) -> lista [osso, peso]
+  function vertexWeights(x, y, z, lm) {
+    const sd = z < 0 ? '_L' : '_R', az = Math.abs(z), out = [];
+    const put = (n, w) => { if (w > 1e-4) out.push([BI[n + (n === 'hips' || n === 'spine' || n === 'chest' || n === 'head' ? '' : sd)], w]); };
+    // braço: começa no ombro e vai até a ponta dos dedos; perto do ombro só o "tubo" do braço (o capacete fica de fora)
+    const shz = lm.sh[2], wz = lm.wr[2], tt = Math.max(0, Math.min(1, (az - shz) / (wz - shz)));
+    const ax = lm.sh[0] + (lm.wr[0] - lm.sh[0]) * tt, ay = lm.sh[1] + (lm.wr[1] - lm.sh[1]) * tt, dxy = Math.hypot(x - ax, y - ay);
+    let A = sstep(shz - 0.035, shz + 0.02, az) * (az > wz - 0.02 ? 1 : 1 - sstep(lm.armR + 0.005, lm.armR + 0.02, dxy)) * (1 - sstep(0.035, 0.055, y));
+    if (y < -0.15) A = 0;
+    // pernas: abaixo da virilha
+    const Lg = 1 - sstep(lm.hip[1] - 0.035, lm.hip[1] + 0.025, y);
+    // tronco e cabeça
+    const wH = 1 - sstep(lm.spine[1] - 0.03, lm.spine[1] + 0.01, y), wC = sstep(lm.chest[1] - 0.03, lm.chest[1] + 0.01, y), wS = Math.max(0, 1 - wH - wC);
+    const Hd = sstep(lm.head[1] - 0.005, lm.head[1] + 0.03, y), T = Math.max(0, 1 - A - Lg);
+    put('hips', T * wH * (1 - Hd)); put('spine', T * wS * (1 - Hd)); put('chest', T * wC * (1 - Hd)); put('head', T * Hd);
+    if (A > 0) { const e1 = sstep(lm.el[2] - 0.025, lm.el[2] + 0.025, az), e2 = sstep(wz - 0.012, wz + 0.018, az), e3 = sstep(lm.kn[2] - 0.01, lm.kn[2] + 0.012, az);
+      put('upperarm', A * (1 - e1)); put('forearm', A * e1 * (1 - e2)); put('hand', A * e2 * (1 - e3)); put('fingers', A * e3); }
+    if (Lg > 0) { const k1 = 1 - sstep(lm.knee[1] - 0.025, lm.knee[1] + 0.025, y), k2 = 1 - sstep(lm.ank[1] - 0.02, lm.ank[1] + 0.02, y);
+      put('thigh', Lg * (1 - k1)); put('shin', Lg * k1 * (1 - k2)); put('foot', Lg * k2); }
+    return out;
   }
-  // superelipse (|x/a|^n + |y/b|^n = 1): quadrado de cantos bem arredondados, como os óculos de aviador
-  function superPts(a, b, n, seg) { const out = []; for (let i = 0; i < seg; i++) { const t = i / seg * Math.PI * 2, c = Math.cos(t), s = Math.sin(t);
-    out.push(new THREE.Vector2(Math.sign(c) * Math.pow(Math.abs(c), 2 / n) * a, Math.sign(s) * Math.pow(Math.abs(s), 2 / n) * b)); } return out; }
-  // lente curva: grade regular deformada para o contorno da superelipse e abaulada (domo)
-  function lensGeo(a, b, n, bulge) {
-    const g = new THREE.PlaneGeometry(2, 2, 14, 14), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const u = p.getX(i), v = p.getY(i), r = Math.max(Math.abs(u), Math.abs(v));
-      if (r < 1e-6) { p.setXYZ(i, 0, 0, bulge); continue; }
-      const t = Math.atan2(v, u), c = Math.cos(t), s = Math.sin(t), rs = Math.pow(Math.pow(Math.abs(c), n) + Math.pow(Math.abs(s), n), -1 / n);
-      const x = c * r * rs * a, y = s * r * rs * b; p.setXYZ(i, x, y, bulge * (1 - Math.min(1, (x * x) / (a * a) + (y * y) / (b * b)) * 0.85)); }
-    g.computeVertexNormals(); return g;
-  }
 
-  const ACCESSORIES = [
-    { id: 'none', name: 'Nenhum', icon: 'none' },
-    // óculos de corrida estilo aviador: armação dourada em quadrado arredondado com entalhes, concha de
-    // borracha atrás, lente curva espelhada (MeshPhysicalMaterial + envMap), ponte com rebites e tira de couro
-    { id: 'goggles', name: 'Óculos de corrida', icon: 'goggles', build() {
-      const g = new THREE.Group();
-      const gold = KartMats.std(0xd9a441, 0.2, 0.9, { sat: 0 }), rubber = KartMats.std(0x1c1a1e, 0.85, 0, { sat: 0 }), leather = KartMats.std(0x6b3f22, 0.8, 0, { sat: 0 });
-      const lens = new THREE.MeshPhysicalMaterial({ color: 0x5fb8ff, metalness: 0.92, roughness: 0.06, envMap: getMirrorEnv(), envMapIntensity: 1.35, clearcoat: 1, clearcoatRoughness: 0.04 });
-      lens.userData.unique = true;
-      const A = 0.125, B = 0.105, N = 4.2;
-      const frameShape = new THREE.Shape(superPts(A, B, N, 48)); frameShape.holes.push(new THREE.Path(superPts(A * 0.78, B * 0.76, N, 48).reverse()));
-      const frameG = new THREE.ExtrudeGeometry(frameShape, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.01, bevelSegments: 2, curveSegments: 4 });
-      const cupG = new THREE.ExtrudeGeometry(new THREE.Shape(superPts(A * 1.06, B * 1.08, N, 40)), { depth: 0.06, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.012, bevelSegments: 2 });
-      const lensG = lensGeo(A * 0.8, B * 0.78, N, 0.035), notchG = GEO.rbox(0.03, 0.022, 0.03, 0.006, 1);
-      [-1, 1].forEach(sd => {
-        const cup = new THREE.Group(); cup.position.set(sd * 0.168, 0.68, 0.515); cup.rotation.order = 'YXZ'; cup.rotation.set(-0.5, sd * 0.33, 0); g.add(cup);
-        const back = new THREE.Mesh(cupG, rubber); back.position.z = -0.07; cup.add(back);                       // concha de borracha (encosta no capacete)
-        const fr = new THREE.Mesh(frameG, gold); cup.add(fr);
-        for (let k = 0; k < 8; k++) { const t = (k + 0.5) / 8 * Math.PI * 2, c = Math.cos(t), s2 = Math.sin(t);  // entalhes escuros na borda da armação
-          const nt = new THREE.Mesh(notchG, rubber); nt.position.set(Math.sign(c) * Math.pow(Math.abs(c), 2 / N) * A * 0.98, Math.sign(s2) * Math.pow(Math.abs(s2), 2 / N) * B * 0.98, 0.03); nt.rotation.z = t; cup.add(nt); }
-        const l = new THREE.Mesh(lensG, lens); l.position.z = 0.012; cup.add(l);
-        // presilha lateral que liga a armação à tira
-        const clip = new THREE.Mesh(GEO.rbox(0.05, 0.06, 0.05, 0.012, 1), gold); clip.position.set(sd * A * 1.05, 0, -0.02); cup.add(clip);
-      });
-      // ponte entre as lentes com dois rebites
-      const br = new THREE.Mesh(GEO.rbox(0.09, 0.045, 0.04, 0.015, 1), gold); br.position.set(0, 0.69, 0.545); br.rotation.x = -0.5; g.add(br);
-      [-1, 1].forEach(sd => { const r = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 4), rubber); r.position.set(sd * 0.025, 0.695, 0.566); g.add(r); });
-      // tira de couro: anel achatado inclinado em volta do capacete (alta na testa, baixa na nuca)
-      const strapG = new THREE.TorusGeometry(0.578, 0.018, 6, 64); strapG.rotateX(Math.PI / 2); strapG.scale(1, 2.6, 1);
-      const strap = new THREE.Mesh(strapG, leather); strap.position.set(0, 0.5, 0.02); strap.rotation.x = -0.28; g.add(strap);
-      return g; } },
-    // antena com estrela no topo central do capacete. Dois segmentos articulados (base -> meio -> ponta):
-    // o pai de cada segmento é a junta anterior, então o balanço da base arrasta o resto (efeito chicote).
-    // A física fica em PilotRig.antennaStep(); a estrela NÃO gira mais: acompanha só a haste.
-    { id: 'antenna', name: 'Antena com estrela', icon: 'antenna', build(color) {
-      const g = new THREE.Group(), rodM = KartMats.std(0x30323a, 0.4, 0.5), tipM = KartMats.std(color, 0.3, 0.4, { emissive: new THREE.Color(color).multiplyScalar(0.25) });
-      const base = new THREE.Group(); base.position.set(0, 0.935, 0.05); g.add(base);                      // pivô: topo central do capacete
-      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), rodM); base.add(socket);
-      const L1 = 0.3, L2 = 0.26;
-      const j1 = new THREE.Group(); base.add(j1);
-      const r1 = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.022, L1, 8).translate(0, L1 / 2, 0), rodM); j1.add(r1);
-      const j2 = new THREE.Group(); j2.position.y = L1; j1.add(j2);
-      const r2 = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.016, L2, 8).translate(0, L2 / 2, 0), rodM); j2.add(r2);
-      const knot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 8, 6), rodM); knot.position.y = L1; j1.add(knot);
-      const st = new THREE.Shape(); for (let k = 0; k < 10; k++) { const a = Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 0.06 : 0.14; k ? st.lineTo(Math.cos(a) * r, Math.sin(a) * r) : st.moveTo(Math.cos(a) * r, Math.sin(a) * r); }
-      const starG = new THREE.ExtrudeGeometry(st, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.015, bevelSize: 0.015, bevelSegments: 2 }); starG.translate(0, 0, -0.02);
-      const star = new THREE.Mesh(starG, tipM); star.position.y = L2 + 0.11; j2.add(star);                 // estrela fixa, de frente, na ponta da haste
-      g.userData.antenna = { base, j1, j2 };
-      return g; } }
-  ];
-
-  // A textura do piloto é de cores chapadas (vermelho = roupa/capacete, bege = pele, preto, branco).
-  // A troca de cor é feita em CADA texel antes da filtragem: lemos os 4 texels vizinhos exatamente no
-  // centro (valor puro, sem mistura), recolorimos cada um e só então interpolamos (bilinear manual).
-  // Antes a recoloração era feita depois da filtragem e com máscaras de matiz + uma "caixa do rosto":
-  // as bordas misturadas (pele+preto, pele+vermelho) e a testa (fora da caixa) ficavam com a pele
-  // original, e o rosto saía manchado de laranja quando o tom de pele era trocado.
-  const RECOLOR_FS = [
-    'uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform vec2 uTexSize; varying vec3 vBind;',
-    'vec3 pilotRecolor(vec3 c, float head) {',
-    '  float wR = 1.0 - smoothstep(0.12, 0.24, distance(c, vec3(0.925, 0.110, 0.141)));',   // vermelho da roupa/capacete
-    '  float wK = 1.0 - smoothstep(0.10, 0.20, distance(c, vec3(0.957, 0.729, 0.557)));',   // pele
-    '  vec3 o = mix(c, mix(uSuit, uHelmet, head), wR);',
-    '  return mix(o, uSkin, wK);',
-    '}'
-  ].join('\n');
+  // A textura é a original do modelo (sombreada). Troca de cor por matiz: o vermelho vira a cor do macacão
+  // (corpo) ou do capacete (acima do pescoço, medido na pose de origem) e o tom de pele vira a pele escolhida;
+  // o brilho do texel é mantido, então dobras e sombras pintadas continuam lá. vKeep = 1 no cabelo.
+  const HSV = 'vec3 kHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x); }';
+  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; varying vec3 vBind; varying float vKeep;', HSV].join('\n');
   const RECOLOR_BODY = [
-    '{ float head = smoothstep(-0.15, -0.08, vBind.y);',
-    '  vec2 e = 1.0 / uTexSize, p = vUv * uTexSize - 0.5, f = fract(p), b = (floor(p) + 0.5) * e;',
-    '  vec3 c00 = pilotRecolor(texture2D(map, b).rgb, head), c10 = pilotRecolor(texture2D(map, b + vec2(e.x, 0.0)).rgb, head);',
-    '  vec3 c01 = pilotRecolor(texture2D(map, b + vec2(0.0, e.y)).rgb, head), c11 = pilotRecolor(texture2D(map, b + e).rgb, head);',
-    '  diffuseColor.rgb = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y) * diffuse; }'
+    'if (vKeep < 0.5) { vec3 hv = kHsv(texelColor.rgb); float dr = min(hv.x, 1.0 - hv.x);',
+    '  float wR = (1.0 - smoothstep(0.028, 0.042, dr)) * smoothstep(0.42, 0.58, hv.y) * smoothstep(0.06, 0.15, hv.z);',
+    '  float wK = (1.0 - smoothstep(0.022, 0.04, abs(hv.x - 0.07))) * smoothstep(0.15, 0.24, hv.y) * (1.0 - smoothstep(0.62, 0.72, hv.y)) * smoothstep(0.5, 0.62, hv.z);',
+    '  float head = smoothstep(uHeadY - 0.005, uHeadY + 0.025, vBind.y), kr = hv.z / 0.9, kk = hv.z / 0.95;',
+    '  vec3 red = mix(uSuit, uHelmet, head) * min(kr, 1.0) + vec3(max(kr - 1.0, 0.0) * 0.5);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, red, wR);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * min(kk, 1.05), wK); }'
   ].join('\n');
 
   // ---------- IK analítico de dois ossos (no espaço do piloto) ----------
@@ -138,106 +102,143 @@
     const p = _b.copy(pole).addScaledVector(dir, -pole.dot(dir)); if (p.lengthSq() < 1e-8) p.set(0, 1, 0); p.normalize();
     return outE.copy(S).addScaledVector(dir, a).addScaledVector(p, h);
   }
+  // parte de q que gira em torno do eixo a (decomposição swing-twist)
+  function twistOf(q, a, out) {
+    const p = q.x * a.x + q.y * a.y + q.z * a.z; out.set(a.x * p, a.y * p, a.z * p, q.w);
+    const l = Math.hypot(out.x, out.y, out.z, out.w); if (l < 1e-6) return out.set(0, 0, 0, 1);
+    return out.set(out.x / l, out.y / l, out.z / l, out.w / l);
+  }
 
   class PilotRig {
     constructor(tpl, spec) {
+      this.tpl = tpl; this.id = tpl.id;
       this.root = THREE.SkeletonUtils.clone(tpl.scene);
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
-      this.bind = tpl.bind; this.len = tpl.len;
-      // toon (3 tons) + brilho suave + recoloração; sem normal map (mais leve e mais "desenho")
-      const img = tpl.map && tpl.map.image, tw = (img && img.width) || 1024, th = (img && img.height) || 1024;
-      const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uTexSize: { value: new THREE.Vector2(tw, th) } };
-      const mat = this.mat = Toon.mat({ map: tpl.map, skinning: true }, { gloss: 0.35, rim: 0.3, sat: 1, key: 'pilot', hook: sh => {
+      this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
+      const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY } };
+      const mat = this.mat = Toon.mat({ map: tpl.map, skinning: true }, { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb', hook: sh => {
         Object.assign(sh.uniforms, u);
-        sh.vertexShader = 'varying vec3 vBind;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
+        sh.vertexShader = 'attribute float aKeep;\nvarying vec3 vBind;\nvarying float vKeep;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
       } });
       this.mesh.material = mat; this.mesh.castShadow = true; this.mesh.frustumCulled = false;
-      Toon.outline(this.root, 0.022);                                                   // contorno de desenho (acompanha o esqueleto)
-      this.setColors(spec); this.setAccessory(spec.accessory, spec.decalColor);
+      Toon.outline(this.root, tpl.outline);                                              // contorno de desenho (acompanha o esqueleto)
+      this.setColors(spec);
       this.t = Math.random() * 10; this.lean = 0; this.look = 0; this.bob = 0;
+      this.ua = { _L: this.bones.upperarm_L.position.clone(), _R: this.bones.upperarm_R.position.clone() };   // ombros na pose de origem (o "alcance" mexe neles)
     }
     setColors(spec) { this.u.uSuit.value.set(spec.suit); this.u.uHelmet.value.set(spec.helmet); this.u.uSkin.value.set(spec.skin); }
-    setAccessory(id, color) {
-      if (this.acc) { this.bones.head.remove(this.acc); this.acc.traverse(o => { if (o.geometry) o.geometry.dispose(); }); this.acc = null; }
-      this.antS = null;
-      const a = ACCESSORIES.find(x => x.id === id); if (!a || !a.build) return;
-      const g = a.build(color || '#ffc928'); g.position.sub(this.bind.head); g.traverse(o => { if (o.isMesh) o.castShadow = true; }); Toon.outline(g, 0.018);   // acessório no espaço do osso da cabeça
-      this.bones.head.add(g); this.acc = g;
-    }
-    // encaixa no cockpit: cp = { seat, scale, hands:[gripL, gripR] (Object3D), feet:[pedalL, pedalR] (Object3D), recline }
+    setAccessory() { }
+    // encaixa no cockpit: cp = { seat, scale, hands:[gripL, gripR] (Object3D, userData.t = sentido da barra), feet:[pés], lean, headTilt, ... }
     attach(parent, cp) {
       this.cp = cp; const s = cp.scale; this.root.scale.setScalar(s);
-      this.root.position.copy(cp.seat).addScaledVector(this.bind.hips, -s);           // quadril exatamente no ponto H do assento
+      this.root.position.copy(cp.seat).addScaledVector(this.bind.hips, -s);           // quadril exatamente no ponto do banco
       parent.add(this.root);
     }
     // anima: st = { steer (-1..1, + = esquerda), speed (0..1), boost, drift (-1/0/1), air }
     update(dt, st) {
       const B = this.bones, cp = this.cp; if (!cp) return; this.t += dt;
-      const k = Math.min(1, 6 * dt), lean = (st.steer || 0) * 0.2 + (st.drift || 0) * 0.12;
-      this.lean += (lean - this.lean) * k; this.look += ((st.steer || 0) * 0.35 + (st.drift || 0) * 0.15 - this.look) * k;
-      const back = (cp.recline || 0) + (st.boost ? 0.1 : 0) + (st.speed || 0) * 0.05;
-      this.bob = st.air ? 0.05 : Math.sin(this.t * 17) * 0.006 * (st.speed || 0);
-      B.hips.rotation.set(0, 0, 0); B.hips.position.y = this.bind.hips.y + this.bob;
-      B.spine.rotation.set(-back * 0.5, 0, -this.lean * 0.5);
-      B.chest.rotation.set(-back * 0.5 + 0.08, this.lean * 0.3, -this.lean * 0.5);
-      B.head.rotation.set(0.05 + back * 0.6, this.look, this.lean * 0.4);
+      const k = Math.min(1, 6 * dt), lk = cp.leanK === undefined ? 1 : cp.leanK;
+      this.lean += (((st.steer || 0) * 0.2 + (st.drift || 0) * 0.12) * lk - this.lean) * k;
+      this.look += ((st.steer || 0) * 0.35 + (st.drift || 0) * 0.15 - this.look) * k;
+      const fwd = (cp.lean || 0) + (st.boost ? (cp.boostLean || 0) : 0);
+      this.bob = st.air ? 0.006 : Math.sin(this.t * 17) * 0.003 * (st.speed || 0);
+      // inclinação do tronco sobretudo no quadril (como na busca de pose): ombros vão à frente sem enrugar a barriga
+      B.hips.rotation.set(fwd * 0.6, 0, 0); B.hips.position.y = this.bind.hips.y + this.bob;
+      B.spine.rotation.set(fwd * 0.2, 0, -this.lean * 0.5);
+      B.chest.rotation.set(fwd * 0.2, this.lean * 0.25, -this.lean * 0.4);
+      B.head.rotation.set(-(cp.headTilt || 0), this.look, this.lean * 0.35);
       this.root.updateMatrixWorld(true);
-      if (this.acc && this.acc.userData.antenna) this.antennaStep(dt);
-      // braços -> volante | pernas -> pedais
-      this.limb('upperarm_L', 'forearm_L', cp.hands[0], 1, true); this.limb('upperarm_R', 'forearm_R', cp.hands[1], -1, true);
-      this.limb('thigh_L', 'shin_L', cp.feet[0], 1, false); this.limb('thigh_R', 'shin_R', cp.feet[1], -1, false);
+      if (this.tpl.pigs) this.pigStep(dt);
+      this.arm(1); this.arm(-1); this.leg(1); this.leg(-1);
     }
-    // ---------- física da antena: mola amortecida de 2 graus de liberdade ----------
-    // 1) mede a aceleração REAL da base da antena no mundo (posição -> velocidade -> aceleração, por diferenças
-    //    finitas) - assim ela reage a qualquer coisa: acelerar, frear, curva, pulo, giro da vitrine, queda no pódio;
-    // 2) leva essa aceleração para o espaço local do capacete (a antena "sente" frente/trás e esquerda/direita);
-    // 3) integra um oscilador amortecido: theta'' = -K*theta - C*theta' - G*a_local (a inércia joga a ponta
-    //    para o lado oposto da aceleração e a mola traz de volta, com 1 ou 2 balanços até parar);
-    // 4) a segunda junta recebe uma fração do ângulo + um termo de velocidade (atraso): a haste "chicoteia".
-    // Tudo usa vetores pré-alocados (módulo + estado do próprio piloto): nenhuma alocação por quadro.
-    antennaStep(dt) {
-      const A = this.acc.userData.antenna, S = this.antS || (this.antS = { th: new THREE.Vector2(), w: new THREE.Vector2(), prev: new THREE.Vector3(), vel: new THREE.Vector3(), vf: new THREE.Vector3(), accel: new THREE.Vector3(), ok: false });
-      A.base.getWorldPosition(_ant.p);
-      if (!S.ok || dt <= 0 || dt > 0.25) { S.prev.copy(_ant.p); S.vel.set(0, 0, 0); S.vf.set(0, 0, 0); S.accel.set(0, 0, 0); S.ok = dt > 0; return; }
-      _ant.v.subVectors(_ant.p, S.prev).divideScalar(dt);
-      _ant.a.subVectors(_ant.v, S.vel).divideScalar(dt);
-      if (_ant.a.lengthSq() > ANT.MAXA * ANT.MAXA) _ant.a.setLength(ANT.MAXA);                          // teleporte/respawn não "chicoteia" absurdo
-      S.accel.lerp(_ant.a, Math.min(1, dt * ANT.FILTER));                                               // filtro passa-baixa (tira o ruído do quadro a quadro)
-      S.vel.copy(_ant.v); S.prev.copy(_ant.p);
-      if (_ant.v.lengthSq() > 120 * 120) _ant.v.setLength(120); S.vf.lerp(_ant.v, Math.min(1, dt * 10));                 // velocidade suavizada (vento)
-      A.base.parent.getWorldQuaternion(_ant.q); _ant.q.invert();
-      _ant.l.copy(S.accel).applyQuaternion(_ant.q); _ant.vl.copy(S.vf).applyQuaternion(_ant.q);                   // aceleração e vento no espaço do capacete
-      const vz = _ant.vl.z, vx = _ant.vl.x, spd = Math.min(1, Math.abs(vz) / 40), flut = ANT.FLUT * spd * Math.sin(this.t * 31);
-      const n = dt > 1 / 45 ? 3 : 1, h = dt / n, th = S.th, w = S.w;
-      for (let i = 0; i < n; i++) {                                                                      // Euler semi-implícito (estável com subpassos)
-        w.x += (-ANT.K * th.x - ANT.C * w.x - ANT.G * _ant.l.z - ANT.D * vz * Math.abs(vz) + flut) * h;   // frente/trás: inércia + vento (deita para trás andando)
-        w.y += (-ANT.K * th.y - ANT.C * w.y + ANT.G * _ant.l.x + ANT.D * 0.5 * vx * Math.abs(vx)) * h;   // lateral: inércia da curva + vento cruzado (derrapagem)
-        th.x += w.x * h; th.y += w.y * h;
-      }
-      th.x = Math.max(-ANT.MAX, Math.min(ANT.MAX, th.x)); th.y = Math.max(-ANT.MAX, Math.min(ANT.MAX, th.y));
-      A.j1.rotation.set(th.x, 0, th.y);
-      A.j2.rotation.set(th.x * 0.6 + w.x * ANT.WHIP, 0, th.y * 0.6 + w.y * ANT.WHIP);
-    }
-    // IK de um membro: posiciona os dois ossos para a ponta (mão / pé) tocar o alvo
-    limb(n1, n2, target, side, arm) {
-      if (!target) return;
-      // sem alocações por quadro: 8 karts x 4 membros chamavam ~40 "new Vector3/Quaternion" a cada quadro
-      const b1 = this.bones[n1], b2 = this.bones[n2], bd = this.bind, rootInv = _m.copy(this.root.matrixWorld).invert();
-      b1.rotation.set(0, 0, 0); b2.rotation.set(0, 0, 0); b1.updateMatrixWorld(true);
-      const S = b1.getWorldPosition(_L.S).applyMatrix4(rootInv);
-      const T = target.getWorldPosition(_L.T).applyMatrix4(rootInv);
-      const L1 = this.len[n1], L2 = this.len[n2];
-      const pole = arm ? _L.pole.set(side * 0.8, -0.55, -0.35) : _L.pole.set(side * 0.15, 0.6, 0.7);
-      const E = solve2(S, T, L1, L2, pole, _L.E);
-      // rotação "de repouso -> pose" no espaço do piloto, convertida para o espaço do pai de cada osso
-      b1.parent.getWorldQuaternion(_L.pq); this.root.getWorldQuaternion(_L.rq);
-      const pRel = _L.rq.invert().multiply(_L.pq);                                      // pai, relativo à raiz do piloto
-      const q1 = _L.q1.setFromUnitVectors(bd.dir[n1], _c.subVectors(E, S).normalize());
-      b1.quaternion.copy(pRel.invert().multiply(q1));
-      const q2 = _L.q2.setFromUnitVectors(bd.dir[n2], _c.subVectors(T, E).normalize());
-      b2.quaternion.copy(q1.invert().multiply(q2));
+    // ---------- braço: mão fechada na barra ----------
+    arm(side) {
+      const cp = this.cp, grip = cp.hands && cp.hands[side > 0 ? 0 : 1]; if (!grip) return;
+      const sf = side > 0 ? '_L' : '_R', B = this.bones, b1 = B['upperarm' + sf], b2 = B['forearm' + sf], bh = B['hand' + sf], bf = B['fingers' + sf];
+      const rootInv = _m.copy(this.root.matrixWorld).invert(); this.root.getWorldQuaternion(_L.rq); _L.rqi.copy(_L.rq).invert();
+      b1.quaternion.identity(); b2.quaternion.identity(); bh.quaternion.identity(); b1.position.copy(this.ua[sf]); b1.updateMatrixWorld(true);
+      const S = b1.getWorldPosition(_L.S).applyMatrix4(rootInv), G = grip.getWorldPosition(_L.G).applyMatrix4(rootInv);
+      // sentido da barra (polegar) e direção dos dedos = antebraço projetado no plano da barra (punho reto)
+      const t = _L.t.copy(grip.userData.t || AX).applyQuaternion(grip.getWorldQuaternion(_L.q)).applyQuaternion(_L.rqi).normalize();
+      const d = _L.d.subVectors(G, S).normalize(), f = _L.f.copy(d).addScaledVector(t, -d.dot(t));
+      if (f.lengthSq() < 1e-6) f.set(0, -1, 0); f.normalize();
+      const bk = side > 0 ? _L.bk.crossVectors(t, f) : _L.bk.crossVectors(f, t); bk.normalize();   // costas da mão
+      _L.x.crossVectors(bk, t); const Qh = _L.qh.setFromRotationMatrix(_mb.makeBasis(_L.x, bk, t));
+      // punho tal que o centro da mão fechada fique exatamente na barra
+      const W = _L.W.copy(this.tpl.gripOff[sf]).applyQuaternion(Qh).negate().add(G);
+      b1.parent.getWorldQuaternion(_L.pq); _L.pq.premultiply(_L.rqi);                    // peito, relativo à raiz do piloto
+      // alcance: se o braço esticado não chega no punho (volante todo virado, salto), o ombro avança um pouco até a pegada
+      const L12 = this.len['upperarm' + sf] + this.len['forearm' + sf], gap = S.distanceTo(W) - 0.985 * L12;
+      if (gap > 0) { const dlt = _a.subVectors(W, S).setLength(Math.min(gap, 0.035)); S.add(dlt);
+        b1.position.add(dlt.applyQuaternion(_L.q.copy(_L.pq).invert())); b1.updateMatrixWorld(true); }
+      const E = solve2(S, W, this.len['upperarm' + sf], this.len['forearm' + sf], _L.pole.set(side * 0.6, -0.8, -0.05), _L.E);
+      const q1 = _L.q1.setFromUnitVectors(this.dir['upperarm' + sf], _c.subVectors(E, S).normalize());
+      b1.quaternion.copy(_L.pq).invert().multiply(q1);
+      const q2 = _L.q2.setFromUnitVectors(this.dir['forearm' + sf], _c.subVectors(W, E).normalize());
+      b2.quaternion.copy(q1).invert().multiply(q2);
+      // mão: rotação local = q2^-1 * Qh; a torção em volta do antebraço vai (quase toda) para o antebraço
+      const qh = _L.qi.copy(q2).invert().multiply(Qh), tw = twistOf(qh, this.dir['forearm' + sf], _L.tw).slerp(QI, 1 - TWIST);
+      b2.quaternion.multiply(tw);
+      bh.quaternion.copy(tw).invert().multiply(qh);
+      bf.quaternion.setFromAxisAngle(AZ, -side * CURL);                                  // dedos fecham em volta da barra
       b1.updateMatrixWorld(true);
+    }
+    // ---------- perna: pé no pedal / na pedaleira ----------
+    leg(side) {
+      const cp = this.cp, tgt = cp.feet && cp.feet[side > 0 ? 0 : 1]; if (!tgt) return;
+      const sf = side > 0 ? '_L' : '_R', B = this.bones, b1 = B['thigh' + sf], b2 = B['shin' + sf], bf = B['foot' + sf];
+      const rootInv = _m.copy(this.root.matrixWorld).invert(); this.root.getWorldQuaternion(_L.rq); _L.rqi.copy(_L.rq).invert();
+      b1.quaternion.identity(); b2.quaternion.identity(); bf.quaternion.identity(); b1.updateMatrixWorld(true);
+      const S = b1.getWorldPosition(_L.S).applyMatrix4(rootInv), T = tgt.getWorldPosition(_L.G).applyMatrix4(rootInv);
+      const kn = cp.knee || [0.15, 0.6, 0.7];
+      const E = solve2(S, T, this.len['thigh' + sf], this.len['shin' + sf], _L.pole.set(side * kn[0], kn[1], kn[2]), _L.E);
+      b1.parent.getWorldQuaternion(_L.pq); _L.pq.premultiply(_L.rqi);
+      const q1 = _L.q1.setFromUnitVectors(this.dir['thigh' + sf], _c.subVectors(E, S).normalize());
+      b1.quaternion.copy(_L.pq).invert().multiply(q1);
+      const q2 = _L.q2.setFromUnitVectors(this.dir['shin' + sf], _c.subVectors(T, E).normalize());
+      b2.quaternion.copy(q1).invert().multiply(q2);
+      bf.quaternion.copy(q2).invert().multiply(_L.qf.setFromAxisAngle(AX, cp.footPitch || 0));   // sola acompanhando o pedal
+      b1.updateMatrixWorld(true);
+    }
+    // ---------- marias-chiquinhas: cabelo com física (base + ponta, molas amortecidas) ----------
+    // A mecha aponta para a soma gravidade + vento (contrário ao movimento): parada ela pende; andando, o vento a joga
+    // para trás cada vez mais (quase na horizontal na velocidade máxima) e, no drift, também de lado. Tremula com a
+    // velocidade, a ponta atrasa em relação à base (efeito chicote) e a inércia da cabeça entra nas freadas e curvas.
+    pigStep(dt) {
+      const B = this.bones, head = B.head, V2 = () => new THREE.Vector2();
+      const S = this.pig || (this.pig = { th: [V2(), V2()], w: [V2(), V2()], th2: [V2(), V2()], w2: [V2(), V2()], prev: new THREE.Vector3(), vel: new THREE.Vector3(), acc: new THREE.Vector3(), vf: new THREE.Vector3(), ok: false });
+      head.getWorldPosition(_P.p);
+      if (!S.ok || dt <= 0 || dt > 0.25) { S.prev.copy(_P.p); S.vel.set(0, 0, 0); S.acc.set(0, 0, 0); S.vf.set(0, 0, 0); S.ok = dt > 0; }
+      else {
+        _P.v.subVectors(_P.p, S.prev).divideScalar(dt); _P.a.subVectors(_P.v, S.vel).divideScalar(dt);
+        if (_P.a.lengthSq() > 140 * 140) _P.a.setLength(140);
+        S.acc.lerp(_P.a, Math.min(1, dt * 18)); S.vel.copy(_P.v); S.prev.copy(_P.p);
+        if (_P.v.lengthSq() > 120 * 120) _P.v.setLength(120); S.vf.lerp(_P.v, Math.min(1, dt * 10));
+      }
+      head.getWorldQuaternion(_P.q).invert();                                           // tudo no espaço da cabeça
+      _P.l.copy(S.acc).applyQuaternion(_P.q); _P.vl.copy(S.vf).applyQuaternion(_P.q); _P.g.set(0, -1, 0).applyQuaternion(_P.q);
+      const sp = _P.vl.length(), k = Math.min(6, Math.pow(sp / 22, 1.5)), iv = sp > 1e-3 ? k / sp : 0;
+      const dx = _P.g.x - _P.vl.x * iv, dy = _P.g.y - _P.vl.y * iv, dz = _P.g.z - _P.vl.z * iv;   // para onde a mecha aponta
+      const ax = Math.atan2(-dz, -dy), az = Math.atan2(dx, Math.hypot(dy, dz)), f = Math.min(1, sp / 35), t = this.t;
+      const n = dt > 1 / 45 ? 3 : 1, h = dt / n;
+      ['pig_L', 'pig_R'].forEach((nm, i) => {
+        const b1 = B[nm], b2 = B[nm + '2']; if (!b1) return;
+        const sd = i === 0 ? 1 : -1, ph = i * 2.1, th = S.th[i], w = S.w[i], th2 = S.th2[i], w2 = S.w2[i];
+        // alvo da base (80% da direção) e da ponta (+30%, continua a curva), com tremulação e inércia
+        const tx = ax * 0.8 + 0.004 * _P.l.z + 0.06 * f * Math.sin(t * 21 + ph);
+        let tz = az * 0.8 - 0.004 * _P.l.x + 0.05 * f * Math.sin(t * 16.5 + ph * 1.3);
+        const ux = ax * 0.3 + 0.12 * f * Math.sin(t * 27 + ph + 1.1);
+        let uz = az * 0.3 + 0.09 * f * Math.sin(t * 19 + ph * 0.7);
+        tz = sd > 0 ? Math.max(-0.25, tz) : Math.min(0.25, tz); uz = sd > 0 ? Math.max(-0.3, uz) : Math.min(0.3, uz);   // não entra no capacete
+        for (let s = 0; s < n; s++) {
+          w.x += (45 * (tx - th.x) - 6.5 * w.x) * h; w.y += (45 * (tz - th.y) - 6.5 * w.y) * h; th.x += w.x * h; th.y += w.y * h;
+          w2.x += (35 * (ux - 0.08 * w.x - th2.x) - 5 * w2.x) * h; w2.y += (35 * (uz - 0.08 * w.y - th2.y) - 5 * w2.y) * h; th2.x += w2.x * h; th2.y += w2.y * h;
+        }
+        th.x = Math.max(-0.7, Math.min(1.45, th.x)); th.y = Math.max(sd > 0 ? -0.25 : -1.2, Math.min(sd > 0 ? 1.2 : 0.25, th.y));
+        th2.x = Math.max(-0.6, Math.min(0.9, th2.x)); th2.y = Math.max(sd > 0 ? -0.3 : -0.8, Math.min(sd > 0 ? 0.8 : 0.3, th2.y));
+        b1.rotation.set(th.x, 0, th.y); if (b2) b2.rotation.set(th2.x, 0, th2.y);
+      });
     }
     dispose() { if (this.root.parent) this.root.parent.remove(this.root); this.mat.dispose(); }
   }
@@ -257,7 +258,7 @@
     }
     setColors(spec) { this.suitM.color.set(spec.suit); this.helmM.color.set(spec.helmet); this.skinM.color.set(spec.skin); }
     setAccessory() {}
-    attach(parent, cp) { this.cp = cp; this.root.scale.setScalar(cp.scale * 0.95); this.root.position.copy(cp.seat).y -= 0.15; parent.add(this.root); }
+    attach(parent, cp) { this.cp = cp; this.root.scale.setScalar(Math.min(cp.scale, 1.6) * 0.95); this.root.position.copy(cp.seat).y -= 0.15; parent.add(this.root); }
     update(dt, st) {
       this.head.rotation.y = (st.steer || 0) * 0.35; this.root.rotation.z = -(st.steer || 0) * 0.1;
       this.root.updateMatrixWorld(true);
@@ -266,51 +267,85 @@
     dispose() { if (this.root.parent) this.root.parent.remove(this.root); }
   }
 
-  // ---------- carregamento ----------
-  function b64ToBuffer(b64) { const bin = atob(b64), n = bin.length, u = new Uint8Array(n); for (let i = 0; i < n; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
+  // ---------- montagem do personagem (uma vez): malha + esqueleto + pesos ----------
+  function buildTemplate(id, gltf) {
+    const C = CHARS[id], lm = C.lm, scene = gltf.scene; scene.updateMatrixWorld(true);
+    let body = null; const pigMesh = {};
+    scene.traverse(o => { if (!o.isMesh) return; const pn = o.parent && o.parent.name; if (pn === C.node) body = o; else if (C.pigs && C.pigs.includes(pn)) pigMesh[pn] = o; });
+    if (!body) throw new Error('malha ' + C.node + ' não encontrada em ' + id + '.glb');
+    const map = body.material.map;
+    const parts = [{ b: GLBAssets.bake(body, new THREE.Matrix4().multiplyMatrices(R_GLB, body.matrixWorld), map), pig: null }];
+    Object.keys(pigMesh).forEach(pn => { const o = pigMesh[pn], pv = V3().setFromMatrixPosition(o.parent.matrixWorld).applyMatrix4(R_GLB);
+      parts.push({ b: GLBAssets.bake(o, new THREE.Matrix4().multiplyMatrices(R_GLB, o.matrixWorld), map), pig: pv.x > 0 ? 'pig_L' : 'pig_R', pivot: pv }); });
+    GLBAssets.plainMap(map); map.generateMipmaps = true;
+    // eixo de cada maria-chiquinha: do ponto de amarração até a ponta mais distante (base e ponta são 2 ossos)
+    parts.forEach(p => { if (!p.pig) return; let far = 0; const Q = p.b.P;
+      for (let i = 0; i < Q.length; i += 3) { const d = Math.hypot(Q[i] - p.pivot.x, Q[i + 1] - p.pivot.y, Q[i + 2] - p.pivot.z); if (d > far) { far = d; p.tip = V3(Q[i], Q[i + 1], Q[i + 2]); } }
+      p.len = far || 0.1; p.axis = p.tip ? p.tip.clone().sub(p.pivot).normalize() : V3(0, -1, 0); });
+    // junta tudo numa malha só, com índices de osso / pesos / "não recolorir"
+    let nv = 0, ni = 0; parts.forEach(p => { nv += p.b.P.length / 3; ni += p.b.I.length; });
+    const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), I = new Uint32Array(ni), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4), KP = new Float32Array(nv);
+    const boneCount = BONES.length + (parts.length > 1 ? 4 : 0);
+    let ov = 0, oi = 0;
+    parts.forEach(p => {
+      const n = p.b.P.length / 3; P.set(p.b.P, ov * 3); N.set(p.b.N, ov * 3); U.set(p.b.U, ov * 2);
+      for (let k = 0; k < p.b.I.length; k++) I[oi + k] = p.b.I[k] + ov;
+      for (let i = 0; i < n; i++) { const j = ov + i;
+        if (p.pig) {   // cabelo: base -> ponta ao longo do comprimento da mecha
+          const sx = ((P[j * 3] - p.pivot.x) * p.axis.x + (P[j * 3 + 1] - p.pivot.y) * p.axis.y + (P[j * 3 + 2] - p.pivot.z) * p.axis.z) / p.len, w2 = sstep(0.3, 0.62, sx), bi = BONES.length + (p.pig === 'pig_L' ? 0 : 2);
+          SI[j * 4] = bi; SW[j * 4] = 1 - w2; SI[j * 4 + 1] = bi + 1; SW[j * 4 + 1] = w2; KP[j] = 1; continue; }
+        const x = P[j * 3 + 2], y = P[j * 3 + 1], z = -P[j * 3];                             // volta para o espaço do .glb
+        const ws = vertexWeights(x, y, z, lm).sort((a, b) => b[1] - a[1]).slice(0, 4), tot = ws.reduce((s, w) => s + w[1], 0) || 1;
+        if (!ws.length) { SI[j * 4] = BI.chest; SW[j * 4] = 1; continue; }
+        ws.forEach((w, k) => { SI[j * 4 + k] = w[0]; SW[j * 4 + k] = w[1] / tot; }); }
+      ov += n; oi += p.b.I.length;
+    });
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geo.setAttribute('aKeep', new THREE.BufferAttribute(KP, 1));
+    geo.setIndex(new THREE.BufferAttribute(nv > 65535 ? I : Uint16Array.from(I), 1)); geo.computeBoundingBox(); geo.computeBoundingSphere();
+    // esqueleto na pose de origem (rotações zeradas: as direções de repouso valem no espaço do piloto)
+    const pos = {}, bones = [], byName = {};
+    BONES.forEach(([name, parent, mk, sd]) => { const a = lm[mk]; pos[name] = toP([a[0], a[1], sd ? sd * Math.abs(a[2]) : a[2]]);
+      const b = new THREE.Bone(); b.name = name; b.position.copy(pos[name]); if (parent) { b.position.sub(pos[parent]); byName[parent].add(b); } byName[name] = b; bones.push(b); });
+    parts.filter(p => p.pig).sort((a, b) => (a.pig > b.pig ? 1 : -1)).forEach(p => { const b = new THREE.Bone(); b.name = p.pig; b.position.copy(p.pivot).sub(pos.head); byName.head.add(b); byName[p.pig] = b; pos[p.pig] = p.pivot.clone();
+      const b2 = new THREE.Bone(); b2.name = p.pig + '2'; b2.position.copy(p.axis).multiplyScalar(p.len * 0.46); b.add(b2); byName[p.pig + '2'] = b2; });
+    if (parts.length > 1) ['pig_L', 'pig_L2', 'pig_R', 'pig_R2'].forEach(nm => bones.push(byName[nm] || new THREE.Bone()));
+    const root = new THREE.Group(); root.add(byName.hips);
+    const mesh = new THREE.SkinnedMesh(geo, new THREE.MeshBasicMaterial({ skinning: true })); root.add(mesh);
+    root.updateMatrixWorld(true); mesh.bind(new THREE.Skeleton(bones), mesh.matrixWorld);
+    // direções e comprimentos de repouso dos ossos dos membros + deslocamento punho -> centro da mão fechada
+    const dir = {}, len = {}, seg = (n, a, b) => { dir[n] = pos[b].clone().sub(pos[a]).normalize(); len[n] = pos[a].distanceTo(pos[b]); };
+    ['_L', '_R'].forEach(s => { seg('upperarm' + s, 'upperarm' + s, 'forearm' + s); seg('forearm' + s, 'forearm' + s, 'hand' + s); seg('thigh' + s, 'thigh' + s, 'shin' + s); seg('shin' + s, 'shin' + s, 'foot' + s); });
+    const gripOff = {}; ['_L', '_R'].forEach(s => { const sd = s === '_L' ? -1 : 1; gripOff[s] = toP([lm.grip[0], lm.grip[1], sd * lm.grip[2]]).sub(pos['hand' + s]); });
+    return { id, scene: root, map, normalMap: null, bind: { hips: pos.hips.clone(), head: pos.head.clone() }, dir, len, gripOff, headY: lm.head[1], outline: 0.0075, pigs: parts.length > 1, boneCount };
+  }
 
   const Pilot = {
-    status: 'idle', progress: 0, tpl: null, accessories: ACCESSORIES,
+    status: 'idle', progress: 0, tpl: null, tpls: {}, accessories: ACCESSORIES,
+    characters: CHAR_IDS.map(id => ({ id, name: CHARS[id].name })),
+    // carrega os pilotos E os veículos (kart e motoca) com uma barra de progresso só; responde true se há piloto 3D
     load(onProgress) {
       if (this._p) return this._p;
       this.status = 'loading';
-      this._p = new Promise(resolve => {
-        const ok = gltf => { try { this.prepare(gltf); this.status = 'ready'; this.progress = 1; onProgress && onProgress(1); resolve(true); } catch (e) { fail(e); } };
-        const fail = e => { console.warn('[piloto] modelo 3D indisponível, usando o piloto procedural:', e); this.status = 'fallback'; this.progress = 1; onProgress && onProgress(1); resolve(false); };
-        if (!THREE.GLTFLoader || !THREE.SkeletonUtils) return fail('GLTFLoader/SkeletonUtils não carregados');
-        const parse = buf => { try { new THREE.GLTFLoader().parse(buf, '', ok, fail); } catch (e) { fail(e); } };
-        const viaScript = () => {
-          if (window.PILOT_GLB_B64) return parse(b64ToBuffer(window.PILOT_GLB_B64));
-          const s = document.createElement('script'); s.src = 'assets/pilot.glb.js?v=202610290007'; s.async = true;
-          s.onload = () => window.PILOT_GLB_B64 ? parse(b64ToBuffer(window.PILOT_GLB_B64)) : fail('base64 vazio');
-          s.onerror = () => fail('assets/pilot.glb.js não encontrado'); document.head.appendChild(s);
-          let fake = 0; const tick = setInterval(() => { if (this.status !== 'loading') return clearInterval(tick); fake = Math.min(0.9, fake + 0.08); this.progress = fake; onProgress && onProgress(fake); }, 120);
-        };
-        if (location.protocol === 'file:') viaScript();
-        else new THREE.GLTFLoader().load('assets/pilot.glb?v=202610290007', ok, x => { if (x.total) { this.progress = x.loaded / x.total * 0.95; onProgress && onProgress(this.progress); } }, viaScript);
+      const names = CHAR_IDS.concat(['kart', 'motoca']);
+      const all = window.GLBAssets ? GLBAssets.loadAll(names, p => { this.progress = p * 0.97; if (onProgress) onProgress(this.progress); }) : Promise.resolve([]);
+      this._p = all.then(() => {
+        CHAR_IDS.forEach(id => { const g = window.GLBAssets && GLBAssets.get(id); if (!g) return;
+          try { this.tpls[id] = buildTemplate(id, g); } catch (e) { console.warn('[piloto] ' + id + ' indisponível:', e); } });
+        try { if (window.KartModels && KartModels.prepare) { KartModels.prepare('gt'); KartModels.prepare('moto'); } } catch (e) { console.warn('[karts] preparo', e); }
+        const first = this.tpls[CHAR_IDS[0]] || this.tpls[CHAR_IDS[1]];
+        this.tpl = first || null;                                                        // (o main.js guarda a textura do piloto entre as corridas)
+        this.status = first ? 'ready' : 'fallback'; this.progress = 1; if (onProgress) onProgress(1);
+        if (!first) console.warn('[piloto] modelos 3D indisponíveis, usando o piloto procedural');
+        return !!first;
       });
       return this._p;
     },
-    // guarda o modelo-base e mede o esqueleto (posições de repouso, direções e comprimentos dos ossos)
-    prepare(gltf) {
-      const scene = gltf.scene; let mesh = null; scene.traverse(o => { if (o.isSkinnedMesh) mesh = o; });
-      if (!mesh) throw new Error('o arquivo não tem malha com esqueleto');
-      const mat = mesh.material, map = mat.map, nm = mat.normalMap;
-      [map, nm].forEach(t => { if (t) { t.encoding = THREE.LinearEncoding; t.anisotropy = TX.aniso; t.needsUpdate = true; } });
-      if (map) { map.generateMipmaps = false; map.minFilter = THREE.LinearFilter; }            // sem mipmaps: as ilhas do atlas não "sangram" umas nas outras (o piloto é pequeno na tela; cores chapadas não cintilam)
-      if (nm) nm.dispose();                                                              // o visual toon não usa o normal map   // o jogo inteiro trabalha sem conversão sRGB
-      scene.updateMatrixWorld(true);
-      const pos = {}; scene.traverse(o => { if (o.isBone) pos[o.name] = o.getWorldPosition(new THREE.Vector3()); });
-      const tip = { 'upperarm_L': 'forearm_L', 'upperarm_R': 'forearm_R', 'thigh_L': 'shin_L', 'thigh_R': 'shin_R' };
-      // pontas: centro da mão (um pouco além do punho) e sola do pé
-      const handC = s => V3(s * 0.49, -0.56, 0.03), footC = s => V3(s * 0.25, -0.9, 0.05);
-      const dir = {}, len = {};
-      Object.keys(tip).forEach(n => { const a = pos[n], b = pos[tip[n]]; dir[n] = b.clone().sub(a).normalize(); len[n] = a.distanceTo(b); });
-      [['forearm_L', handC(1)], ['forearm_R', handC(-1)], ['shin_L', footC(1)], ['shin_R', footC(-1)]].forEach(([n, end]) => { dir[n] = end.clone().sub(pos[n]).normalize(); len[n] = pos[n].distanceTo(end); });
-      this.tpl = { scene, map, normalMap: null, bind: { hips: pos.hips.clone(), head: pos.head.clone(), dir }, len };
-      mat.dispose();
-    },
-    create(spec) { return this.tpl ? new PilotRig(this.tpl, spec) : new FallbackPilot(spec); }
+    create(spec) {
+      const t = this.tpls[spec && spec.pilot] || this.tpls[CHAR_IDS[0]] || this.tpls[CHAR_IDS[1]];
+      return t ? new PilotRig(t, spec) : new FallbackPilot(spec);
+    }
   };
   window.Pilot = Pilot;
 })();

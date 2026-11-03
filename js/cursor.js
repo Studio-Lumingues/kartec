@@ -1,24 +1,13 @@
 // =====================================================================================
-// cursor.js — detalhes do cursor personalizado (as imagens e as regras ficam no style.css)
-//  * clique: anel + 6 faíscas coloridas no ponto clicado (animação em CSS, removida no fim)
+// cursor.js — comportamento do cursor (o pacote de cursores, estilo Windows 11, e as regras ficam no style.css)
 //  * Garagem: ao arrastar o kart, o volante "gira" (classe body.dragging)
 //  * corrida: o cursor some depois de 2 s parado e volta ao mexer o mouse
 // =====================================================================================
 (function () {
-  const COLORS = ['#ff4d9a', '#ffd23f', '#3dd6ff', '#2ee6a8', '#ff7a1a', '#b08aff'];
   const RACING = ['race', 'countdown', 'finish', 'waiting'];
-  const body = document.body; let idleT = 0, k = 0;
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
-  function burst(x, y) {
-    if (reduced.matches) return;
-    const e = document.createElement('div'), c = COLORS[k++ % COLORS.length]; e.className = 'cBurst'; e.style.left = x + 'px'; e.style.top = y + 'px';
-    e.innerHTML = '<i style="--c:' + c + '"></i>' + [0, 60, 120, 180, 240, 300].map((a, i) => '<b style="--a:' + (a + 15) + 'deg;--c:' + COLORS[(k + i) % COLORS.length] + '"></b>').join('');
-    body.appendChild(e); setTimeout(() => e.remove(), 560);
-  }
+  const body = document.body; let idleT = 0;
   addEventListener('pointerdown', e => {
     if (e.pointerType !== 'mouse') return;
-    const racing = window.Game && RACING.includes(Game.state);
-    if (!racing) burst(e.clientX, e.clientY);
     if (window.Game && Game.state === 'garage' && e.target && e.target.tagName === 'CANVAS' && e.button === 0) body.classList.add('dragging');
   }, true);
   addEventListener('pointerup', () => body.classList.remove('dragging'), true);

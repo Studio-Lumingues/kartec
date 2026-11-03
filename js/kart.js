@@ -437,7 +437,7 @@
   const _w = new THREE.Vector3(), _w2 = new THREE.Vector3();
 
   class Kart {
-    // spec = { model, color, decal, decalColor, number, suit, helmet, skin, accessory } (ver CFG.DEFAULT_SPEC)
+    // spec = { model, color, pilot, suit, helmet, skin } (ver CFG.DEFAULT_SPEC)
     constructor(scene, spec, opts) {
       this.spec = spec; this.m = buildKartModel(spec, { lights: !!opts.player }); scene.add(this.m.group);
       this.name = opts.name; this.isPlayer = !!opts.player;
