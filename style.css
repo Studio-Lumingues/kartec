@@ -1074,7 +1074,11 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 @media (hover: none), (max-width: 820px) { .setupFoot kbd, .modeTile .mtGo { display: none; } }
 
 /* =====================================================================================
+<<<<<<< HEAD
    PADRÃO ÚNICO DE BOTÕES: o mesmo dos botões da Garagem, em todas as telas (destaque = vermelho da logo, #E8213A)
+=======
+   PADRÃO ÚNICO DE BOTÕES: o mesmo dos botões da Garagem, em todas as telas
+>>>>>>> e20c524f96ea345c604bd5fd8c84f086b2b2a7ff
    Duas famílias, exatamente como na Garagem:
    * AÇÃO (= .gBtn/.gArrow): papel branco, borda de tinta de 4px, cantos de 12px e sombra sólida. Ao passar o mouse
      (ou focar pelo teclado/controle) ele sobe e a aba amarela desliza da direita; ao clicar ele afunda.
@@ -1089,7 +1093,11 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
    as amostras de cor e a própria Garagem (a referência).
    ===================================================================================== */
 :root {
+<<<<<<< HEAD
   --b-ink: #000417; --b-ink-2: #4b4f63; --b-paper: #f6f5f2; --b-paper-hi: #ffffff; --b-accent: #E8213A; --b-off: #8a8c9c;
+=======
+  --b-ink: #000417; --b-ink-2: #4b4f63; --b-paper: #f6f5f2; --b-paper-hi: #ffffff; --b-accent: #FFC21A; --b-off: #8a8c9c;
+>>>>>>> e20c524f96ea345c604bd5fd8c84f086b2b2a7ff
   --b-ease: cubic-bezier(.2, .9, .3, 1.15); --b-t: .24s;
   --b-face: linear-gradient(180deg, var(--b-paper-hi), var(--b-paper));
 }
@@ -1145,9 +1153,15 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 }
 .seg button:not(:disabled):not(.soon):active, .tab:active, .trackCard:active, .roomItem:active { transform: none !important; translate: 0 3px !important; box-shadow: 0 1px 0 var(--b-ink) !important; transition-duration: .06s !important; }
 .seg button.on, .tab.on, .trackCard.on, .roomItem.on, .seg button.on:hover, .tab.on:hover, .trackCard.on:hover, .roomItem.on:hover,
+<<<<<<< HEAD
 .seg button.on:focus-visible, .trackCard.on:focus-visible { background: var(--b-accent) !important; color: #fff !important; animation: none !important; }
 .seg button.on span, .seg button.on strong, .trackCard.on strong, .trackCard.on span, .trackCard.on em, .roomItem.on, .roomItem.on small { color: #fff !important; }
 .seg button.on span, .trackCard.on span, .roomItem.on small { color: rgba(255, 255, 255, .86) !important; }
+=======
+.seg button.on:focus-visible, .trackCard.on:focus-visible { background: var(--b-accent) !important; color: var(--b-ink) !important; animation: none !important; }
+.seg button.on span, .seg button.on strong { color: var(--b-ink) !important; }
+.seg button.on span { color: var(--b-ink-2) !important; }
+>>>>>>> e20c524f96ea345c604bd5fd8c84f086b2b2a7ff
 .seg button.soon, .seg button:disabled { background: #e9e9ee !important; color: var(--b-off) !important; border-color: var(--b-off) !important; box-shadow: 0 3px 0 var(--b-off) !important; filter: none !important; translate: 0 0 !important; }
 .roomItem.busy { opacity: .6; }
 
@@ -1155,6 +1169,7 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
   .cta, .ghost, .danger, .skip, .modeTile, .utilBtn, .pill.btn, .close, .lobbyPlayers .kick, .lobbyCard .code, .seg button, .tab, .trackCard, .roomItem { transition: none !important; }
   .cta::after, .ghost::after, .danger::after, .skip::after, .modeTile::after, .utilBtn::after, .pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { transition: none !important; }
 }
+<<<<<<< HEAD
 
 /* =====================================================================================
    AJUSTES DE UI: pausa, configurações e ícones
@@ -1236,3 +1251,5 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .lobbySetup.ro .seg button { pointer-events: none; }                 /* quem não é o anfitrião só vê as escolhas */
 .lobbySetup.ro .stepper { justify-content: center; }
 @media (max-width: 760px) { .lobbySetup { grid-template-columns: minmax(0, 1fr); } .lobbyTrackCard strong { font-size: 20px; } }
+=======
+>>>>>>> e20c524f96ea345c604bd5fd8c84f086b2b2a7ff
