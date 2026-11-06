@@ -292,11 +292,12 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
   // ===================================================================================
   function build(def, scene) {
     const L = layout(def), S = L.S, T = L.T, W = def.W; N = def.N || 500;
+    const CB = 1.8;   // largura da zebra
     // chão e mar cobrem a pista + o alcance da névoa em qualquer direção (antes: placa fixa de 3 km, a borda aparecia nas pistas maiores)
     const EXT = Math.max(Math.abs(L.bbox.x0), Math.abs(L.bbox.x1), Math.abs(L.bbox.z0), Math.abs(L.bbox.z1));
     const GS = Math.ceil((EXT + (def.fogFar || 820) + 400) * 2 / 100) * 100, RAD = Math.max(L.bbox.x1 - L.bbox.x0, L.bbox.z1 - L.bbox.z0) / 2;
     let seed = 7 + def.id.length * 13; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-    const tr = { def, N, W, S, T, length: L.length, startIdx: def.startIdx, roadBase: 0.1, lamps: [], nightMats: [], animated: [], obstacles: [], ponds: [], minimap: [], blockers: [], dustColor: 0xc9a878 };
+    const tr = { def, N, W, CB, S, T, length: L.length, startIdx: def.startIdx, roadBase: 0.1, lamps: [], nightMats: [], animated: [], obstacles: [], ponds: [], minimap: [], blockers: [], dustColor: 0xc9a878 };
     // ---------- qualidade gráfica (configurações) ----------
     // detail: geometria/enfeites desta pista (vale ao carregar); water: reflexo e refração da água (vale na hora)
     const QS = () => (window.Settings && Settings.q) ? Settings.q() : { water: 'high', detail: 'high' };
@@ -658,9 +659,9 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: LO ? null : { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: !LO, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
     [-1, 1].forEach(s => strip(s * (W - 0.85), s * (W - 0.4), 0.06, { map: TX.get('paint'), uSpan: 0.2, vLen: 3, po: -2 }));
     strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
-    strip(W, W + 1.8, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4 }); strip(-W - 1.8, -W, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true });
-    strip(W + 1.8, W + 5.2, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
-    strip(-W - 5.2, -W - 1.8, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
+    strip(W, W + CB, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4 }); strip(-W - CB, -W, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true });
+    strip(W + CB, W + CB + 3.4, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
+    strip(-W - 5.2, -W - CB, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
 
     // ---------- linha de largada + pórtico ----------
     const si = def.startIdx, sAng = Math.atan2(T[si].x, T[si].z);
@@ -974,7 +975,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     // ---------- altura do chão para a física ----------
     tr.groundAt = (p, hint, heading) => {
       const n = tr.nearest(p, hint); let h, exact = false, slope = 0, soft = false, roll = 0;
-      if (n.dist <= W + 1.8) {
+      if (n.dist <= W + CB) {
         const u = n.i + n.f, b = bump(u); h = tr.roadBase + hAt(u); exact = b > 0.001 || tr.vert;
         const segL = S[n.i].distanceTo(S[(n.i + 1) % N]) || 1, grade = (hAt(u + 0.25) - hAt(u - 0.25)) / (0.5 * segL);
         const tA = Math.atan2(T[n.i].x, T[n.i].z); slope = grade * Math.cos(wrapA((heading || 0) - tA));
@@ -984,7 +985,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         // inclinação do chão fora do asfalto (atalhos, barrancos, grama): mede a altura 0,9 m à frente/atrás e 0,7 m de cada lado
         // -> o kart empina/abaixa o bico e inclina de lado acompanhando o relevo, como no asfalto (antes andava sempre reto)
         if (heading !== undefined) { const onDirt = hs !== null, hf = (x, z) => { const q = tr.nearest({ x, z }, n.i);
-            if (q.dist <= W + 1.8) return tr.roadBase + hAt(q.i + q.f); const t = terrain(x, z, q.dist, q.i + q.f), sg = tr.shortcuts.length ? tr.shortcutGround(x, z) : null;
+            if (q.dist <= W + CB) return tr.roadBase + hAt(q.i + q.f); const t = terrain(x, z, q.dist, q.i + q.f), sg = tr.shortcuts.length ? tr.shortcutGround(x, z) : null;
             return sg === null ? t : onDirt ? sg : Math.max(t, sg); };
           const fx = Math.sin(heading), fz = Math.cos(heading), F = 0.9, R = 0.7;
           slope = Math.max(-0.6, Math.min(0.6, (hf(p.x + fx * F, p.z + fz * F) - hf(p.x - fx * F, p.z - fz * F)) / (2 * F)));
@@ -1028,6 +1029,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     // ---------- atualização por quadro ----------
     tr.update = (dt, t) => tr.animated.forEach(f => f(t, dt));
     glowSpr.finish();   // brilhos da pista: uma chamada de desenho para todos
+    if (window.SunFlare) { try { SunFlare.attach(tr, scene); } catch (e) { console.warn('[lens flare]', e); } }
     return tr;
 
     // =========================================================================
@@ -1465,7 +1467,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       bridges.forEach(bi => {
         const dOf = i => Math.abs(i - bi);
         // laterais: nas rampas descem até o chão; sobre o rio viram uma viga de 1,1 m
-        [W + 1.8, -W - 1.8].forEach(o => { const pos = [], uv = [];
+        [W + CB, -W - CB].forEach(o => { const pos = [], uv = [];
           for (let i = bi - BR.END; i < bi + BR.END; i++) { const lo = j => dOf(j) <= BR.FLAT + 1 ? bump(j) - 1.1 : 0.02;
             const a = side(i, o, bump(i) + 0.05), b = side(i + 1, o, bump(i + 1) + 0.05), c = side(i, o, lo(i)), d = side(i + 1, o, lo(i + 1));
             [a, b, d, a, d, c].forEach(p => pos.push(p.x, p.y, p.z)); [[0, 1], [1, 1], [1, 0], [0, 1], [1, 0], [0, 0]].forEach(q => uv.push(q[0], q[1])); }
@@ -1473,7 +1475,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           const m = new THREE.Mesh(g, conc); m.castShadow = m.receiveShadow = true; add(m); });
         // laje por baixo do tabuleiro (vista de dentro do rio)
         { const pos = []; for (let i = bi - BR.FLAT - 1; i < bi + BR.FLAT + 1; i++) { const y0 = bump(i) - 1.1, y1 = bump(i + 1) - 1.1;
-            const a = side(i, -W - 1.8, y0), b = side(i + 1, -W - 1.8, y1), c = side(i, W + 1.8, y0), d = side(i + 1, W + 1.8, y1); [a, b, d, a, d, c].forEach(p => pos.push(p.x, p.y, p.z)); }
+            const a = side(i, -W - CB, y0), b = side(i + 1, -W - CB, y1), c = side(i, W + CB, y0), d = side(i + 1, W + CB, y1); [a, b, d, a, d, c].forEach(p => pos.push(p.x, p.y, p.z)); }
           const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); add(new THREE.Mesh(g, conc)); }
         // pilares de pedra apoiando o vão
         const rk = rpts.reduce((b, p, k) => p.distanceTo(S[bi]) < rpts[b].distanceTo(S[bi]) ? k : b, 0), nodeL = S[bi].distanceTo(S[(bi + 1) % N]);
@@ -1973,7 +1975,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         // (lado de dentro das curvas), sobravam valas, buracos e pedaços da "saia" da faixa furando os atalhos.
         // DINF = até onde (a partir da zebra) um triângulo da grade pode estar puxado para baixo; a faixa fica ACIMA da grade até
         // DINF+0,5 e depois mergulha embaixo dela (as duas têm a mesma textura, cor e normal: a troca não aparece)
-        const CELL = LO ? 13 : MID ? 13 : 10, DINF = CELL * 1.42 + 0.4, oS = W + 1.8 + DINF + 3.5;   // oS cabe até na curva mais fechada (0,8 x raio)
+        const CELL = LO ? 13 : MID ? 13 : 10, DINF = CELL * 1.42 + 0.4, oS = W + CB + DINF + 3.5;   // oS cabe até na curva mais fechada (0,8 x raio)
         const oMaxAt = (i, sg) => { const rl = Rloc(i), inner = rl.sg !== 0 && Math.sign(-rl.sg) === sg; return inner ? Math.max(W + 8, Math.min(oS, 0.8 * rl.R)) : oS; };
         const terrM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true }));
         const stripM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }));   // faixa ganha da grade onde as duas se encostam
@@ -1982,8 +1984,8 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const x = x0 + i * CELL, z = z0 + j * CELL, k = j * (nx + 1) + i, r = roadInfo(x, z);
             let h = surfAt(x, z, false); rawY[k] = h;
             if (r.d < W + 40) {
-              if (nearBridge(r.i)) { if (r.d < W + 6) h = Math.min(h, H[r.i] - drop(r.d) - (r.d < W + 2 ? 0.3 : 0)); }   // nunca acima da beira do asfalto (só rente à pista: mais longe a grade afundava ~25 cm e a borda da areia aparecia como uma linha)
-              else if (r.d < W + 12) { const n = tr.nearest({ x, z }, r.i); if (n.dist < W + 2.2) h = Math.min(h, elevAt(n.i + n.f) - 1.2); } }   // só embaixo do asfalto/zebra
+              if (nearBridge(r.i)) { if (r.d < W + 6) h = Math.min(h, H[r.i] - drop(r.d) - (r.d < W + CB + 0.2 ? 0.3 : 0)); }   // nunca acima da beira do asfalto (só rente à pista: mais longe a grade afundava ~25 cm e a borda da areia aparecia como uma linha)
+              else if (r.d < W + 12) { const n = tr.nearest({ x, z }, r.i); if (n.dist < W + CB + 0.4) h = Math.min(h, elevAt(n.i + n.f) - 1.2); } }   // só embaixo do asfalto/zebra
             if (i === 0 || j === 0 || i === nx || j === nz) h = rawY[k] = -0.6;           // borda escondida embaixo do chão grande
             pos[k * 3] = x; pos[k * 3 + 1] = h; pos[k * 3 + 2] = z; const t = grassUV(x, z); uv[k * 2] = t[0]; uv[k * 2 + 1] = t[1]; const c = gcol(x, z); col.set(c, k * 3); }
           for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + 1, c = a + nx + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
@@ -2009,7 +2011,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           for (let i = 0; i <= N; i += STEP) rows.push(i % N);
           const oMR = [], skipR = rows.map(i => nearBridge(i));
           rows.forEach(i => { const oMax = oMaxAt(i, sg); oMR.push(oMax);
-            FR.concat([1.15]).forEach((f, c) => { const o = c < FR.length ? W + 1.8 + (oMax - W - 1.8) * f : oMax + 3, p = side(i, sg * o, 0); let h;
+            FR.concat([1.15]).forEach((f, c) => { const o = c < FR.length ? W + CB + (oMax - W - CB) * f : oMax + 3, p = side(i, sg * o, 0); let h;
               if (c === 0) h = terrain(p.x, p.z, o, i) - 0.02;                                // rente à zebra: altura exata da beira do asfalto
               else if (c < FR.length - 2) { h = Math.max(terrain(p.x, p.z, o, i), gridRawAt(p.x, p.z)) + (c === 1 ? 0.06 : c === 2 ? 0.12 : 0.15); const bk = bank(p.x, p.z); if (bk > gridRawAt(p.x, p.z) + 0.015) h = Math.min(h, bk - 0.04); }   // margem de lago perto da pista: a faixa passa por baixo da areia   // acima da grade (ela dobra até ~15 cm entre vértices), subindo aos poucos a partir da zebra
               else if (c === FR.length - 2) { h = gridRawAt(p.x, p.z) + 0.02; const bk = bank(p.x, p.z); if (bk > gridRawAt(p.x, p.z) + 0.015) h = Math.min(h, bk - 0.04); }                // já fora da zona afundada: desce suave até a grade (sem degrau -> o pós-efeito não desenha linha/sombra)
@@ -2063,7 +2065,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       // altura da faixa da beira desenhada (fileiras a cada STEP nós, colunas em FR); null fora dela
       const stripAt = n => { const sg = Math.sign(n.lat) || 1, Sd = RG.strip[sg]; if (!Sd) return null; const o = Math.abs(n.lat), ru = (n.i + n.f) / Sd.step, r0 = Math.floor(ru), r1 = r0 + 1, t = ru - r0;
         if (r1 >= Sd.oMR.length || Sd.skipR[r0] || Sd.skipR[r1]) return null;
-        const col = r => { const f = (o - W - 1.8) / (Sd.oMR[r] - W - 1.8); if (f < 0 || f > 1) return null; let c = 0; while (c < Sd.FR.length - 2 && Sd.FR[c + 1] < f) c++;
+        const col = r => { const f = (o - W - CB) / (Sd.oMR[r] - W - CB); if (f < 0 || f > 1) return null; let c = 0; while (c < Sd.FR.length - 2 && Sd.FR[c + 1] < f) c++;
           const w = (f - Sd.FR[c]) / (Sd.FR[c + 1] - Sd.FR[c]), y0 = Sd.Y[r * Sd.C + c], y1 = Sd.Y[r * Sd.C + c + 1]; return y0 + (y1 - y0) * w; };
         const a = col(r0), b = col(r1); if (a === null || b === null) return null; return a + (b - a) * t; };
       // chão VISÍVEL no ponto: o mais alto entre grade e faixa da beira (embaixo da faixa a grade fica afundada) e a areia das margens
@@ -2077,64 +2079,100 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       const gy = (x, z) => { const r = roadInfo(x, z); if (tr.vert) return visGround(x, z, r.i);
         if (r.i < 0 || r.d > W + 45) return terrain(x, z);
         const n = tr.nearest({ x, z }, r.i); return terrain(x, z, n.dist, n.i + n.f); };
-      // ---- postes de luz (estilo praça: base de pedra, poste afinando com anéis, braço curvo sobre a pista e luminária) ----
-      // Geometrias e materiais compartilhados por todos os postes. A lente acende à noite (tr.nightMats) e um círculo de
-      // luz quente aparece no asfalto embaixo da luminária (some de dia).
+      // ---- postes de luz: lampião clássico grande (base de pedra em degraus, coluna de ferro torneada com anéis dourados,
+      //      braço em "pescoço de cisne" com voluta e lanterna com vidro, capelo e pináculo) ----
+      // Todos os postes são assados em 4 malhas (pedra, ferro, dourado e vidro): poucas chamadas de desenho.
+      // À noite eles ILUMINAM de verdade: um conjunto fixo de SpotLights (quente, com penumbra) é levado para os postes
+      // mais perto da câmera, trocando com fade (o número de luzes nunca muda: sem recompilar shader). Além disso:
+      // poça de luz no chão (queda física cos³/d²), feixe volumétrico sutil, halo na lanterna e brilho grande em volta.
       const NIGHT = () => (window.Env && Env.nightF) || 0;
       { const LM = {
-          base: new THREE.MeshLambertMaterial({ map: TX.get('rock', 1, 1), color: 0xb9b4ad }),
-          iron: new THREE.MeshLambertMaterial({ color: 0x2b3038 }),
-          trim: new THREE.MeshLambertMaterial({ color: 0xc9a24a }),
-          glass: new THREE.MeshLambertMaterial({ color: 0xfff4d6, emissive: 0xffd58a, emissiveIntensity: 0.1 })
+          base: new THREE.MeshLambertMaterial({ map: TX.get('rock', 1, 1), color: 0xc9c3ba }),
+          iron: new THREE.MeshPhongMaterial({ color: 0x23272f, shininess: 40, specular: 0x3a3f48 }),
+          trim: new THREE.MeshPhongMaterial({ color: 0xd8ad4c, shininess: 70, specular: 0x806020 }),
+          glass: new THREE.MeshLambertMaterial({ color: 0xfff1cf, emissive: 0xffc777, emissiveIntensity: 0.12 })
         };
-        LM.glass.userData.unique = true; tr.nightMats.push({ m: LM.glass, max: 1.4, min: 0.1 });
-        const ARM = 2.6, TOPY = 7.2;
+        LM.glass.userData.unique = true; tr.nightMats.push({ m: LM.glass, max: 1.9, min: 0.12 });
+        const ARM = 3.9, TOPY = 10.6, LAMPY = TOPY - 0.55, SPACING = LO ? 36 : 28;
+        // coluna torneada: sino na base, fuste afinando, colarinho antes do topo
+        const colP = [[0.36, 0], [0.34, 0.18], [0.24, 0.42], [0.27, 0.52], [0.2, 0.7], [0.17, 1.4], [0.15, 3.2], [0.19, 3.32], [0.15, 3.44], [0.13, TOPY - 1.05],
+          [0.18, TOPY - 0.92], [0.13, TOPY - 0.78], [0.12, TOPY - 0.2], [0.15, TOPY - 0.1], [0.0, TOPY]].map(p => new THREE.Vector2(p[0], p[1]));
+        const swan = new THREE.CubicBezierCurve3(V3(0, TOPY - 0.6, 0), V3(0, TOPY + 1.5, 0), V3(ARM * 0.55, TOPY + 1.6, 0), V3(ARM, TOPY + 0.55, 0));
+        const brace = new THREE.CubicBezierCurve3(V3(0, TOPY - 1.9, 0), V3(0.9, TOPY - 1.7, 0), V3(1.6, TOPY - 0.4, 0), V3(2.2, TOPY + 1.05, 0));
         const LG = {
-          base: GEO.rbox(0.95, 0.55, 0.95, 0.14), plinth: GEO.rbox(0.6, 0.35, 0.6, 0.1),
-          pole: new THREE.CylinderGeometry(0.085, 0.15, TOPY - 0.9, 12),
-          ring: new THREE.CylinderGeometry(0.19, 0.19, 0.12, 14), ringS: new THREE.CylinderGeometry(0.13, 0.13, 0.09, 12),
-          cap: new THREE.SphereGeometry(0.17, 12, 8),
-          arm: new THREE.TubeGeometry(new THREE.CubicBezierCurve3(V3(0, TOPY - 0.15, 0), V3(0, TOPY + 0.9, 0), V3(ARM * 0.55, TOPY + 0.95, 0), V3(ARM, TOPY + 0.35, 0)), 20, 0.055, 8, false),
-          scroll: new THREE.TorusGeometry(0.32, 0.035, 6, 18, Math.PI * 1.5),
-          hood: new THREE.ConeGeometry(0.5, 0.36, 12, 1, true), hoodTop: new THREE.CylinderGeometry(0.1, 0.16, 0.18, 10),
-          lens: new THREE.CylinderGeometry(0.3, 0.38, 0.22, 12)
+          step1: new THREE.CylinderGeometry(0.95, 1.05, 0.45, 8), step2: new THREE.CylinderGeometry(0.7, 0.8, 0.5, 8), step3: new THREE.CylinderGeometry(0.5, 0.55, 0.2, 8),
+          col: new THREE.LatheGeometry(colP, 18),
+          ring: new THREE.TorusGeometry(0.2, 0.045, 6, 18).rotateX(Math.PI / 2), ringB: new THREE.TorusGeometry(0.3, 0.05, 6, 18).rotateX(Math.PI / 2),
+          arm: new THREE.TubeGeometry(swan, 28, 0.075, 8, false), brace: new THREE.TubeGeometry(brace, 20, 0.04, 6, false),
+          scroll: new THREE.TorusGeometry(0.34, 0.04, 6, 20, Math.PI * 1.6), scroll2: new THREE.TorusGeometry(0.22, 0.035, 6, 16, Math.PI * 1.6),
+          hook: new THREE.CylinderGeometry(0.035, 0.035, 0.45, 6),
+          hood: new THREE.ConeGeometry(0.62, 0.48, 8), hoodRim: new THREE.CylinderGeometry(0.64, 0.64, 0.06, 8),
+          finial: new THREE.SphereGeometry(0.11, 10, 8), spike: new THREE.ConeGeometry(0.05, 0.3, 6),
+          glass: new THREE.CylinderGeometry(0.42, 0.3, 0.72, 8, 1, true), glassIn: new THREE.CylinderGeometry(0.16, 0.16, 0.36, 10),
+          bar: new THREE.CylinderGeometry(0.022, 0.022, 0.76, 4), bottom: new THREE.ConeGeometry(0.31, 0.3, 8), drop: new THREE.SphereGeometry(0.06, 8, 6)
         };
-        LG.hood.rotateY(Math.PI / 12);
-        const heads = [], halos = [];   // luminárias (posição da lente e altura do chão embaixo) e halos pequenos
-        const mk = (g, m, x, y, z, parent) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; parent.add(o); return o; };
-        for (let i = 15; i < N; i += 36) { if (bridges.some(b => Math.abs(i - b) < 14)) continue;
-          const sd = ((i / 36 | 0) % 2 ? 1 : -1), q = side(i, sd * (W + 4), 0); if (tr.shortcuts.length && shortcutDist(q.x, q.z) < 4) continue;
-          const y0 = gy(q.x, q.z), grp = new THREE.Group();
-          mk(LG.base, LM.base, 0, 0.12, 0, grp); mk(LG.plinth, LM.iron, 0, 0.55, 0, grp);
-          mk(LG.pole, LM.iron, 0, 0.7 + (TOPY - 0.9) / 2, 0, grp);
-          [1.0, 3.2, TOPY - 0.3].forEach((yy, k) => mk(k === 1 ? LG.ringS : LG.ring, LM.trim, 0, yy, 0, grp));
-          mk(LG.cap, LM.trim, 0, TOPY + 0.05, 0, grp);
-          mk(LG.arm, LM.iron, 0, 0, 0, grp);
-          const sc1 = mk(LG.scroll, LM.iron, 0.42, TOPY + 0.42, 0, grp); sc1.rotation.z = -0.4;   // voluta decorativa embaixo do braço
-          mk(LG.hoodTop, LM.iron, ARM, TOPY + 0.42, 0, grp);
-          mk(LG.hood, LM.iron, ARM, TOPY + 0.2, 0, grp);
-          const lens = mk(LG.lens, LM.glass, ARM, TOPY - 0.02, 0, grp); lens.castShadow = false;
-          // +x local do poste aponta para a pista (o braço fica por cima do asfalto)
-          const dx = -sd * T[i].z, dz = sd * T[i].x; grp.rotation.y = Math.atan2(-dz, dx); grp.position.set(q.x, y0, q.z); add(grp);
-          const lx = q.x + dx * ARM, lz = q.z + dz * ARM;
-          // halo pequeno colado na lente (o brilho grande que virava "bola amarela" saiu; ele não entra em tr.lamps,
-          // que o main.js aumenta para ~19 m à noite)
-          const h = glowSpr(0xfff1d6, 1.4, 0); h.position.set(lx, y0 + TOPY - 0.16, lz); halos.push(h);
-          const ni = tr.nearest({ x: lx, z: lz }, i);
-          heads.push({ x: lx, y: y0 + TOPY - 0.13, z: lz, g: (ni.dist < W + 2 ? tr.roadBase + hAt(ni.i + ni.f) : gy(lx, lz)) });
-          tr.obstacles.push({ x: q.x, z: q.z, r: 0.45 }); }
-        // ---- LUZ DOS POSTES (realista e barata: sem luz de verdade, tudo em 2 chamadas de desenho para todos os postes) ----
-        // 1) poça no chão: queda de uma lâmpada a h metros de altura -> E(d) = (1 + (d/h)^2)^-1,5 (cosseno^3 / distância^2),
-        //    branco quente, apagando suave na borda. Todas as poças numa malha só.
-        // 2) cone de luz: feixe bem sutil da luminária até o chão, mais forte perto da lâmpada; some nas bordas da silhueta
-        //    (por isso não fica com "contorno"). Só aparece à noite e é atenuado pela névoa como o resto da cena.
+        LG.glass.rotateY(Math.PI / 8); LG.hood.rotateY(Math.PI / 8); LG.hoodRim.rotateY(Math.PI / 8); LG.bottom.rotateX(Math.PI).rotateY(Math.PI / 8);
+        const bake = { base: [], iron: [], trim: [], glass: [] }, _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+        const put = (key, geo, M, x, y, z, rx, ry, rz) => { _l.compose(V3(x, y, z), _q.setFromEuler(_e.set(rx || 0, ry || 0, rz || 0)), V3(1, 1, 1)); const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.applyMatrix4(_m.copy(M).multiply(_l)); bake[key].push(g); };
+        const heads = [], halos = [], auras = [];
+        for (let i = 15; i < N; i += SPACING) { if (bridges.some(b => Math.abs(i - b) < 14)) continue;
+          const sd = ((i / SPACING | 0) % 2 ? 1 : -1), q = side(i, sd * (W + CB + 2.6), 0); if (tr.shortcuts.length && shortcutDist(q.x, q.z) < 4) continue;
+          if (def.wall && sd < 0 && i >= def.wall[0] - 3 && i <= def.wall[1] + 3) continue;
+          const y0 = gy(q.x, q.z) - 0.1, dx = -sd * T[i].z, dz = sd * T[i].x, ang = Math.atan2(-dz, dx);   // +x local aponta para a pista
+          const M = new THREE.Matrix4().compose(V3(q.x, y0, q.z), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), ang), V3(1, 1, 1));
+          put('base', LG.step1, M, 0, 0.22, 0); put('base', LG.step2, M, 0, 0.67, 0); put('base', LG.step3, M, 0, 1.0, 0);
+          put('iron', LG.col, M, 0, 1.05, 0);
+          [[LG.ringB, 1.12], [LG.ring, 1.9], [LG.ring, 4.38], [LG.ring, TOPY + 1.05 - 0.92], [LG.ringB, TOPY + 1.05 - 1.5]].forEach(([g, yy]) => put('trim', g, M, 0, yy, 0));
+          put('iron', LG.arm, M, 0, 0, 0); put('iron', LG.brace, M, 0, 0, 0);
+          put('iron', LG.scroll, M, 0.55, TOPY - 0.25, 0, 0, 0, -0.6); put('iron', LG.scroll2, M, 1.35, TOPY + 0.45, 0, 0, 0, 2.4);
+          put('trim', LG.finial, M, 0, TOPY + 1.12, 0); put('trim', LG.spike, M, 0, TOPY + 1.34, 0);
+          // lanterna pendurada na ponta do braço
+          const lx = ARM, ly = LAMPY;
+          put('iron', LG.hook, M, lx, ly + 0.9, 0); put('iron', LG.hoodRim, M, lx, ly + 0.4, 0); put('iron', LG.hood, M, lx, ly + 0.66, 0);
+          put('trim', LG.finial, M, lx, ly + 0.95, 0);
+          put('glass', LG.glass, M, lx, ly, 0); put('glass', LG.glassIn, M, lx, ly - 0.02, 0);
+          for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; put('iron', LG.bar, M, lx + Math.cos(a) * 0.37, ly, Math.sin(a) * 0.37, Math.sin(a) * 0.17, 0, -Math.cos(a) * 0.17); }
+          put('iron', LG.bottom, M, lx, ly - 0.5, 0); put('trim', LG.drop, M, lx, ly - 0.7, 0);
+          const wx = q.x + dx * ARM, wz = q.z + dz * ARM;
+          const h = glowSpr(0xfff0d0, 1.6, 0); h.position.set(wx, y0 + ly, wz); halos.push(h);
+          const au = glowSpr(0xffb766, 6, 0); au.position.set(wx, y0 + ly - 0.1, wz); auras.push(au);
+          const ni = tr.nearest({ x: wx, z: wz }, i);
+          heads.push({ x: wx, y: y0 + ly - 0.4, z: wz, g: (ni.dist < W + CB ? tr.roadBase + hAt(ni.i + ni.f) : gy(wx, wz)) });
+          tr.obstacles.push({ x: q.x, z: q.z, r: 0.75 }); }
+        // malhas assadas (posições, normais e uv somadas)
+        Object.keys(bake).forEach(key => { const L2 = bake[key]; if (!L2.length) return; let n = 0; L2.forEach(g => { n += g.attributes.position.count; });
+          const P = new Float32Array(n * 3), Nn = new Float32Array(n * 3), U = new Float32Array(n * 2); let o = 0;
+          L2.forEach(g => { const c = g.attributes.position.count; if (!g.attributes.normal) g.computeVertexNormals(); P.set(g.attributes.position.array, o * 3); Nn.set(g.attributes.normal.array, o * 3);
+            if (g.attributes.uv) U.set(g.attributes.uv.array, o * 2); o += c; g.dispose(); });
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Nn, 3)); g.setAttribute('uv', new THREE.BufferAttribute(U, 2)); g.computeBoundingSphere();
+          const m = new THREE.Mesh(g, LM[key]); m.castShadow = key !== 'glass'; m.receiveShadow = true; m.userData.dynamic = true; if (key === 'glass') m.userData.noOutline = true; add(m); });
+        Object.values(LG).forEach(g => g.dispose());
+        // ---- LUZ DE VERDADE: SpotLights levados para os postes mais próximos da câmera ----
         if (heads.length) {
-          const LU = { uNight: { value: 0 }, uCol: { value: new THREE.Color(0xffd7a0) } };
+          const NL = Math.min(heads.length, LO ? 3 : MID ? 4 : 6), pool = [];
+          for (let k = 0; k < NL; k++) { const L = new THREE.SpotLight(0xffc685, 0, 62, 1.0, 0.75, 1.4); L.castShadow = false; L.userData.dynamic = true;
+            L.target.userData.dynamic = true; add(L); add(L.target); pool.push({ L, cur: -1, k: 0 }); }
+          let physical = false, acc = 0;
+          const hook = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial()); hook.frustumCulled = false; hook.userData.dynamic = true; hook.userData.noOutline = true;
+          hook.onBeforeRender = r => { physical = !!r.physicallyCorrectLights; }; add(hook);
+          const place = (p, hi) => { const H = heads[hi]; p.cur = hi; p.L.position.set(H.x, H.y, H.z); p.L.target.position.set(H.x, H.g, H.z); p.L.target.updateMatrixWorld(); };
+          tr.animated.push((t, dt) => { dt = dt || 0.016; const nf = NIGHT(), cam = window.Fx && Fx.cam;
+            acc -= dt; if (acc <= 0 && cam) { acc = 0.2; const e = cam.matrixWorld.elements, cx = e[12], cz = e[14];
+              const want = heads.map((H, hi) => [hi, (H.x - cx) ** 2 + (H.z - cz) ** 2]).sort((a, b) => a[1] - b[1]).slice(0, NL).map(a => a[0]);
+              pool.forEach(p => { p.want = want.includes(p.cur); });
+              const free = want.filter(hi => !pool.some(p => p.cur === hi));
+              pool.forEach(p => { if (!p.want && p.k < 0.02 && free.length) { place(p, free.shift()); p.want = true; } }); }
+            const base = physical ? 420 : 2.6;
+            pool.forEach(p => { p.k = Math.max(0, Math.min(1, p.k + (p.want && p.cur >= 0 ? 3 : -3) * dt)); p.L.intensity = base * nf * p.k * (0.97 + 0.03 * Math.sin(t * 9 + p.cur)); p.L.decay = physical ? 2 : 1.4; });
+          });
+        }
+        // ---- poça de luz no chão e feixe volumétrico (2 chamadas para todos os postes) ----
+        if (heads.length) {
+          const LU = { uNight: { value: 0 }, uCol: { value: new THREE.Color(0xffd29a) } };
           const fogU = () => THREE.UniformsUtils.merge([THREE.UniformsLib.fog]);
           const mkMat = (vs, fs, extra) => { const m = new THREE.ShaderMaterial(Object.assign({ uniforms: Object.assign(fogU(), LU), vertexShader: vs, fragmentShader: fs,
             transparent: true, depthWrite: false, fog: true, blending: THREE.AdditiveBlending }, extra || {})); m.userData.unique = true; return m; };
-          // --- poças
-          { const R = 13, pos = [], q = [], hh = [], idx = [];
+          { const R = 20, pos = [], q = [], hh = [], idx = [];
             heads.forEach((L, k) => { const y = L.g + 0.07, H = Math.max(3, L.y - L.g);
               [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([a, b]) => { pos.push(L.x + a * R, y, L.z + b * R); q.push(a * R, b * R); hh.push(H); });
               const o = k * 4; idx.push(o, o + 2, o + 1, o, o + 3, o + 2); });
@@ -2143,13 +2181,13 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
             const m = mkMat(['attribute vec2 aQ; attribute float aH; varying vec2 vQ; varying float vH;', '#include <fog_pars_vertex>',
               'void main() { vQ = aQ; vH = aH; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;', '#include <fog_vertex>', '}'].join('\n'),
               ['uniform float uNight; uniform vec3 uCol; varying vec2 vQ; varying float vH;', '#include <fog_pars_fragment>',
-               'void main() { float d = length(vQ), e = pow(1.0 + (d * d) / (vH * vH), -1.5) * (1.0 - smoothstep(0.3 * ' + R.toFixed(1) + ', ' + R.toFixed(1) + ', d));',
-               '  gl_FragColor = vec4(uCol * e * 0.7 * uNight, 1.0); if (e * uNight < 0.002) discard;', FOG_ADD, '}'].join('\n'),
+               'void main() { float d = length(vQ), e = pow(1.0 + (d * d) / (vH * vH), -1.5) * (1.0 - smoothstep(0.35 * ' + R.toFixed(1) + ', ' + R.toFixed(1) + ', d));',
+               '  e += 0.25 * exp(-d * d / (vH * vH * 0.08));',                                  // ponto quente bem embaixo da lanterna
+               '  gl_FragColor = vec4(uCol * e * 0.55 * uNight, 1.0); if (e * uNight < 0.002) discard;', FOG_ADD, '}'].join('\n'),
               { polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
             const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 1; mesh.userData.dynamic = true; mesh.userData.noOutline = true; add(mesh); }
-          // --- cones
-          { const SEG = 20, RT = 0.26, pos = [], nor = [], tt = [], idx = [];
-            heads.forEach(L => { const H = Math.max(3, L.y - L.g - 0.05), RB = Math.min(5.5, 0.62 * H), b0 = pos.length / 3, sl = (RB - RT) / H;
+          { const SEG = 24, RT = 0.34, pos = [], nor = [], tt = [], idx = [];
+            heads.forEach(L => { const H = Math.max(3, L.y - L.g - 0.05), RB = Math.min(8, 0.72 * H), b0 = pos.length / 3, sl = (RB - RT) / H;
               for (let r = 0; r < 2; r++) for (let j = 0; j <= SEG; j++) { const a = j / SEG * Math.PI * 2, c = Math.cos(a), s2 = Math.sin(a), rad = r ? RB : RT;
                 pos.push(L.x + c * rad, r ? L.y - H : L.y, L.z + s2 * rad); const n = new THREE.Vector3(c, sl, s2).normalize(); nor.push(n.x, n.y, n.z); tt.push(r); }
               for (let j = 0; j < SEG; j++) { const a = b0 + j, b = a + 1, c = a + SEG + 1, d = c + 1; idx.push(a, c, b, b, c, d); } });
@@ -2159,13 +2197,14 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
               'void main() { vT = aT; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mvPosition.xyz);',
               '  gl_Position = projectionMatrix * mvPosition;', '#include <fog_vertex>', '}'].join('\n'),
               ['uniform float uNight; uniform vec3 uCol; varying float vT; varying vec3 vN; varying vec3 vV;', '#include <fog_pars_fragment>',
-               'void main() { float face = abs(dot(normalize(vN), normalize(vV)));',              // de frente = muito volume atravessado; na borda = quase nada
-               '  float fall = pow(1.0 - vT, 1.6) * smoothstep(0.0, 0.06, vT) + 0.12 * (1.0 - vT);',  // forte perto da lâmpada, apagando até o chão
-               '  float a = fall * face * face * 0.085 * uNight;', '  if (a < 0.0015) discard;', '  gl_FragColor = vec4(uCol * a, 1.0);', FOG_ADD, '}'].join('\n'),
+               'void main() { float face = abs(dot(normalize(vN), normalize(vV)));',
+               '  float fall = pow(1.0 - vT, 1.6) * smoothstep(0.0, 0.05, vT) + 0.1 * (1.0 - vT);',
+               '  float a = fall * face * face * 0.11 * uNight;', '  if (a < 0.0015) discard;', '  gl_FragColor = vec4(uCol * a, 1.0);', FOG_ADD, '}'].join('\n'),
               { side: THREE.DoubleSide });
             const mesh = new THREE.Mesh(g, m); mesh.renderOrder = 8; mesh.userData.dynamic = true; mesh.userData.noOutline = true; mesh.frustumCulled = false; add(mesh); }
-          tr.animated.push(() => { const nf = NIGHT(); LU.uNight.value = nf;
-            for (const h of halos) { h.material.opacity = 0.85 * nf; h.scale.setScalar(1.15 + 0.35 * nf); } });
+          tr.animated.push(t => { const nf = NIGHT(); LU.uNight.value = nf;
+            halos.forEach((h, k) => { h.material.opacity = 0.95 * nf; h.scale.setScalar(1.3 + 0.6 * nf); });
+            auras.forEach((a, k) => { a.material.opacity = 0.32 * nf * (0.96 + 0.04 * Math.sin(t * 7 + k)); a.scale.setScalar(5 + 2.5 * nf); }); });
         }
       }
       // ---- muro azul e amarelo: mesma barreira das pontes, mais alta, seguindo o chão (com colisão) ----
@@ -2208,20 +2247,20 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         const bermM = grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', 1, 1), vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
         const rutM = new THREE.MeshBasicMaterial({ color: 0x5a3c22, transparent: true, opacity: 0.35, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -3 });
         const postM = new THREE.MeshLambertMaterial({ map: TX.get('stripes', 1, 2) }), logM = new THREE.MeshLambertMaterial({ map: TX.get('bark', 1, 1), color: 0xc8a070 });
-        let hint = 0; const yH = (x, z) => { const n = tr.nearest({ x, z }, hint); return n.dist < W + 1.8 ? tr.roadBase + hAt(n.i + n.f) + 0.03 : terrain(x, z, n.dist, n.i + n.f); };
+        let hint = 0; const yH = (x, z) => { const n = tr.nearest({ x, z }, hint); return n.dist < W + CB ? tr.roadBase + hAt(n.i + n.f) + 0.03 : terrain(x, z, n.dist, n.i + n.f); };
         // superfície VISÍVEL mais alta no ponto: relevo suave, faixa da beira de cada perna da curva (entrada e saída) e asfalto
         const legH = (x, z, c) => { let bd = 1e18, bi = c; for (let d = -45; d <= 45; d++) { const i = (c + d + N) % N, dx = S[i].x - x, dz = S[i].z - z, q = dx * dx + dz * dz; if (q < bd) { bd = q; bi = i; } }
-          const dist = Math.sqrt(bd); if (dist > W + 42) return -1e9; return dist < W + 1.8 ? tr.roadBase + hAt(bi) : terrain(x, z, dist, bi); };
+          const dist = Math.sqrt(bd); if (dist > W + 42) return -1e9; return dist < W + CB ? tr.roadBase + hAt(bi) : terrain(x, z, dist, bi); };
         // nó mais próximo procurado na pista INTEIRA (a busca local do tr.nearest parte de um nó "chute" e, na ponta de saída
         // do atalho, achava um trecho errado)
         const nearAll = (x, z) => { let bd = 1e18, bi = 0; for (let i = 0; i < N; i++) { const dx = S[i].x - x, dz = S[i].z - z, q = dx * dx + dz * dz; if (q < bd) { bd = q; bi = i; } } return tr.nearest({ x, z }, bi); };
         // chão que REALMENTE aparece no ponto: perto da pista é a faixa da beira (segue a altura do asfalto), longe é o relevo.
         // (antes era o máximo entre relevo e faixas: perto da pista o relevo "cru" fica escondido por baixo, mais alto que a faixa,
         //  e o atalho virava um dique elevado, "voando")
-        const visH = (x, z) => { const nn = nearAll(x, z); return nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i); };
+        const visH = (x, z) => { const nn = nearAll(x, z); return nn.dist < W + CB ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i); };
         // teto perto da pista: o chão do atalho sobe no máximo 1:2,5 a partir da zebra (antes, onde o atalho passava rente à
         // pista, ficava um "paredão" de terra de ~1 m colado na zebra)
-        const capNN = nn => nn.dist < W + 40 ? tr.roadBase + hAt(nn.i + nn.f) + 0.06 + Math.max(0, nn.dist - (W + 2.1)) * 0.4 : 1e9;
+        const capNN = nn => nn.dist < W + 40 ? tr.roadBase + hAt(nn.i + nn.f) + 0.06 + Math.max(0, nn.dist - (W + CB + 0.3)) * 0.4 : 1e9;
         // perfil do caminho: máximo das superfícies na largura do caminho, depois envelope (máximo móvel) e média móvel -> sem degraus
         tr.shortcuts.forEach(sc => { const P = sc.pts, n = P.length, raw = [];
           for (let k = 0; k < n; k++) { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
@@ -2232,7 +2271,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           sc.h = raw.map((r, k) => Math.min(r + 0.06, capNN(nearAll(P[k].x, P[k].z))));
           // pontas: enquanto o caminho está em cima do asfalto ele fica na altura exata da pista; depois sobe/desce em rampa
           // suave (6 amostras, ~15 m) até o perfil do terreno -> sem degrau na hora de sair da pista
-          const road = P.map(q => { const nn = nearAll(q.x, q.z); return nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) + 0.03 : null; });
+          const road = P.map(q => { const nn = nearAll(q.x, q.z); return nn.dist < W + CB ? tr.roadBase + hAt(nn.i + nn.f) + 0.03 : null; });
           [[0, 1], [n - 1, -1]].forEach(([k0, dir]) => { let kE = -1; for (let k = k0; k >= 0 && k < n && road[k] !== null; k += dir) kE = k; if (kE < 0) return;
             const base = road[kE], R = 6; for (let k = k0; k !== kE + dir; k += dir) sc.h[k] = road[k];
             for (let m = 1; m <= R; m++) { const k = kE + dir * m; if (k < 0 || k >= n) break; const w = m / R, e = w * w * (3 - 2 * w); sc.h[k] = base + (sc.h[k] - base) * e; } }); });
@@ -2270,7 +2309,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         tr.animated.push(t => { const nf = NIGHT(); LIFE.flick.forEach((g, k) => { const f = 0.88 + 0.08 * Math.sin(t * 13 + k * 1.7) + 0.04 * Math.sin(t * 29 + k); g.scale.setScalar(1.0 * f); g.material.opacity = 0.9 * nf * f; }); });
         const logG = new THREE.CylinderGeometry(0.22, 0.26, 1.1, 8); logG.rotateZ(Math.PI / 2);
         // nada do caminho é desenhado em cima do asfalto/zebra: o ponto que cairia na pista é empurrado para logo depois da zebra
-        const EDGE = W + 2.1, snap = (x, z) => { const nn = nearAll(x, z); if (nn.dist >= EDGE) return [x, z];
+        const EDGE = W + CB + 0.3, snap = (x, z) => { const nn = nearAll(x, z); if (nn.dist >= EDGE) return [x, z];
           const i = nn.i, i1 = (i + 1) % N, qx = S[i].x + (S[i1].x - S[i].x) * nn.f, qz = S[i].z + (S[i1].z - S[i].z) * nn.f, sg = Math.sign(nn.lat) || 1;
           return [qx + T[i].z * sg * EDGE, qz - T[i].x * sg * EDGE]; };
         tr.shortcuts.forEach(sc => {
@@ -2291,7 +2330,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           const RB = 6;                                                      // faixa de grama além da borda da terra (a camada acompanha o chão: não há barranco)
           // chão do atalho = chão DESENHADO (grade/faixa, exatamente os mesmos triângulos) + 12 cm; na beira de fora mergulha
           // embaixo da grama. Como segue os mesmos triângulos, nunca fica solto no ar nem é engolido pelo chão.
-          const surf = (x, z, nn) => { nn = nn || nearAll(x, z); const q = pathQ(x, z), g = nn.dist < W + 1.8 ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i), lift = q.s < RB - 2.5 ? LIFT : LIFT - (LIFT + 0.45) * Math.min(1, (q.s - (RB - 2.5)) / 2.5);
+          const surf = (x, z, nn) => { nn = nn || nearAll(x, z); const q = pathQ(x, z), g = nn.dist < W + CB ? tr.roadBase + hAt(nn.i + nn.f) : visGround(x, z, nn.i), lift = q.s < RB - 2.5 ? LIFT : LIFT - (LIFT + 0.45) * Math.min(1, (q.s - (RB - 2.5)) / 2.5);
             return { y: Math.min(g + lift, capNN(nn)), s: q.s }; };
           const CS = LO ? 2.0 : MID ? 1.5 : 1.2;
           let bx0 = 1e9, bx1 = -1e9, bz0 = 1e9, bz1 = -1e9; P.forEach(q => { bx0 = Math.min(bx0, q.x); bx1 = Math.max(bx1, q.x); bz0 = Math.min(bz0, q.z); bz1 = Math.max(bz1, q.z); });
@@ -2428,7 +2467,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         });
         console.info('[atalho] ' + tr.shortcuts.length + ' atalho(s): ' + tr.shortcuts.map(sc => sc.i + '→' + sc.j).join(', '));
       }
-      const waterTest = p => { if (bridges.some(b => { const dx = p.x - S[b].x, dz = p.z - S[b].z; return Math.abs(dx * T[b].x + dz * T[b].z) < 30 && Math.abs(dx * T[b].z - dz * T[b].x) < W + 2.1; })) return false;
+      const waterTest = p => { if (bridges.some(b => { const dx = p.x - S[b].x, dz = p.z - S[b].z; return Math.abs(dx * T[b].x + dz * T[b].z) < 30 && Math.abs(dx * T[b].z - dz * T[b].x) < W + CB + 0.3; })) return false;
         return ponds.some(q => pondEdge(q, p.x, p.z) < 0) || nearRiver(p.x, p.z, RHW - 0.5) || (!!SEA && SEA.e(p.x, p.z) < 0); };
       buildShortcuts();
       tr.dustColor = 0xc9a878;

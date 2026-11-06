@@ -81,16 +81,166 @@
   // (corpo) ou do capacete (acima do pescoço, medido na pose de origem) e o tom de pele vira a pele escolhida;
   // o brilho do texel é mantido, então dobras e sombras pintadas continuam lá. vKeep = 1 no cabelo.
   const HSV = 'vec3 kHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x); }';
-  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; varying vec3 vBind; varying float vKeep;', HSV].join('\n');
+  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; uniform sampler2D uMask; varying vec3 vBind; varying float vKeep; varying float vSkin; varying vec3 vVM; varying vec3 vOther;'].join('\n');
+  // Troca de cor pela MÁSCARA (feita uma vez por personagem, ver cleanTexture): R = vermelho (macacão/capacete, com os
+  // reflexos pintados), G = tom de pele, B = brilho claro e quente (vira pele só dentro do rosto). A máscara é filtrada (bilinear) e passa por um limiar suave:
+  // as bordas entre cores ficam lisas como desenho vetorial, em vez dos dentes e respingos cinza de antes.
+  // vSkin = 1 só nas regiões de pele de verdade (rosto/mãos, achadas na malha): fora delas, tom de pele é reflexo pintado
+  // no vermelho e vira a cor do macacão/capacete. SR/SK = quanto da sombra pintada na textura fica: a textura da Tripo
+  // traz dobras e manchas de luz "sujas"; o volume agora vem da luz toon.
   const RECOLOR_BODY = [
-    'if (vKeep < 0.5) { vec3 hv = kHsv(texelColor.rgb); float dr = min(hv.x, 1.0 - hv.x);',
-    '  float wR = (1.0 - smoothstep(0.028, 0.042, dr)) * smoothstep(0.42, 0.58, hv.y) * smoothstep(0.06, 0.15, hv.z);',
-    '  float wK = (1.0 - smoothstep(0.022, 0.04, abs(hv.x - 0.07))) * smoothstep(0.15, 0.24, hv.y) * (1.0 - smoothstep(0.62, 0.72, hv.y)) * smoothstep(0.5, 0.62, hv.z);',
-    '  float head = smoothstep(uHeadY - 0.005, uHeadY + 0.025, vBind.y), kr = hv.z / 0.9, kk = hv.z / 0.95;',
-    '  vec3 red = mix(uSuit, uHelmet, head) * min(kr, 1.0) + vec3(max(kr - 1.0, 0.0) * 0.5);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, red, wR);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * min(kk, 1.05), wK); }'
+    'if (vKeep < 0.5) { vec3 mk = texture2D(uMask, vUv).rgb; float core = smoothstep(0.75, 1.0, vVM.z);',
+    '  float texCol = smoothstep(0.32, 0.68, mk.r);',
+    '  mk.r = mix(vVM.x, mk.r, core); mk.g = max(mk.g, mk.b * vSkin);',   // perto das bordas do vermelho: cor por vértice (pele: textura)
+    '  float wK0 = smoothstep(0.32, 0.68, mk.g), wR = smoothstep(0.32, 0.68, mk.r);',
+    '  float wK = wK0 * vSkin; wR = max(wR * (1.0 - wK), wK0 * (1.0 - vSkin));',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vOther, texCol * (1.0 - max(wR, wK)) * (1.0 - core));',   // dente de cor fora do lugar
+    '  float v = max(texelColor.r, max(texelColor.g, texelColor.b));',
+    '  float head = smoothstep(uHeadY - 0.005, uHeadY + 0.025, vBind.y);',
+    '  float sr = mix(1.0, clamp(v / 0.9, 0.0, 1.0), 0.32), sk = mix(1.0, clamp(v / 0.95, 0.0, 1.0), 0.22);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uSuit, uHelmet, head) * sr, wR);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * sk, wK); }'
   ].join('\n');
+
+  // ---------- máscara de cores (uma vez por personagem) ----------
+  // Classifica cada texel da textura original: vermelho (inclui reflexos claros e sombras do vermelho), pele (inclui o
+  // brilho claro pintado no rosto) e escuro. Um filtro de maioria 3x3 tira os respingos da compressão JPEG.
+  function hsv(r, g, b) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn; let h = 0;
+    if (d > 1e-5) { h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; if (h < 0) h += 1; }
+    return [h, mx > 0 ? d / mx : 0, mx]; }
+  function texelClass(r, g, b) {   // 1 = vermelho, 2 = pele, 3 = brilho claro, 0 = outro
+    const [h, s, v] = hsv(r / 255, g / 255, b / 255), dr = Math.min(h, 1 - h);
+    if (v < 0.1) return 0;
+    if (dr < 0.042 && s > 0.45) return 1;                                              // vermelho (com sombra)
+    if (Math.abs(h - 0.075) < 0.05 && s > 0.12 && s < 0.7 && v > 0.5) return 2;        // pele (e reflexo rosado do vermelho)
+    if (dr < 0.075 && s > 0.12 && v > 0.62) return 1;                                  // reflexo claro do vermelho
+    if (s <= 0.22 && v > 0.72) return 3;                                               // brilho claro (só vale dentro da pele)
+    return 0;
+  }
+  // ---------- limpeza da textura (uma vez por personagem) ----------
+  // O atlas da Tripo tem espaços vazios entre as ilhas de UV, pintados com a cor da ilha ERRADA. A filtragem da placa de
+  // vídeo lê esses texels nas bordas de cada ilha: aparecem "dentes" e riscos de outra cor nas costuras (vermelho na
+  // viseira, preto no macacão). Aqui os triângulos são desenhados no espaço da textura e cada texel vazio recebe a cor
+  // do texel coberto mais próximo (edge padding / dilatação). Em seguida sai a máscara de cores, já sem vazamento.
+  function cleanTexture(map, U, I) {
+    const image = map && map.image; if (!image || !image.width) return null;
+    const W = image.width, H = image.height, N = W * H;
+    let c, g, im;
+    try { c = document.createElement('canvas'); c.width = W; c.height = H; g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(image, 0, 0); im = g.getImageData(0, 0, W, H); }
+    catch (e) { console.warn('[piloto] textura não pôde ser lida', e); return null; }
+    const d = im.data;
+    // cobertura: triângulos rasterizados no espaço UV (direto num array, sem canvas) + 1 texel de folga em volta
+    const covA = new Uint8Array(N);
+    for (let t = 0; t < I.length; t += 3) {
+      const ax = U[I[t] * 2] * W, ay = U[I[t] * 2 + 1] * H, bx = U[I[t + 1] * 2] * W, by = U[I[t + 1] * 2 + 1] * H, cx = U[I[t + 2] * 2] * W, cy = U[I[t + 2] * 2 + 1] * H;
+      const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax); if (Math.abs(area) < 1e-9) continue; const sg = area > 0 ? 1 : -1;
+      const x0 = Math.max(0, Math.floor(Math.min(ax, bx, cx))), x1 = Math.min(W - 1, Math.ceil(Math.max(ax, bx, cx))), y0 = Math.max(0, Math.floor(Math.min(ay, by, cy))), y1 = Math.min(H - 1, Math.ceil(Math.max(ay, by, cy)));
+      for (let y = y0; y <= y1; y++) { const py = y + 0.5; for (let x = x0; x <= x1; x++) { const px = x + 0.5;
+        const w0 = ((bx - px) * (cy - py) - (by - py) * (cx - px)) * sg, w1 = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) * sg, w2 = ((ax - px) * (by - py) - (ay - py) * (bx - px)) * sg;
+        if (w0 >= 0 && w1 >= 0 && w2 >= 0) covA[y * W + x] = 1; } }
+    }
+    const src = new Int32Array(N), q = new Int32Array(N);
+    let qh = 0, qt = 0;
+    for (let i = 0; i < N; i++) { const x = i % W;                                         // coberto, ou vizinho de coberto (texel cortado pela aresta)
+      if (covA[i] || (x > 0 && covA[i - 1]) || (x < W - 1 && covA[i + 1]) || (i >= W && covA[i - W]) || (i < N - W && covA[i + W])) { src[i] = i; q[qt++] = i; } else src[i] = -1; }
+    if (qt > N * 0.05) {                                                                   // busca em largura a partir de todos os texels cobertos
+      while (qh < qt) { const p = q[qh++], x = p % W, s0 = src[p];
+        if (x > 0 && src[p - 1] < 0) { src[p - 1] = s0; q[qt++] = p - 1; }
+        if (x < W - 1 && src[p + 1] < 0) { src[p + 1] = s0; q[qt++] = p + 1; }
+        if (p >= W && src[p - W] < 0) { src[p - W] = s0; q[qt++] = p - W; }
+        if (p < N - W && src[p + W] < 0) { src[p + W] = s0; q[qt++] = p + W; } }
+      for (let i = 0; i < N; i++) { const s0 = src[i]; if (s0 >= 0 && s0 !== i) { const o = i * 4, k = s0 * 4; d[o] = d[k]; d[o + 1] = d[k + 1]; d[o + 2] = d[k + 2]; } }
+      g.putImageData(im, 0, 0);
+      try { if (image.close) image.close(); } catch (e) { }
+      map.image = c; map.needsUpdate = true;
+    }
+    // máscara de cores a partir da textura já limpa
+    const cls = new Uint8Array(N);
+    for (let i = 0; i < N; i++) cls[i] = texelClass(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]);
+    // brilho dentro do olho (pontinho claro cercado de escuro) continua brilho, não vira pele
+    { const dark = new Uint8Array(N), S = W + 1, ii = new Int32Array(S * (H + 1));
+      for (let i = 0; i < N; i++) dark[i] = Math.max(d[i * 4], d[i * 4 + 1], d[i * 4 + 2]) < 80 ? 1 : 0;
+      for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += dark[y * W + x]; ii[(y + 1) * S + x + 1] = ii[y * S + x + 1] + row; } }
+      const R = 4;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = y * W + x; if (cls[i] !== 3) continue;
+        const x0 = Math.max(0, x - R), x1 = Math.min(W - 1, x + R), y0 = Math.max(0, y - R), y1 = Math.min(H - 1, y + R);
+        const s = ii[(y1 + 1) * S + x1 + 1] - ii[y0 * S + x1 + 1] - ii[(y1 + 1) * S + x0] + ii[y0 * S + x0];
+        if (s > 0.5 * (x1 - x0 + 1) * (y1 - y0 + 1)) cls[i] = 0; } }
+    const fin = new Uint8Array(N), mc = document.createElement('canvas'); mc.width = W; mc.height = H; const mg = mc.getContext('2d'), mi = mg.createImageData(W, H), md = mi.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const cnt = [0, 0, 0, 0];
+      for (let dy = -1; dy <= 1; dy++) { const yy = Math.min(H - 1, Math.max(0, y + dy)); for (let dx = -1; dx <= 1; dx++) cnt[cls[yy * W + Math.min(W - 1, Math.max(0, x + dx))]]++; }
+      const self = cls[y * W + x]; let k = self;
+      if (cnt[self] < 3) { k = 0; for (let j = 1; j < 4; j++) if (cnt[j] > cnt[k]) k = j; }                    // maioria 3x3 (tira respingos)
+      fin[y * W + x] = k; const o = (y * W + x) * 4; md[o] = k === 1 ? 255 : 0; md[o + 1] = k === 2 ? 255 : 0; md[o + 2] = k === 3 ? 255 : 0; md[o + 3] = 255;
+    }
+    mg.putImageData(mi, 0, 0);
+    const t = new THREE.CanvasTexture(mc); t.flipY = false; t.encoding = THREE.LinearEncoding; t.anisotropy = (window.TX && TX.aniso) || 1;
+    t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter;
+    return { tex: t, cls: fin, W, H, rgb: d };
+  }
+
+  // ---------- borda de cor pela malha (uma vez por personagem) ----------
+  // Na transição entre duas cores (capacete/viseira, macacão/luva) a textura da IA pinta cada triângulo de uma cor:
+  // sai uma fileira de "dentes". Aqui cada triângulo recebe a cor da maioria dos texels no seu miolo; cada vértice
+  // (soldado nas costuras) fica com a cor da maioria das faces em volta. No shader, perto das bordas, vale essa cor por
+  // vértice interpolada (borda lisa, seguindo a malha); no miolo das regiões (todas as faces de acordo) vale a textura.
+  // Saída por vértice: [vermelho 0/1, pele 0/1, miolo 0/1] e a "outra cor" do lugar (média dos texels que não são
+  // vermelho nem pele em volta): um dente vermelho pintado dentro da viseira escura vira cinza-viseira, não vermelho.
+  function vertexMasks(P, U, I, nv, M) {
+    const out = new Float32Array(nv * 3), oth = new Float32Array(nv * 3).fill(0.2); if (!M) { for (let i = 0; i < nv; i++) out[i * 3 + 2] = 1; return { vm: out, other: oth }; }
+    const { cls, W, H, rgb } = M, px = (u, v) => { u -= Math.floor(u); v -= Math.floor(v); return Math.min(H - 1, v * H | 0) * W + Math.min(W - 1, u * W | 0); }, at = (u, v) => cls[px(u, v)];
+    const weld = new Int32Array(nv), m = new Map(); let k = 0;
+    for (let i = 0; i < nv; i++) { const key = Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5);
+      let w = m.get(key); if (w === undefined) { w = k++; m.set(key, w); } weld[i] = w; }
+    const red = new Float32Array(k), skn = new Float32Array(k), tot = new Float32Array(k), first = new Int8Array(k).fill(-1), mixd = new Uint8Array(k), oc = new Float32Array(k * 4);
+    for (let t = 0; t < I.length; t += 3) {
+      const a = I[t], b = I[t + 1], c = I[t + 2], cu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, cv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3, n = [0, 0, 0, 0];
+      const smp = (u, v, wgt) => { const q = px(u, v), cl = cls[q]; n[cl] += wgt;
+        if (cl === 0) for (const i of [a, b, c]) { const o = weld[i] * 4; oc[o] += rgb[q * 4] * wgt; oc[o + 1] += rgb[q * 4 + 1] * wgt; oc[o + 2] += rgb[q * 4 + 2] * wgt; oc[o + 3] += wgt; } };
+      smp(cu, cv, 2); [a, b, c].forEach(i => smp(cu + (U[i * 2] - cu) * 0.5, cv + (U[i * 2 + 1] - cv) * 0.5, 1));
+      let cl = 0; for (let j = 1; j < 4; j++) if (n[j] > n[cl]) cl = j; const r = cl === 1 ? 1 : 0, s = cl >= 2 ? 1 : 0, code = r ? 1 : s ? 2 : 0;
+      for (const i of [a, b, c]) { const w = weld[i]; red[w] += r; skn[w] += s; tot[w]++; if (first[w] < 0) first[w] = code; else if (first[w] !== code) mixd[w] = 1; }
+    }
+    for (let i = 0; i < nv; i++) { const w = weld[i], T = tot[w] || 1; out[i * 3] = red[w] / T >= 0.5 ? 1 : 0; out[i * 3 + 1] = skn[w] / T >= 0.5 ? 1 : 0; out[i * 3 + 2] = mixd[w] ? 0 : 1;
+      const o = w * 4; if (oc[o + 3] > 0) for (let j = 0; j < 3; j++) oth[i * 3 + j] = oc[o + j] / oc[o + 3] / 255; }
+    return { vm: out, other: oth };
+  }
+
+  // ---------- regiões de pele (uma vez por personagem) ----------
+  // Cada triângulo é classificado pela cor da textura no seu miolo (longe das bordas da ilha de UV). Os triângulos
+  // de pele que se tocam (vértices na mesma posição) formam regiões; só as grandes (rosto, mãos) contam como pele.
+  // Pontinhos isolados com tom de pele (reflexo pintado no capacete) ficam de fora.
+  function skinRegions(P, U, I, nv, image, M) {
+    const out = new Float32Array(nv);
+    let data, W, H;
+    if (M) { data = M.rgb; W = M.W; H = M.H; } else try { W = image.width; H = image.height; const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(image, 0, 0); data = g.getImageData(0, 0, W, H).data; }
+    catch (e) { out.fill(1); return out; }
+    const isSkin = (u, v) => { u -= Math.floor(u); v -= Math.floor(v); const p = (Math.min(H - 1, v * H | 0) * W + Math.min(W - 1, u * W | 0)) * 4;
+      return texelClass(data[p], data[p + 1], data[p + 2]) === 2; };
+    // vértices soldados pela posição
+    const weld = new Int32Array(nv), m = new Map(); let k = 0;
+    for (let i = 0; i < nv; i++) { const key = Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5);
+      let w = m.get(key); if (w === undefined) { w = k++; m.set(key, w); } weld[i] = w; }
+    const nt = I.length / 3, skin = new Uint8Array(nt), area = new Float32Array(nt);
+    for (let t = 0; t < nt; t++) {
+      const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2], cu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, cv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3;
+      let n = isSkin(cu, cv) ? 1 : 0; [a, b, c].forEach(i => { if (isSkin(cu + (U[i * 2] - cu) * 0.55, cv + (U[i * 2 + 1] - cv) * 0.55)) n++; });
+      skin[t] = n >= 2 ? 1 : 0;
+      const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+      area[t] = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2;
+    }
+    // união das regiões (union-find pelos vértices soldados)
+    const par = new Int32Array(k); for (let i = 0; i < k; i++) par[i] = i;
+    const find = x => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+    for (let t = 0; t < nt; t++) if (skin[t]) { const r0 = find(weld[I[t * 3]]); for (let j = 1; j < 3; j++) { const r1 = find(weld[I[t * 3 + j]]); if (r1 !== r0) par[r1] = r0; } }
+    const comp = new Map(); for (let t = 0; t < nt; t++) if (skin[t]) { const r = find(weld[I[t * 3]]); comp.set(r, (comp.get(r) || 0) + area[t]); }
+    const big = Math.max(0, ...comp.values()), keep = new Set([...comp].filter(([, a]) => a >= big * 0.06).map(([r]) => r));
+    const okW = new Uint8Array(k);
+    for (let t = 0; t < nt; t++) if (skin[t] && keep.has(find(weld[I[t * 3]]))) for (let j = 0; j < 3; j++) okW[weld[I[t * 3 + j]]] = 1;
+    for (let i = 0; i < nv; i++) out[i] = okW[weld[i]];
+    return out;
+  }
 
   // ---------- IK analítico de dois ossos (no espaço do piloto) ----------
   // S = ombro/quadril, T = alvo, L1/L2 = comprimentos, pole = direção preferida da dobra -> devolve o cotovelo/joelho
@@ -115,14 +265,14 @@
       this.root = THREE.SkeletonUtils.clone(tpl.scene);
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
       this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
-      const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY } };
-      const mat = this.mat = Toon.mat({ map: tpl.map, skinning: true }, { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb', hook: sh => {
+      const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY }, uMask: { value: tpl.mask } };
+      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb5', hook: sh => {
         Object.assign(sh.uniforms, u);
-        sh.vertexShader = 'attribute float aKeep;\nvarying vec3 vBind;\nvarying float vKeep;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep;');
+        sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
       } });
       this.mesh.material = mat; this.mesh.castShadow = true; this.mesh.frustumCulled = false;
-      Toon.outline(this.root, tpl.outline);                                              // contorno de desenho (acompanha o esqueleto)
+      Toon.outline(this.root, tpl.outline, null, undefined, 6);                         // contorno de desenho (acompanha o esqueleto); recua mais: sem faixas por dentro
       this.setColors(spec);
       this.t = Math.random() * 10; this.lean = 0; this.look = 0; this.bob = 0;
       this.ua = { _L: this.bones.upperarm_L.position.clone(), _R: this.bones.upperarm_R.position.clone() };   // ombros na pose de origem (o "alcance" mexe neles)
@@ -303,7 +453,13 @@
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2));
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geo.setAttribute('aKeep', new THREE.BufferAttribute(KP, 1));
+    const CM = cleanTexture(map, U, I), mask = CM && CM.tex;                                // textura sem vazamento nas costuras + máscara de cores
+    const VMK = vertexMasks(P, U, I, nv, CM);
+    geo.setAttribute('aVM', new THREE.BufferAttribute(VMK.vm, 3)); geo.setAttribute('aOther', new THREE.BufferAttribute(VMK.other, 3));
+    geo.setAttribute('aSkin', new THREE.BufferAttribute(skinRegions(P, U, I, nv, map.image, CM), 1));
     geo.setIndex(new THREE.BufferAttribute(nv > 65535 ? I : Uint16Array.from(I), 1)); geo.computeBoundingBox(); geo.computeBoundingSphere();
+    // (as normais de sombreamento ficam as do arquivo: com a rampa toon suave elas dão o rosto mais limpo; as suavizadas
+    //  vão só para o contorno, em Toon.outline, onde acabam com os rasgos nas costuras)
     // esqueleto na pose de origem (rotações zeradas: as direções de repouso valem no espaço do piloto)
     const pos = {}, bones = [], byName = {};
     BONES.forEach(([name, parent, mk, sd]) => { const a = lm[mk]; pos[name] = toP([a[0], a[1], sd ? sd * Math.abs(a[2]) : a[2]]);
@@ -318,7 +474,7 @@
     const dir = {}, len = {}, seg = (n, a, b) => { dir[n] = pos[b].clone().sub(pos[a]).normalize(); len[n] = pos[a].distanceTo(pos[b]); };
     ['_L', '_R'].forEach(s => { seg('upperarm' + s, 'upperarm' + s, 'forearm' + s); seg('forearm' + s, 'forearm' + s, 'hand' + s); seg('thigh' + s, 'thigh' + s, 'shin' + s); seg('shin' + s, 'shin' + s, 'foot' + s); });
     const gripOff = {}; ['_L', '_R'].forEach(s => { const sd = s === '_L' ? -1 : 1; gripOff[s] = toP([lm.grip[0], lm.grip[1], sd * lm.grip[2]]).sub(pos['hand' + s]); });
-    return { id, scene: root, map, normalMap: null, bind: { hips: pos.hips.clone(), head: pos.head.clone() }, dir, len, gripOff, headY: lm.head[1], outline: 0.0075, pigs: parts.length > 1, boneCount };
+    return { id, scene: root, map, mask, normalMap: null, bind: { hips: pos.hips.clone(), head: pos.head.clone() }, dir, len, gripOff, headY: lm.head[1], outline: 0.0068, pigs: parts.length > 1, boneCount };
   }
 
   const Pilot = {
@@ -332,7 +488,7 @@
       const all = window.GLBAssets ? GLBAssets.loadAll(names, p => { this.progress = p * 0.97; if (onProgress) onProgress(this.progress); }) : Promise.resolve([]);
       this._p = all.then(() => {
         CHAR_IDS.forEach(id => { const g = window.GLBAssets && GLBAssets.get(id); if (!g) return;
-          try { this.tpls[id] = buildTemplate(id, g); } catch (e) { console.warn('[piloto] ' + id + ' indisponível:', e); } });
+          try { const t0 = performance.now(); this.tpls[id] = buildTemplate(id, g); console.info('[piloto] ' + id + ' preparado em ' + Math.round(performance.now() - t0) + ' ms'); } catch (e) { console.warn('[piloto] ' + id + ' indisponível:', e); } });
         try { if (window.KartModels && KartModels.prepare) { KartModels.prepare('gt'); KartModels.prepare('moto'); } } catch (e) { console.warn('[karts] preparo', e); }
         const first = this.tpls[CHAR_IDS[0]] || this.tpls[CHAR_IDS[1]];
         this.tpl = first || null;                                                        // (o main.js guarda a textura do piloto entre as corridas)

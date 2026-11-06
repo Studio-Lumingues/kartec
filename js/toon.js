@@ -25,6 +25,19 @@
     return grad;
   }
 
+  // rampa com transições curtas e suaves (mesmos 3 tons): em malhas orgânicas e irregulares (personagens gerados por IA)
+  // a borda seca entre luz e sombra sai dentada; aqui ela vira uma curva limpa, sem perder a cara de desenho
+  let gradSoft = null;
+  function gradientSoft() {
+    if (gradSoft) return gradSoft;
+    const n = 64, d = new Uint8Array(n * 4), ss = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    for (let i = 0; i < n; i++) { const x = (i + 0.5) / n, r = 122 + 74 * ss(0.3, 0.38, x) + 59 * ss(0.62, 0.7, x), b = 132 + 72 * ss(0.3, 0.38, x) + 51 * ss(0.62, 0.7, x);
+      d[i * 4] = d[i * 4 + 1] = Math.round(r); d[i * 4 + 2] = Math.round(b); d[i * 4 + 3] = 255; }
+    gradSoft = new THREE.DataTexture(d, n, 1, THREE.RGBAFormat);
+    gradSoft.minFilter = gradSoft.magFilter = THREE.LinearFilter; gradSoft.generateMipmaps = false; gradSoft.needsUpdate = true;
+    return gradSoft;
+  }
+
   function vivid(c, k) {
     const col = c && c.isColor ? c : new THREE.Color(c === undefined ? 0xffffff : c), hsl = {}; col.getHSL(hsl);
     if (hsl.s > 0.08) col.setHSL(hsl.h, Math.min(1, hsl.s * (k || 1.25) + 0.06), Math.min(0.92, hsl.l * 1.02 + 0.02));
@@ -74,20 +87,77 @@
   // anéis e manchas de tinta dentro do desenho. Na silhueta (contra o fundo ou objetos mais distantes) nada muda.
   const OUT_PUSH = 1.35;
   const OUTLINE_PUSH = ['{ vec4 oW = vec4(oE, 0.0);', '#ifdef USE_INSTANCING', 'oW = instanceMatrix * oW;', '#endif',
-    'mvPosition.xyz += normalize(mvPosition.xyz) * length((modelViewMatrix * oW).xyz) * ' + OUT_PUSH.toFixed(2) + ';',
+    'mvPosition.xyz += normalize(mvPosition.xyz) * length((modelViewMatrix * oW).xyz) * OUT_PUSH;',
     'gl_Position = projectionMatrix * mvPosition; }'].join('\n');
-  function outlineMat(t, skinned, color) {
-    const col = color === undefined ? INK : color, key = t + (skinned ? 's' : '') + ':' + col;
+  // push (opcional): quanto o casco recua para longe da câmera, em múltiplos da espessura. Personagens usam mais:
+  // braços encostados no tronco e partes que se cruzam deixam de mostrar faixas de tinta POR DENTRO do desenho.
+  function outlineMat(t, skinned, color, push) {
+    const col = color === undefined ? INK : color, pu = push || OUT_PUSH, key = t + (skinned ? 's' : '') + ':' + col + ':' + pu;
     if (outlineMats[key]) return outlineMats[key];
     const m = new THREE.MeshBasicMaterial({ color: col, side: THREE.BackSide, skinning: !!skinned });
-    m.onBeforeCompile = sh => { sh.vertexShader = sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 oE = normalize(normal) * ' + t.toFixed(4) + ';\ntransformed += oE;')
+    // o casco é empurrado pela NORMAL SUAVIZADA (aOutN): nas costuras de UV a malha tem vértices duplicados com normais
+    // diferentes; empurrando pela normal de cada um, o casco se rasgava em pedaços e atravessava a superfície (riscos).
+    m.onBeforeCompile = sh => { sh.vertexShader = 'attribute vec3 aOutN;\n#define OUT_PUSH ' + pu.toFixed(2) + '\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 oE = normalize(aOutN) * ' + t.toFixed(4) + ';\ntransformed += oE;')
         .replace('#include <project_vertex>', '#include <project_vertex>\n' + OUTLINE_PUSH); };
-    m.customProgramCacheKey = () => 'outline-' + key;
+    m.customProgramCacheKey = () => 'outline2-' + key;
     m.userData.outline = true;
     return outlineMats[key] = m;
   }
+  // normal suavizada para o contorno: junta os vértices na mesma posição (costuras de UV) e soma as normais das faces
+  // em volta, ponderadas pelo ângulo do canto (orientadas pela normal original, à prova de faces com o lado trocado).
+  // Fica guardada na própria geometria (as compartilhadas entre karts calculam uma vez só).
+  function hullGeometry(g) {
+    const ud = g.userData || (g.userData = {});
+    if (ud.outlineGeo) return ud.outlineGeo;
+    const h = new THREE.BufferGeometry();
+    for (const k in g.attributes) h.setAttribute(k, g.attributes[k]);
+    if (g.index) h.setIndex(g.index);
+    h.setAttribute('aOutN', smoothNormals(g));
+    if (!g.boundingSphere) g.computeBoundingSphere(); h.boundingSphere = g.boundingSphere.clone(); if (g.boundingBox) h.boundingBox = g.boundingBox.clone();
+    h.userData = { shared: !!ud.shared, outlineOf: true };
+    return ud.outlineGeo = h;
+  }
+  // crease (graus, opcional): só junta faces cuja normal está a menos desse ângulo da normal original do vértice
+  // (quinas de verdade, como a borda da viseira encontrando o rosto, continuam vivas). Sem crease: junta tudo (contorno).
+  function smoothNormals(g, crease) {
+    const P = g.attributes.position, N = g.attributes.normal, n = P.count, idx = g.index ? g.index.array : null, nt = idx ? idx.length / 3 : n / 3;
+    if (!g.boundingBox) g.computeBoundingBox();
+    const sz = g.boundingBox.getSize(new THREE.Vector3()), q = Math.max(sz.x, sz.y, sz.z, 1e-6) * 2e-5;
+    const key = new Int32Array(n), map = new Map(); let k = 0;
+    for (let i = 0; i < n; i++) { const h = Math.round(P.getX(i) / q) + ',' + Math.round(P.getY(i) / q) + ',' + Math.round(P.getZ(i) / q);
+      let v = map.get(h); if (v === undefined) { v = k++; map.set(h, v); } key[i] = v; }
+    const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3(), e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), fn = new THREE.Vector3(), vn = new THREE.Vector3();
+    const V = [a, b, c], FN = new Float32Array(nt * 3), cnt = new Int32Array(k + 1);
+    const wv = new Float32Array(nt * 3);   // peso (ângulo do canto) de cada canto de triângulo
+    for (let t = 0; t < nt; t++) {
+      const i0 = idx ? idx[t * 3] : t * 3, i1 = idx ? idx[t * 3 + 1] : t * 3 + 1, i2 = idx ? idx[t * 3 + 2] : t * 3 + 2, I = [i0, i1, i2];
+      a.fromBufferAttribute(P, i0); b.fromBufferAttribute(P, i1); c.fromBufferAttribute(P, i2);
+      fn.subVectors(c, b).cross(e1.subVectors(a, b)); const len = fn.length(); if (len < 1e-20) continue; fn.divideScalar(len);
+      vn.set(0, 0, 0); for (let j = 0; j < 3; j++) vn.x += N.getX(I[j]), vn.y += N.getY(I[j]), vn.z += N.getZ(I[j]);
+      if (fn.dot(vn) < 0) fn.negate();
+      FN[t * 3] = fn.x; FN[t * 3 + 1] = fn.y; FN[t * 3 + 2] = fn.z;
+      for (let j = 0; j < 3; j++) { e1.subVectors(V[(j + 1) % 3], V[j]).normalize(); e2.subVectors(V[(j + 2) % 3], V[j]).normalize();
+        wv[t * 3 + j] = Math.acos(Math.max(-1, Math.min(1, e1.dot(e2)))); cnt[key[I[j]] + 1]++; }
+    }
+    // lista de cantos por grupo soldado
+    for (let i = 0; i < k; i++) cnt[i + 1] += cnt[i];
+    const list = new Int32Array(cnt[k]), fill = cnt.slice(0, k);
+    for (let t = 0; t < nt; t++) { if (FN[t * 3] === 0 && FN[t * 3 + 1] === 0 && FN[t * 3 + 2] === 0) continue;
+      for (let j = 0; j < 3; j++) { const v = idx ? idx[t * 3 + j] : t * 3 + j; list[fill[key[v]]++] = t * 3 + j; } }
+    const cosC = crease ? Math.cos(crease * Math.PI / 180) : -2, out = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const nx = N.getX(i), ny = N.getY(i), nz = N.getZ(i), nl = Math.hypot(nx, ny, nz) || 1, g0 = key[i];
+      let sx = 0, sy = 0, sz = 0;
+      for (let p = cnt[g0]; p < fill[g0]; p++) { const tc = list[p], t = (tc / 3) | 0, fx = FN[t * 3], fy = FN[t * 3 + 1], fz = FN[t * 3 + 2];
+        if ((fx * nx + fy * ny + fz * nz) / nl < cosC) continue; const w = wv[tc]; sx += fx * w; sy += fy * w; sz += fz * w; }
+      vn.set(sx, sy, sz);
+      if (vn.lengthSq() < 1e-20 || vn.x * nx + vn.y * ny + vn.z * nz < 0) vn.set(nx, ny, nz); vn.normalize();
+      out[i * 3] = vn.x; out[i * 3 + 1] = vn.y; out[i * 3 + 2] = vn.z;
+    }
+    return new THREE.BufferAttribute(out, 3);
+  }
   // color (opcional): cor do traço; os pneus usam preto neutro em vez da tinta roxa
-  function outline(root, t, filter, color) {
+  function outline(root, t, filter, color, push) {
     const list = [];
     root.traverse(o => {
       if (!o.isMesh || o.userData.outline || o.userData.noOutline || !o.geometry.attributes.normal) return;
@@ -97,10 +167,11 @@
       list.push(o);
     });
     list.forEach(o => {
+      const hg = hullGeometry(o.geometry);
       let h;
-      if (o.isSkinnedMesh) { h = new THREE.SkinnedMesh(o.geometry, outlineMat(t, true, color)); h.bind(o.skeleton, o.bindMatrix); h.frustumCulled = false; }
-      else if (o.isInstancedMesh) { h = new THREE.InstancedMesh(o.geometry, outlineMat(t, false, color), o.count); h.instanceMatrix = o.instanceMatrix; h.frustumCulled = o.frustumCulled; }
-      else h = new THREE.Mesh(o.geometry, outlineMat(t, false, color));
+      if (o.isSkinnedMesh) { h = new THREE.SkinnedMesh(hg, outlineMat(t, true, color, push)); h.bind(o.skeleton, o.bindMatrix); h.frustumCulled = false; }
+      else if (o.isInstancedMesh) { h = new THREE.InstancedMesh(hg, outlineMat(t, false, color, push), o.count); h.instanceMatrix = o.instanceMatrix; h.frustumCulled = o.frustumCulled; }
+      else h = new THREE.Mesh(hg, outlineMat(t, false, color, push));
       h.position.copy(o.position); h.quaternion.copy(o.quaternion); h.scale.copy(o.scale);
       h.userData.outline = true; h.castShadow = false; h.receiveShadow = false; h.renderOrder = o.renderOrder;
       o.parent.add(h);
@@ -128,5 +199,5 @@
     try { return fn(); } finally { THREE.MeshLambertMaterial = Lambert; THREE.MeshPhongMaterial = Phong; }
   }
 
-  window.Toon = { INK, gradient, vivid, mat, outline, during, Lambert };
+  window.Toon = { INK, gradient, gradientSoft, vivid, mat, outline, smoothNormals, during, Lambert };
 })();

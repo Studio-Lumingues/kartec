@@ -127,7 +127,8 @@ body[data-screen="race"] #signal:not([hidden]) { display: flex; }
 #toast { position: fixed; top: 20%; left: 50%; transform: translate(-50%, -12px) rotate(-2deg); padding: 10px 30px 12px; border-radius: 999px; background: var(--ink); color: var(--white); font: 700 clamp(26px, 4.4vw, 44px) var(--display); letter-spacing: .5px; box-shadow: var(--pop); opacity: 0; pointer-events: none; z-index: 5; transition: opacity .2s, transform .35s cubic-bezier(.2, 1.9, .4, 1); white-space: nowrap; }
 #toast.show { opacity: 1; transform: translate(-50%, 0) rotate(-2deg) scale(1); }
 
-#flare { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+#flare { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; display: none !important; }   /* flare antigo: substituído pelo js/sunflare.js (#kFlare) */
+body:not([data-screen="race"]) #kFlare { display: none; }
 #flare div { position: absolute; left: 0; top: 0; border-radius: 50%; opacity: 0; mix-blend-mode: screen; will-change: transform, opacity; }
 
 /* toque */
