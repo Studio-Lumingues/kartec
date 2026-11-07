@@ -1150,7 +1150,7 @@
       for (const k of this.karts) { if (!k || !k.m || k.gone) continue;
         if (k === this.player) { k.m.lod = 0; continue; }
         const d2 = k.pos.distanceToSquared(cp); S.center.copy(k.pos);
-        const show = all || d2 < 900 || F.intersectsSphere(S);
+        const show = !k.boomHidden && (all || d2 < 900 || F.intersectsSphere(S));   // boomHidden: kart explodido pelo foguete (items.js)
         if (k.m.group.visible !== show) k.m.group.visible = show;
         k.m.lod = !show ? 3 : all || this.state === 'showcase' ? 0 : d2 > 8100 ? 2 : d2 > 2025 ? 1 : 0; }   // showcase: piloto animado todo quadro
     },

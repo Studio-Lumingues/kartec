@@ -481,7 +481,8 @@
       const grip = Math.min(grip0, this.wetT > 0 ? 1 - 0.1 * this.wetT / 2 : 1);
       // plataformas de boost
       const padNow = racing && !this.finished && !this.air && tr.onPad(this.pos);
-      if (padNow && !this.onPadPrev) { this.boostT = 1.6; this.speed = Math.max(this.speed, P.MAX * 1.05); this.boostTint = 0; this.padFx = true; this.events('boost', this); }
+      if (padNow && !this.onPadPrev) { this.boostT = 1.6; this.speed += P.MAX * (P.PAD_KICK || 0.2);   // impulso SOMADO à velocidade atual (quem chega embalado sai mais rápido)
+        this.boostTint = 0; this.padFx = true; this.events('boost', this); }
       this.onPadPrev = padNow; if (padNow) this.boostT = Math.max(this.boostT, 1.0);
       if (this.boostT > 0) this.boostT -= dt;
       const boosting = this.boostT > 0 && (!off || dirt);
@@ -492,20 +493,27 @@
       this.wheelT = Math.max(0, Math.min(1, (this.wheelT || 0) + (wantW ? dt * 2.2 : -dt * 3.2)));
       // relevo: na subida a velocidade máxima cai (12% -> ~-26%) e na descida sobe um pouco; quem chega embalado
       // (turbo, mini-turbo) perde a sobra aos poucos -> as subidas íngremes pedem impulso
-      const slopeK = tr.vert && !off ? Math.max(0.6, Math.min(1.12, 1 - (P.SLOPE_TOP || 0) * (this.slope || 0))) : 1;
+      const slopeK = tr.vert && !off ? Math.max(0.6, Math.min(1, 1 - (P.SLOPE_TOP || 0) * (this.slope || 0))) : 1;   // na descida não há teto fixo: a gravidade embala
       const MAXE = P.MAX * (1 + 0.012 * this.coins) * (this.topScale || 1) * (this.wheelT > 0.9 ? 1.06 : 1) * slopeK;
-      const top = boosting ? MAXE * 1.5 : MAXE, maxF = off ? P.MAX * (dirt ? 0.9 : 0.38) : P.MAX;
+      const maxF = off ? P.MAX * (dirt ? 0.9 : 0.38) : P.MAX;
+      // FÍSICA DE EMBALO: o motor só empurra até a velocidade máxima (o empurrão some suavemente perto dela). Acima disso
+      // a velocidade vem de fora (descida, turbos, plataformas) e vai embora aos poucos pelo arrasto do ar -> o kart
+      // "carrega" o embalo de uma descida ou de um turbo em vez de voltar na hora para um valor fixo.
+      const engine = Math.max(0, Math.min(1, (MAXE - this.speed) / (MAXE * 0.06)));
       if (!this.air) {
-        if (up) this.speed += (this.speed < 0 ? P.BRAKE * grip : P.ACC) * dt;
+        if (up) this.speed += (this.speed < 0 ? P.BRAKE * grip : P.ACC * engine) * dt;
         else if (down) this.speed -= (this.speed > 0 ? P.BRAKE * grip : P.ACC * 0.7) * dt;   // molhado: freia menos (distância maior)
-        else this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), (off && !dirt ? 18 : 6) * dt);
+        else this.speed -= Math.sign(this.speed) * Math.min(Math.abs(this.speed), (off && !dirt ? 18 : P.ACC * (0.06 + 0.1 * Math.min(1, Math.abs(this.speed) / P.MAX))) * dt);   // solto: rolamento + ar (rodando solto na descida o kart ainda ganha velocidade)
         if (off && this.speed > maxF) this.speed -= (this.speed - maxF) * Math.min(1, 3 * dt);
         if (tr.vert && !off) this.speed -= (P.SLOPE_ACC || 0) * (this.slope || 0) * dt;   // gravidade na rampa
         if (grip0 <= 0.6) this.speed -= this.speed * 0.1 * dt;              // poça / canal: arrasto da água
       }
-      if (boosting && !this.finished) this.speed += P.ACC * 2.2 * dt;
-      else if (this.speed > MAXE && !off) this.speed -= (this.speed - MAXE) * Math.min(1, 1.6 * dt);
-      this.speed = Math.max(-P.MAXREV, Math.min(top, this.speed));
+      // turbo (dinossauro, plataforma, mini-turbo): força que SOMA aceleração, até 1,5x a máxima; dá para passar disso com o
+      // impulso inicial ou descendo. Sem turbo, o que passar da máxima vai embora pelo arrasto (mais forte quanto mais rápido).
+      if (boosting && !this.finished && this.speed < MAXE * (P.BOOST_TOP || 1.5)) this.speed += P.ACC * 2.2 * dt;
+      const ex = this.speed - MAXE;
+      if (ex > 0 && !off && !(boosting && !this.finished)) this.speed -= ex * Math.min(1, (P.OVER_DRAG || 0.3) * (1 + 1.5 * ex / P.MAX) * dt);
+      this.speed = Math.max(-P.MAXREV, Math.min(MAXE * (P.TOP_HARD || 1.8), this.speed));
       // drift (segura o botão numa curva; solta para o mini-turbo)
       const wet = this.wet = !this.air && tr.inWater(this.pos), wantD = racing && inp.drift && !this.finished && !((this.wheelT || 0) > 0.3);
       if (this.driftCD > 0) this.driftCD -= dt;
@@ -525,7 +533,7 @@
         // pista curva de fato) E de GIRO real do kart. Depois de um mini-turbo há 2 s em que a carga cresce bem
         // devagar, e um novo drift só começa 0,35 s depois de soltar -> "spammar" drift em reta não rende nitro.
         const lvl = this.driftLevel();
-        if (lvl > 0) { this.boostT = Math.max(this.boostT, lvl === 2 ? 1.3 : 0.8); this.speed = Math.max(this.speed, Math.min(P.MAX * 1.02, this.speed + P.MAX * 0.09)); this.mtCool = 2.0; this.mtFx = lvl; this.boostTint = lvl; this.events('miniTurbo', this); }   // empurrão proporcional à velocidade do jogo (antes +7 m/s fixos)
+        if (lvl > 0) { this.boostT = Math.max(this.boostT, lvl === 2 ? 1.3 : 0.8); this.speed += P.MAX * (lvl === 2 ? (P.MT_KICK2 || 0.12) : (P.MT_KICK1 || 0.07)); this.mtCool = 2.0; this.mtFx = lvl; this.boostTint = lvl; this.events('miniTurbo', this); }   // empurrão proporcional à velocidade do jogo (antes +7 m/s fixos)
         this.drifting = false; this.driftCD = 0.35;
       }
       let turn = steer * P.TURN * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / P.MAX)) * (1 - 0.45 * (this.wheelT || 0));
@@ -569,7 +577,7 @@
         this.vy -= P.GRAV * dt; this.pos.y += this.vy * dt;
         if (this.pos.y <= gr.h) { const impact = -this.vy; this.pos.y = gr.h; this.air = false; this.vy = 0; this.vyG = 0;   // zera a velocidade vertical do chão: sem isso o kart re-decolava sozinho logo depois de pousar (pulos em cadeia)
           if (impact > 5) { this.squash = Math.min(0.35, impact * 0.025); this.landFx = impact; this.events('land', this); }
-          if (this.trick) { this.trick = false; this.trickT = 1; this.boostT = Math.max(this.boostT, 1.1); this.speed = Math.max(this.speed, P.MAX * 1.04); this.mtFx = 2; this.boostTint = 2; this.events('miniTurbo', this); } }
+          if (this.trick) { this.trick = false; this.trickT = 1; this.boostT = Math.max(this.boostT, 1.1); this.speed += P.MAX * (P.TRICK_KICK || 0.1); this.mtFx = 2; this.boostTint = 2; this.events('miniTurbo', this); } }
       } else if (tr.vert && Math.abs(this.speed) > 8 && gr.h < this.pos.y + this.vyG * dt - ((off ? 0.9 : 0.4) + 0.08 * Math.abs(this.speed) * dt)) {   // margem cresce com o passo do quadro (FPS baixo não vira pulo)
         // pista com relevo: decola só quando o chão "some" de verdade (borda de rampa). Nas cristas o kart fica colado
         // no asfalto: com as velocidades atuais elas faziam o kart dar pulinhos sozinho em lombadas suaves.

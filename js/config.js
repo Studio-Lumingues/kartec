@@ -117,7 +117,14 @@ window.CFG = {
     KART_RADIUS: 1.9, // raio de colisão entre karts
     // relevo (só nas pistas com elev): SLOPE_TOP = quanto a rampa muda a velocidade máxima (12% de subida -> -19%);
     // SLOPE_ACC = "gravidade" que freia na subida e empurra na descida (m/s² por 100% de inclinação)
-    SLOPE_TOP: 1.6, SLOPE_ACC: 26
+    SLOPE_TOP: 1.6, SLOPE_ACC: 26,
+    // EMBALO E TURBOS (tudo SOMADO à velocidade atual, nada de "velocidade fixa"):
+    //  OVER_DRAG: quão rápido some a velocidade acima da máxima (por segundo; menor = embalo dura mais)
+    //  BOOST_TOP: até quanto (x máxima) a força do turbo continua empurrando; TOP_HARD: limite absoluto (x máxima)
+    //  PAD_KICK / MT_KICK1 / MT_KICK2 / TRICK_KICK: impulso instantâneo (fração da máxima) da plataforma, mini-turbo
+    //  azul / laranja e da manobra no ar
+    OVER_DRAG: 0.3, BOOST_TOP: 1.5, TOP_HARD: 1.8,
+    PAD_KICK: 0.2, MT_KICK1: 0.07, MT_KICK2: 0.12, TRICK_KICK: 0.1
   },
 
   // ---------- inteligência artificial ----------
