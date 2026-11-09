@@ -59,6 +59,15 @@
     m.userData.unique = true; return m;
   }
 
+  // pintura chapada: as carrocerias novas (moto) têm cor sólida no material e não textura -> usa a cor escolhida direto
+  function paintFlatMat(u) {
+    const m = Toon.mat({ color: 0xffffff }, { gloss: 0.45, rim: 0.3, sat: 0, key: 'veh-paint-flat', hook: sh => {
+      Object.assign(sh.uniforms, u);
+      sh.fragmentShader = 'uniform vec3 uPaint;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = uPaint;');
+    } });
+    m.userData.unique = true; return m;
+  }
+
   // ---------------- conversão do .glb para o espaço do jogo (uma vez por modelo) ----------------
   function prepVehicle(def) {
     const d = def.veh; if (!d) return null;
@@ -70,38 +79,85 @@
     if (d.face > 0) R.set(0, 0, -1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1); else R.set(0, 0, 1, 0, 0, 1, 0, 0, -1, 0, 0, 0, 0, 0, 0, 1);
     const M = new THREE.Matrix4().makeScale(S, S, S).multiply(R).multiply(new THREE.Matrix4().makeTranslation(-d.midX, -d.ground, 0));
     const G = a => new THREE.Vector3().fromArray(a).applyMatrix4(M), D = a => new THREE.Vector3().fromArray(a).transformDirection(R);
-    let chassis = null, map = null; const wmesh = {};
-    scene.traverse(o => { if (!o.isMesh) return; const pn = o.parent && o.parent.name;
-      if (pn === 'chassis') chassis = o; else if (d.wheels.some(w => w[0] === pn)) wmesh[pn] = o;
-      if (!map && o.material && o.material.map) map = o.material.map; });
-    if (!chassis) { console.warn('[karts] ' + d.glb + '.glb sem o nó chassis'); return d._tpl = null; }
-    const tex = map, side = chassis.material && chassis.material.side === THREE.DoubleSide ? THREE.DoubleSide : THREE.FrontSide;                                               // offset/repeat do KHR_texture_transform: lidos pelo bake e depois zerados
-    const tpl = { map, side, refV: d.refV, lean: d.lean, moto: !!d.moto, wheels: [], flames: [], lights: [] };
+    // Os .glb podem trazer VÁRIAS primitivas/materiais por peça (chassi, pneus, faróis, escapamento...). Em vez de exigir uma
+    // malha só por nó, junta TODAS as malhas debaixo de 'chassis' e de cada 'wheel_*', classifica cada uma pelo material
+    // (atlas pintável / cor chapada pintável / borracha / cor fixa / brilho) e funde as de mesma classe numa geometria só.
+    const nodeNamed = nm => { let f = null; scene.traverse(o => { if (!f && o.name === nm) f = o; }); return f; };
+    const meshesOf = n => { const a = []; if (n) n.traverse(o => { if (o.isMesh && o.geometry && o.geometry.attributes.position) a.push(o); }); return a; };
+    const chassisNode = nodeNamed('chassis'), cMeshes = meshesOf(chassisNode);
+    if (!cMeshes.length) { console.warn('[karts] ' + d.glb + '.glb sem o nó chassis'); return d._tpl = null; }
+    // atlas = textura base com a lataria vermelha (a troca de cor mira nela)
+    let map = null;
+    scene.traverse(o => { if (!map && o.isMesh && o.material && o.material.map && /^(kart|moto)_/.test(o.material.name || '')) map = o.material.map; });
+    scene.traverse(o => { if (!map && o.isMesh && o.material && o.material.map) map = o.material.map; });
+    const isAtlas = m => !!(m.map && map && m.map.image === map.image && !/tire|tread/i.test(m.name || ''));
+    const toS = c => c.clone().convertLinearToSRGB();                       // fatores do glTF são lineares; a cena é desenhada sem conversão
+    // classe do material: { k, key, hex?, rough?, metal?, ds } ou null (não desenha: vidros transparentes)
+    const classify = mesh => {
+      const m = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material; if (!m) return null;
+      const ds = m.side === THREE.DoubleSide;
+      if (isAtlas(m)) return { k: 'atlas', key: 'atlas' + ds, ds };
+      if (m.transparent && m.opacity < 0.5) return null;
+      if (/tire|tread/i.test(m.name || '') || m.map) return { k: 'rubber', key: 'rubber', ds };
+      const em = m.emissive, glow = em && em.r + em.g + em.b > 1.5;
+      if (glow) { const c = toS(em); return { k: 'glow', key: 'glow' + c.getHex(), hex: c.getHex(), ds }; }
+      if (/paint|deck/i.test(m.name || '') && m.color) return { k: 'paint', key: 'paint' + ds, ds };
+      const c = m.color ? toS(m.color) : new THREE.Color(0x888888);
+      return { k: 'flat', key: 'flat' + c.getHex() + ':' + (m.roughness || 0).toFixed(2) + ':' + (m.metalness || 0).toFixed(2) + ds, hex: c.getHex(), rough: m.roughness === undefined ? 0.5 : m.roughness, metal: m.metalness || 0, ds };
+    };
+    // funde geometrias (position/normal/uv/index) numa só
+    const mergeGeos = list => {
+      if (list.length === 1) return list[0];
+      let nv = 0, ni = 0; list.forEach(g => { nv += g.attributes.position.count; ni += g.index.count; });
+      const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), I = new Uint32Array(ni); let vo = 0, io = 0;
+      list.forEach(g => { P.set(g.attributes.position.array, vo * 3); N.set(g.attributes.normal.array, vo * 3); U.set(g.attributes.uv.array, vo * 2);
+        for (let i = 0; i < g.index.count; i++) I[io + i] = g.index.array[i] + vo; vo += g.attributes.position.count; io += g.index.count; g.dispose(); });
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(N, 3)); g.setAttribute('uv', new THREE.BufferAttribute(U, 2));
+      g.setIndex(new THREE.BufferAttribute(I, 1)); g.computeBoundingBox(); g.computeBoundingSphere(); return g;
+    };
+    // buckets: key -> { cls, geos[] }  ->  [{ geo, ...cls }]
+    const addTo = (bk, cls, g) => { (bk[cls.key] || (bk[cls.key] = { cls, geos: [] })).geos.push(g); };
+    const finish = bk => Object.keys(bk).map(k => { const g = mergeGeos(bk[k].geos); g.userData.shared = true; return Object.assign({ geo: g }, bk[k].cls); });
+    const tpl = { map, refV: d.refV, lean: d.lean, moto: !!d.moto, wheels: [], flames: [], lights: [] };
     // ----- chassi (e, no kart, o volante recortado dele) -----
-    const cb = GLBAssets.bake(chassis, chassis.matrixWorld, tex);
+    const bodyB = {}, steerB = {}; let pm = null, pmi = null, sw = null, C = null, n = null;
     if (d.steer) {
-      const sw = d.steer, C = V(...sw.c), n = V(...sw.n).normalize(), nt = cb.I.length / 3, inW = new Uint8Array(nt), c = V(0, 0, 0), dv = V(0, 0, 0);
-      for (let t = 0; t < nt; t++) { c.set(0, 0, 0); for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; c.x += cb.P[i * 3]; c.y += cb.P[i * 3 + 1]; c.z += cb.P[i * 3 + 2]; }
-        c.multiplyScalar(1 / 3); dv.subVectors(c, C); const h = dv.dot(n), rr = dv.addScaledVector(n, -h).length();
-        inW[t] = h < sw.cutH && h > sw.cutBack && rr < sw.cutR ? 1 : 0; }
+      sw = d.steer; C = V(...sw.c); n = V(...sw.n).normalize();
       // referencial do volante no jogo: z local aponta para o piloto, y local = "12 horas" do aro
       const up = V(0, 1, 0).addScaledVector(n, -n.y).normalize(), Zl = D(n.toArray()).negate(), Yl = D(up.toArray()), Xl = V().crossVectors(Yl, Zl).normalize();
-      const pm = new THREE.Matrix4().makeBasis(Xl, Yl, Zl).setPosition(G(sw.c)), pmi = pm.clone().invert();
-      tpl.bodyGeo = GLBAssets.geometry(cb, t => !inW[t], M);
-      tpl.steerGeo = GLBAssets.geometry(cb, t => inW[t], pmi.clone().multiply(M));
+      pm = new THREE.Matrix4().makeBasis(Xl, Yl, Zl).setPosition(G(sw.c)); pmi = pm.clone().invert();
+    }
+    cMeshes.forEach(mesh => {
+      const cls = classify(mesh); if (!cls) return;
+      const cb = GLBAssets.bake(mesh, mesh.matrixWorld, mesh.material && mesh.material.map);
+      if (sw) {
+        const nt = cb.I.length / 3, inW = new Uint8Array(nt), c = V(0, 0, 0), dv = V(0, 0, 0); let any = 0;
+        for (let t = 0; t < nt; t++) { c.set(0, 0, 0); for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; c.x += cb.P[i * 3]; c.y += cb.P[i * 3 + 1]; c.z += cb.P[i * 3 + 2]; }
+          c.multiplyScalar(1 / 3); dv.subVectors(c, C); const h = dv.dot(n), rr = dv.addScaledVector(n, -h).length();
+          if (h < sw.cutH && h > sw.cutBack && rr < sw.cutR) { inW[t] = 1; any++; } }
+        if (any < nt) addTo(bodyB, cls, GLBAssets.geometry(cb, t => !inW[t], M));
+        if (any) addTo(steerB, cls, GLBAssets.geometry(cb, t => inW[t], pmi.clone().multiply(M)));
+      } else addTo(bodyB, cls, GLBAssets.geometry(cb, null, M));
+    });
+    tpl.bodyParts = finish(bodyB);
+    if (sw) {
+      tpl.steerParts = finish(steerB);
       const r = sw.rim * S, a = sw.grip;
       tpl.steer = { pos: V().setFromMatrixPosition(pm), quat: new THREE.Quaternion().setFromRotationMatrix(pm), k: sw.k,
         // mão esquerda (+x do jogo = -x local) e direita; t = sentido do polegar (para as 12 horas, ao longo do aro)
         grips: [{ pos: V(-r * Math.sin(a), r * Math.cos(a), 0), t: V(Math.cos(a), Math.sin(a), 0) }, { pos: V(r * Math.sin(a), r * Math.cos(a), 0), t: V(-Math.cos(a), Math.sin(a), 0) }] };
-    } else tpl.bodyGeo = GLBAssets.geometry(cb, null, M);
-    tpl.bodyGeo.userData.shared = true; if (tpl.steerGeo) tpl.steerGeo.userData.shared = true;
+    }
     // ----- rodas: geometria centrada no cubo (gira em x; as da frente esterçam em y) -----
     d.wheels.forEach(([name, steer]) => {
-      const mesh = wmesh[name]; if (!mesh) return;
-      const hub = V().setFromMatrixPosition(mesh.parent.matrixWorld).applyMatrix4(M);
-      const geo = GLBAssets.geometry(GLBAssets.bake(mesh, mesh.matrixWorld, tex), null, new THREE.Matrix4().makeTranslation(-hub.x, -hub.y, -hub.z).multiply(M));
-      const p = geo.attributes.position; let r = 0; for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getY(i), p.getZ(i)));
-      geo.userData.shared = true; tpl.wheels.push({ geo, hub, r, steer });
+      const node = nodeNamed(name), ms = meshesOf(node); if (!ms.length) return;
+      node.updateWorldMatrix(true, false);
+      const hub = V().setFromMatrixPosition(node.matrixWorld).applyMatrix4(M), wB = {};
+      const toHub = new THREE.Matrix4().makeTranslation(-hub.x, -hub.y, -hub.z).multiply(M);
+      ms.forEach(mesh => { const cls = classify(mesh); if (!cls) return; addTo(wB, cls, GLBAssets.geometry(GLBAssets.bake(mesh, mesh.matrixWorld, mesh.material && mesh.material.map), null, toHub)); });
+      const parts = finish(wB); let r = 0;
+      parts.forEach(pt => { const p = pt.geo.attributes.position; for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getY(i), p.getZ(i))); });
+      tpl.wheels.push({ parts, hub, r, steer });
     });
     GLBAssets.plainMap(map);
     // ----- piloto: quadril, tornozelos, manoplas (moto) -----
@@ -112,11 +168,12 @@
     (d.exhaust || []).forEach(([tip, dir]) => tpl.flames.push({ pos: G(tip), dir: D(dir), r: d.exR * S }));
     const fwd = V(0, 0, 1);
     if (d.lights) d.lights.forEach(l => tpl.lights.push({ pos: G(l).addScaledVector(fwd, 0.004 * S), r: d.lightR * S }));
-    if (d.lightAuto) { const p = tpl.bodyGeo.attributes.position; let best = null;   // ponta do bico (moto): vértice mais à frente perto do eixo
-      for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); if (Math.abs(x) < 0.12 * S * 0.25 && y > 0.4 * S && y < 0.6 * S && (!best || z > best.z)) best = V(x, y, z); }
+    if (d.lightAuto) { let best = null;   // ponta do bico (moto): vértice mais à frente perto do eixo
+      tpl.bodyParts.forEach(pt => { const p = pt.geo.attributes.position;
+        for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); if (Math.abs(x) < 0.12 * S * 0.25 && y > 0.4 * S && y < 0.6 * S && (!best || z > best.z)) best = V(x, y, z); } });
       if (best) tpl.lights.push({ pos: best.addScaledVector(fwd, 0.006 * S), r: d.lightR * S }); }
     // ----- sombra e rodas de trás -----
-    const bb = tpl.bodyGeo.boundingBox, sz = bb.getSize(V());
+    const bb = new THREE.Box3(); tpl.bodyParts.forEach(pt => bb.union(pt.geo.boundingBox)); const sz = bb.getSize(V());
     tpl.shadow = [Math.max(sz.x * 0.47, 0.9), sz.z * 0.46];
     const rears = tpl.wheels.filter(w => w.steer === 0);
     tpl.rear = rears.length > 1 ? { x: Math.abs(rears[0].hub.x), z: rears[0].hub.z } : { x: 0.45, z: rears.length ? rears[0].hub.z : -1.95 };
@@ -144,20 +201,31 @@
     const def = byId(spec.model), tpl = prepVehicle(def);
     if (!tpl) return fallbackModel(spec, opts, def);
     const u = { uPaint: { value: new THREE.Color(spec.color) }, uRefV: { value: tpl.refV } };
-    const paint = paintMat(tpl.map, u), parts = paint;                               // carroceria, rodas e volante: um material só
-    paint.side = tpl.side;                                                           // a moto vem com faces dos dois lados no .glb
+    // um material por classe de peça (atlas pintável, cor chapada pintável, borracha, cores fixas, brilhos), criados por kart
+    const matCache = {}; let paint = null;
+    const matFor = pt => matCache[pt.key] || (matCache[pt.key] = (() => {
+      let m;
+      if (pt.k === 'atlas') m = paintMat(tpl.map, u);
+      else if (pt.k === 'paint') m = paintFlatMat(u);
+      else if (pt.k === 'rubber') m = KartMats.rubber(false);
+      else if (pt.k === 'glow') { m = new THREE.MeshBasicMaterial({ color: pt.hex }); }
+      else m = KartMats.std(pt.hex, pt.rough, pt.metal, { sat: 0 });
+      m.userData.unique = true; if (pt.ds) m.side = THREE.DoubleSide;
+      if (!paint && (pt.k === 'atlas' || pt.k === 'paint')) paint = m;
+      return m; })());
+    const meshesFor = parts => parts.map(pt => new THREE.Mesh(pt.geo, matFor(pt)));
     const group = new THREE.Group(), pivot = new THREE.Group(), body = new THREE.Group(); group.add(pivot); pivot.add(body);
-    body.add(new THREE.Mesh(tpl.bodyGeo, paint));
+    meshesFor(tpl.bodyParts).forEach(me => body.add(me));
     // rodas
     const fw = [], rolls = []; let fork = null;
     tpl.wheels.forEach(w => { const p = new THREE.Group(); p.position.copy(w.hub); pivot.add(p); const roll = new THREE.Group(); p.add(roll);
-      roll.add(new THREE.Mesh(w.geo, parts)); rolls.push({ g: roll, r: w.r * 0.8 });
+      meshesFor(w.parts).forEach(me => roll.add(me)); rolls.push({ g: roll, r: w.r * 0.8 });
       if (w.steer === 1) fw.push(p); else if (w.steer === 2) fork = p; });
     // volante (kart: gira com a direção e leva as mãos) / manoplas fixas (moto)
     let steerRig, hands;
     if (tpl.steer) {
       const piv = new THREE.Group(); piv.position.copy(tpl.steer.pos); piv.quaternion.copy(tpl.steer.quat); body.add(piv);
-      const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin); spin.add(new THREE.Mesh(tpl.steerGeo, parts));
+      const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin); meshesFor(tpl.steerParts || []).forEach(me => spin.add(me));
       hands = tpl.steer.grips.map(g => { const o = new THREE.Object3D(); o.position.copy(g.pos); o.userData.t = g.t.clone(); spin.add(o); return o; });
       steerRig = { spin, axis: 'z', k: tpl.steer.k };
     } else {
@@ -169,7 +237,7 @@
     // chama do turbo na ponta de cada escapamento
     const flames = tpl.flames.map(fl => {
       const f = new THREE.Mesh(new THREE.ConeGeometry(fl.r * 0.95, 1.8, 16), new THREE.MeshBasicMaterial({ color: 0xff9a2a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-      f.position.copy(fl.pos).addScaledVector(fl.dir, 0.9); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; body.add(f); return f; });
+      f.position.copy(fl.pos).addScaledVector(fl.dir, 0.9); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; body.add(f); return f; });
     // lente dos faróis (acende à noite) sobre o farol do modelo
     const lensPos = tpl.lights.map(l => { const lensM = new THREE.MeshBasicMaterial({ color: 0xd8d2b0 }); lensM.userData.unique = true;
       const lens = new THREE.Mesh(new THREE.CircleGeometry(l.r, 20), lensM); lens.position.copy(l.pos); lens.userData.dynamic = true; body.add(lens);
@@ -199,7 +267,7 @@
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
-      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint }, paint,
+      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; },
       // troca de cores do piloto ou do personagem (menino/menina): o personagem novo é montado no mesmo lugar
