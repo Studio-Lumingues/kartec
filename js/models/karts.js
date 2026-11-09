@@ -59,13 +59,32 @@
     m.userData.unique = true; return m;
   }
 
-  // pintura chapada: as carrocerias novas (moto) têm cor sólida no material e não textura -> usa a cor escolhida direto
-  function paintFlatMat(u) {
-    const m = Toon.mat({ color: 0xffffff }, { gloss: 0.45, rim: 0.3, sat: 0, key: 'veh-paint-flat', hook: sh => {
-      Object.assign(sh.uniforms, u);
-      sh.fragmentShader = 'uniform vec3 uPaint;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb = uPaint;');
-    } });
-    m.userData.unique = true; return m;
+  const ENV_I = 1.0;     // intensidade do reflexo de estúdio nos veículos (1 = como no visualizador do modelo)
+  // Materiais dos veículos = os MESMOS do .glb (PBR: verniz, cromado, vidro, texturas), com o reflexo de estúdio. Duas adaptações:
+  //  * a saída é convertida para sRGB aqui dentro (o renderer do jogo desenha sem conversão);
+  //  * no atlas (e nas tintas chapadas) o vermelho vira a cor escolhida, mantendo o sombreado.
+  const PBR_HEAD = 'uniform vec3 uPaint; uniform float uRefV;\n' + HSV;
+  const PBR_BODY = [
+    '{ vec3 sc = LinearTosRGB(vec4(texelColor.rgb, 1.0)).rgb; vec3 hv = kHsv(sc); float dr = min(hv.x, 1.0 - hv.x);',
+    '  float wP = (1.0 - smoothstep(0.045, 0.075, dr)) * smoothstep(0.35, 0.5, hv.y) * smoothstep(0.05, 0.14, hv.z);',
+    '  float kv = hv.z / uRefV; float sh = min(kv, 1.0); vec3 hi = vec3(max(kv - 1.0, 0.0) * 0.5);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, sRGBToLinear(vec4(uPaint * sh + hi, 1.0)).rgb, wP); }'
+  ].join('\n');
+  function pbrMat(pt, u, env) {
+    let m;
+    if (pt.k === 'glass' && pt.mat.transmission > 0) {         // vidro com transmissão (cúpula da moto): transparente de verdade, mantém reflexos
+      m = new THREE.MeshPhysicalMaterial({ color: pt.mat.color.clone(), roughness: pt.mat.roughness, metalness: pt.mat.metalness || 0, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.3, depthWrite: false });
+    } else m = pt.mat.clone();
+    if (pt.k === 'glass') { m.transparent = true; m.depthWrite = false; }
+    if (m.emissive && pt.em > 1) m.emissiveIntensity = pt.em;
+    m.envMap = env; m.envMapIntensity = ENV_I;
+    const atlas = pt.k === 'atlas';
+    m.onBeforeCompile = sh => {
+      if (atlas) { Object.assign(sh.uniforms, u); sh.fragmentShader = PBR_HEAD + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + PBR_BODY); }
+      sh.fragmentShader = sh.fragmentShader.replace('#include <encodings_fragment>', 'gl_FragColor = LinearTosRGB(gl_FragColor);');
+    };
+    m.customProgramCacheKey = () => 'veh-pbr-' + (atlas ? 'atlas' : 'plain');
+    m.userData.unique = true; m.needsUpdate = true; return m;
   }
 
   // ---------------- conversão do .glb para o espaço do jogo (uma vez por modelo) ----------------
@@ -90,20 +109,18 @@
     let map = null;
     scene.traverse(o => { if (!map && o.isMesh && o.material && o.material.map && /^(kart|moto)_/.test(o.material.name || '')) map = o.material.map; });
     scene.traverse(o => { if (!map && o.isMesh && o.material && o.material.map) map = o.material.map; });
-    const isAtlas = m => !!(m.map && map && m.map.image === map.image && !/tire|tread/i.test(m.name || ''));
-    const toS = c => c.clone().convertLinearToSRGB();                       // fatores do glTF são lineares; a cena é desenhada sem conversão
-    // classe do material: { k, key, hex?, rough?, metal?, ds } ou null (não desenha: vidros transparentes)
+    const isAtlas = m => !!(m.map && map && m.map.image === map.image && !/tire|tread/i.test(m.name || ''));   // (as texturas ficam como no .glb: sRGB + KHR_texture_transform)
+        // classe da malha = o material ORIGINAL do .glb: 'atlas' (textura base com a lataria vermelha), 'flatpaint' (tinta chapada: moto),
+    // 'glass' (transparente: cúpula da moto, lente do farol) ou 'pbr' (todo o resto, igual ao modelo). Malhas do mesmo material se fundem.
+    const jm = (gltf.parser && gltf.parser.json && gltf.parser.json.materials) || [];
+    const emStr = m => { const j = jm.find(x => x.name === m.name), e = j && j.extensions && j.extensions.KHR_materials_emissive_strength; return e ? e.emissiveStrength : 1; };
     const classify = mesh => {
       const m = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material; if (!m) return null;
-      const ds = m.side === THREE.DoubleSide;
-      if (isAtlas(m)) return { k: 'atlas', key: 'atlas' + ds, ds };
-      if (m.transparent && m.opacity < 0.5) return null;
-      if (/tire|tread/i.test(m.name || '') || m.map) return { k: 'rubber', key: 'rubber', ds };
-      const em = m.emissive, glow = em && em.r + em.g + em.b > 1.5;
-      if (glow) { const c = toS(em); return { k: 'glow', key: 'glow' + c.getHex(), hex: c.getHex(), ds }; }
-      if (/paint|deck/i.test(m.name || '') && m.color) return { k: 'paint', key: 'paint' + ds, ds };
-      const c = m.color ? toS(m.color) : new THREE.Color(0x888888);
-      return { k: 'flat', key: 'flat' + c.getHex() + ':' + (m.roughness || 0).toFixed(2) + ':' + (m.metalness || 0).toFixed(2) + ds, hex: c.getHex(), rough: m.roughness === undefined ? 0.5 : m.roughness, metal: m.metalness || 0, ds };
+      let k = 'pbr';
+      if ((m.transmission && m.transmission > 0) || (m.transparent && m.opacity < 0.5)) k = 'glass';
+      else if (isAtlas(m)) k = 'atlas';
+      else if (!m.map && /paint|deck/i.test(m.name || '')) k = 'flatpaint';
+      return { k, key: m.uuid, mat: m, em: emStr(m) };
     };
     // funde geometrias (position/normal/uv/index) numa só
     const mergeGeos = list => {
@@ -130,7 +147,7 @@
     }
     cMeshes.forEach(mesh => {
       const cls = classify(mesh); if (!cls) return;
-      const cb = GLBAssets.bake(mesh, mesh.matrixWorld, mesh.material && mesh.material.map);
+      const cb = GLBAssets.bake(mesh, mesh.matrixWorld);
       if (sw) {
         const nt = cb.I.length / 3, inW = new Uint8Array(nt), c = V(0, 0, 0), dv = V(0, 0, 0); let any = 0;
         for (let t = 0; t < nt; t++) { c.set(0, 0, 0); for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; c.x += cb.P[i * 3]; c.y += cb.P[i * 3 + 1]; c.z += cb.P[i * 3 + 2]; }
@@ -154,12 +171,11 @@
       node.updateWorldMatrix(true, false);
       const hub = V().setFromMatrixPosition(node.matrixWorld).applyMatrix4(M), wB = {};
       const toHub = new THREE.Matrix4().makeTranslation(-hub.x, -hub.y, -hub.z).multiply(M);
-      ms.forEach(mesh => { const cls = classify(mesh); if (!cls) return; addTo(wB, cls, GLBAssets.geometry(GLBAssets.bake(mesh, mesh.matrixWorld, mesh.material && mesh.material.map), null, toHub)); });
+      ms.forEach(mesh => { const cls = classify(mesh); if (!cls) return; addTo(wB, cls, GLBAssets.geometry(GLBAssets.bake(mesh, mesh.matrixWorld), null, toHub)); });
       const parts = finish(wB); let r = 0;
       parts.forEach(pt => { const p = pt.geo.attributes.position; for (let i = 0; i < p.count; i++) r = Math.max(r, Math.hypot(p.getY(i), p.getZ(i))); });
       tpl.wheels.push({ parts, hub, r, steer });
     });
-    GLBAssets.plainMap(map);
     // ----- piloto: quadril, tornozelos, manoplas (moto) -----
     const pp = d.pilot, pair = a => { const A = G([a[0], a[1], a[2]]), B = G([a[0], a[1], -a[2]]); return A.x > B.x ? [A, B] : [B, A]; };   // [esquerda (+x), direita]
     tpl.cockpit = { seat: G(pp.hip), scale: pp.p * S, feet: pair(pp.feet), lean: pp.lean, headTilt: pp.headTilt, footPitch: pp.footPitch, leanK: pp.leanK, boostLean: pp.boostLean, knee: pp.knee, moto: !!d.moto };
@@ -201,19 +217,14 @@
     const def = byId(spec.model), tpl = prepVehicle(def);
     if (!tpl) return fallbackModel(spec, opts, def);
     const u = { uPaint: { value: new THREE.Color(spec.color) }, uRefV: { value: tpl.refV } };
-    // um material por classe de peça (atlas pintável, cor chapada pintável, borracha, cores fixas, brilhos), criados por kart
-    const matCache = {}; let paint = null;
+    // um material por material do .glb (clonado por kart: a cor de pintura é individual)
+    const env = window.KartMats ? KartMats.env : null, matCache = {}, flatPaints = []; let paint = null;
     const matFor = pt => matCache[pt.key] || (matCache[pt.key] = (() => {
-      let m;
-      if (pt.k === 'atlas') m = paintMat(tpl.map, u);
-      else if (pt.k === 'paint') m = paintFlatMat(u);
-      else if (pt.k === 'rubber') m = KartMats.rubber(false);
-      else if (pt.k === 'glow') { m = new THREE.MeshBasicMaterial({ color: pt.hex }); }
-      else m = KartMats.std(pt.hex, pt.rough, pt.metal, { sat: 0 });
-      m.userData.unique = true; if (pt.ds) m.side = THREE.DoubleSide;
-      if (!paint && (pt.k === 'atlas' || pt.k === 'paint')) paint = m;
+      const m = pbrMat(pt, u, env);
+      if (pt.k === 'flatpaint') { flatPaints.push(m); m.color.set(spec.color).convertSRGBToLinear(); }
+      if (!paint && (pt.k === 'atlas' || pt.k === 'flatpaint')) paint = m;
       return m; })());
-    const meshesFor = parts => parts.map(pt => new THREE.Mesh(pt.geo, matFor(pt)));
+    const meshesFor = parts => parts.map(pt => { const me = new THREE.Mesh(pt.geo, matFor(pt)); if (pt.k === 'glass') { me.renderOrder = 3; me.userData.noOutline = true; me.userData.noShadow = true; } return me; });
     const group = new THREE.Group(), pivot = new THREE.Group(), body = new THREE.Group(); group.add(pivot); pivot.add(body);
     meshesFor(tpl.bodyParts).forEach(me => body.add(me));
     // rodas
@@ -240,7 +251,7 @@
       f.position.copy(fl.pos).addScaledVector(fl.dir, 0.9); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; body.add(f); return f; });
     // lente dos faróis (acende à noite) sobre o farol do modelo
     const lensPos = tpl.lights.map(l => { const lensM = new THREE.MeshBasicMaterial({ color: 0xd8d2b0 }); lensM.userData.unique = true;
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(l.r, 20), lensM); lens.position.copy(l.pos); lens.userData.dynamic = true; body.add(lens);
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(l.r, 20), lensM); lens.position.copy(l.pos); lens.userData.dynamic = true;   // sem body.add: o farol do próprio modelo aparece; o objeto só guarda o tom (kart.js)
       return { lens, x: l.pos.x, y: l.pos.y, z: l.pos.z + l.r * 0.5 }; });
     // sombra-bolha, farol (só o jogador leva luz de verdade), brilhos dos faróis
     const blob = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ color: 0, transparent: true, opacity: 0.16, depthWrite: false }));
@@ -252,11 +263,9 @@
       const t = new THREE.Object3D(); t.position.set(0, 0, 22); group.add(t); headL.target = t; }
     const headGlows = lensPos.map(l => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: 0xfff2c0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); p.position.set(l.x, l.y, l.z + 0.2); p.scale.setScalar(1.6); group.add(p); return p; });
     group.scale.setScalar(0.8);
-    group.traverse(o => { if (o.isMesh && !o.material.isMeshBasicMaterial) { o.castShadow = true; o.receiveShadow = false; } });
-    // contorno de desenho animado (casco invertido) na carroceria, volante e rodas
+    group.traverse(o => { if (o.isMesh && !o.material.isMeshBasicMaterial) { o.castShadow = !o.userData.noShadow; o.receiveShadow = false; } });
+    // sem contorno de desenho animado: o veículo é desenhado como no modelo original (o piloto mantém o dele)
     if (opts.outline !== false) {
-      Toon.outline(body, 0.05);
-      rolls.forEach(r => Toon.outline(r.g, 0.04, null, 0x0c0c0e));
       group.traverse(o => { if (o.isMesh || o.isSprite) o.frustumCulled = false; });   // kart inteiro sempre desenhado (são poucos objetos; evita sumir na borda da tela)
     }
     // piloto
@@ -269,7 +278,7 @@
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
-      setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; },
+      setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; flatPaints.forEach(m => m.color.set(hex).convertSRGBToLinear()); },
       // troca de cores do piloto ou do personagem (menino/menina): o personagem novo é montado no mesmo lugar
       setPilot(s) { const before = spec.pilot; Object.assign(spec, s, { accessory: 'none' });
         if (!this.pilot) return;
@@ -286,7 +295,7 @@
           if (L > 0 && (this._pf = ((this._pf || 0) + 1) % (L === 1 ? 2 : 4)) !== 0) return;
           pl.update(this._pacc, st); this._pacc = 0; }
       },
-      setNight(nf) { KartMats.setEnvLevel(group, 1 - 0.75 * nf); },
+      setNight(nf) { const e = ENV_I * (1 - 0.75 * nf); Object.keys(matCache).forEach(k => matCache[k].envMapIntensity = e); },
       dispose() { if (this.pilot) this.pilot.dispose(); disposeTree(group); }
     };
     return m;

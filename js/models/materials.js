@@ -5,7 +5,7 @@
 // * Borracha fofa com gomos desenhados, plásticos brilhantes, "prata de brinquedo" e neon.
 // =====================================================================================
 (function () {
-  let treadTex = null, knobTex = null;
+  let treadTex = null, knobTex = null, envTex = null;
 
   // banda de rodagem de desenho: gomos arredondados (borracha fofa), sem ruído
   function tread(knobby) {
@@ -21,8 +21,23 @@
   // Acabamentos (todos toon): gloss = mancha de brilho de plástico, rim = contorno claro
   const KartMats = {
     tread,
-    initEnv() { return null; },          // o visual cartum não usa mapa de ambiente (economia de GPU e memória)
-    get env() { return null; },
+    // Ambiente de estúdio (céu em degradê + painéis de luz) pré-filtrado em PMREM: dá aos veículos os mesmos reflexos do modelo
+    // original (verniz da pintura, cromados, vidro). Só os materiais dos veículos usam (karts.js); o resto do jogo segue toon.
+    initEnv(renderer) {
+      if (envTex || !renderer || !THREE.PMREMGenerator) return envTex;
+      try {
+        const sc = new THREE.Scene(), g = new THREE.SphereGeometry(50, 32, 16), p = g.attributes.position, cols = [];
+        const top = new THREE.Color(0xe8eef6), mid = new THREE.Color(0xaeb8c4), bot = new THREE.Color(0x2e323a), c = new THREE.Color();
+        for (let i = 0; i < p.count; i++) { const y = p.getY(i) / 50; if (y > 0) c.copy(mid).lerp(top, Math.pow(y, 0.7)); else c.copy(mid).lerp(bot, Math.min(1, -y * 1.6)); cols.push(c.r, c.g, c.b); }
+        g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+        sc.add(new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide })));
+        const panel = (w, h, x, y, z, I) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: new THREE.Color(I, I, I), side: THREE.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); sc.add(m); };
+        panel(34, 20, 0, 42, 0, 5); panel(10, 30, -36, 12, 10, 4); panel(10, 30, 36, 12, -10, 3); panel(26, 8, 0, 16, -42, 3); panel(22, 8, 0, 14, 42, 2);
+        const pm = new THREE.PMREMGenerator(renderer); envTex = pm.fromScene(sc, 0.03).texture; pm.dispose();
+      } catch (e) { console.warn('[env] ambiente de estúdio indisponível:', e); envTex = null; }
+      return envTex;
+    },
+    get env() { return envTex; },
     // plástico liso (rough alto = fosco; rough baixo = brilhante)
     std(color, rough, metal, extra) {
       const gloss = rough === undefined ? 0.3 : Math.max(0, 0.75 - rough) * (metal > 0.5 ? 1.2 : 1);

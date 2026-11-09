@@ -8,7 +8,7 @@
 // GLBAssets.get(nome) devolve o gltf já carregado (ou null) para o pilot.js e o karts.js.
 // =====================================================================================
 (function () {
-  const VER = '202611091300';
+  const VER = '202611091700';
   const FILES = { kart: 'assets/kart.glb', motoca: 'assets/motoca.glb', menino: 'assets/menino.glb', menina: 'assets/menina.glb' };
   const embedSrc = name => 'assets/' + name + '_glb.js?v=' + VER;
   const cache = {}, pending = {};
