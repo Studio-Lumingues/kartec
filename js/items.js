@@ -723,9 +723,13 @@
         const r = this.rockets.find(o => o.id === m.id); if (r) this.explode(r, true);
         if (k && !(k.spinT > 0)) { k.hitBy = 'rocket'; this.blowUp(k); } }
       else if (m.k === 'shield') { if (k) this.shieldOn(k); }
-      else if (m.k === 'brick') {
-        if (k && typeof m.id === 'string' && !this.bricks.some(b => b.id === m.id)) { const to = m.to === (window.Net && Net.id) ? Game.player : (kartOf && m.to != null ? kartOf(m.to) : null); if (to) this.throwBrick(k, to, m.id); } }
-      else if (m.k === 'hitk') { const b = this.bricks.find(o => o.id === m.id); if (b) this.brickBonk(b);
+      else if (m.k === 'brick') {   // alguém arremessou: o tijolo aparece em todas as telas e persegue o mesmo alvo
+        if (k && typeof m.id === 'string' && !this.bricks.some(b => b.id === m.id) && !(this._brickDone && this._brickDone.has(m.id))) {
+          const me = window.Net && Net.id, to = m.to != null && Number(m.to) === Number(me) ? Game.player : (kartOf && m.to != null ? kartOf(Number(m.to)) : null);
+          if (to) this.throwBrick(k, to, m.id); } }
+      else if (m.k === 'hitk') {    // o alvo confirmou o acerto: tira o tijolo (se ainda voa aqui) e gira o kart dele
+        (this._brickDone || (this._brickDone = new Set())).add(m.id);
+        const b = this.bricks.find(o => o.id === m.id); if (b) this.brickBonk(b);
         if (k && !(k.spinT > 0)) { k.hitBy = 'brick'; this.hit(k, C.BRICK.POWER); } }
       else if (m.k === 'boomr') { const r = this.rockets.find(o => o.id === m.id); if (r) this.explode(r, false); }
     },
@@ -787,7 +791,7 @@
       if (this.group && this.group.parent) this.group.parent.remove(this.group);
       [this.boxGeo, this.glowGeo, this.glassMat, this.frameMat, this.qMat, this.shGeo, this.shMat].concat(this.boxMats || []).forEach(o => o && o.dispose()); this.boxMats = []; this.glowGeo = null; (this.shards || []).forEach(sh => sh.m.material.dispose()); this.shards = []; (this.shardGeos || []).forEach(g => g.dispose()); this.shardGeos = null;
       this.bananas.forEach(o => o.mesh.parent && o.mesh.parent.remove(o.mesh));
-      this.rockets = []; this.bricks = []; this.rocketWarn(null, 0);
+      this.rockets = []; this.bricks = []; this._brickDone = null; this.rocketWarn(null, 0);
       spinning.forEach(k => { clearGhosts(k); setSpin(k, 0); k.spinT = 0; }); spinning.clear();
       (this._karts || []).forEach(k => this.shieldOff(k));
       this._karts = []; if (window.Smoke) Smoke.clear();
@@ -828,7 +832,7 @@
       } else if (kind === 'brick') {
         const to = this.brickTarget(k), id = (window.Net && Net.id != null ? Net.id : 'l') + ':k' + (++this._seq);
         this.throwBrick(k, to, id);
-        if (k.isPlayer) this.netSend({ k: 'brick', id, to: to.isPlayer ? (window.Net && Net.id) : to.netId });
+        if (k.isPlayer) this.netSend({ k: 'brick', id, to: Number(to.isPlayer ? (window.Net && Net.id) : to.netId) });
       } else if (kind === 'shield') {
         this.shieldOn(k); if (k.isPlayer) this.netSend({ k: 'shield' });
       } else if (kind === 'rocket') {
@@ -945,8 +949,10 @@
         if (dx * dx + dz * dz < H2 && Math.abs(dy) < 2.6 && !(tg.spinT > 0)) {
           // acerto: quem decide é o dono do kart (jogador local; bots no modo solo)
           const solo = !(window.Game && Game.online);
+          if (tg.remote) {   // kart de outro jogador: quem decide é a tela dele (chega 'hitk'); aqui o tijolo só "bate" visualmente
+            if (!b.wait) { b.wait = true; this.brickBonk(b); } continue; }
           this.brickBonk(b);
-          if (!tg.remote && (tg.isPlayer || solo)) { tg.hitBy = 'brick'; this.hit(tg, B.POWER); if (tg.isPlayer) this.netSend({ k: 'hitk', id: b.id }); }
+          if (tg.isPlayer || solo) { tg.hitBy = 'brick'; this.hit(tg, B.POWER); if (tg.isPlayer) this.netSend({ k: 'hitk', id: b.id }); }
         }
       }
     },

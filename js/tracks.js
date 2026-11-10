@@ -73,6 +73,83 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     }
   };
 
+  const GRASS_TONE = { sat: 0.6, mul: [0.88, 0.81, 0.72] };
+  GfxFX.grassTone = function grassTone(m) {
+      m.userData.unique = true; m.customProgramCacheKey = () => 'grass-tone-v2'; GfxFX.aniso(m.map, 16);
+      // + sem repetição visível do ladrilho, manchas grandes de cor e trechos de grama mais seca (mesma conta nos dois chãos: sem emenda)
+      m.onBeforeCompile = sh => { sh.fragmentShader = GfxFX.NOISE + sh.fragmentShader.replace('#include <map_fragment>', GfxFX.mapCode({ scale: 0.29, blend: 0.55, macro: 0.13, dry: 0.55 }) + `
+        { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, ${GRASS_TONE.sat.toFixed(3)}) * vec3(${GRASS_TONE.mul.map(v => v.toFixed(3)).join(', ')}); }`); };
+      return m;
+    };
+  // asfalto do jogo (mesma textura, Phong e anti-repetição da pista) para outros cenários (lobby)
+  GfxFX.asphaltMaterial = function (rx, ry) {
+    const t = GfxFX.aniso(TX.get('asphalt', rx || 1, ry || 1), 16);
+    return GfxFX.antiTile(new THREE.MeshPhongMaterial({ map: t, color: 0xffffff, shininess: 30, specular: 0x26262a }), { scale: 0.41, blend: 0.45, macro: 0.07 });
+  };
+
+  // ===================================================================================
+  // POSTE DE LUZ (lampião clássico grande) — o MESMO modelo nas pistas e no lobby/garagem (showroom.js)
+  //   LampPost.materials()  pedra, ferro, dourado e vidro     LampPost.geometries()  peças (descarte depois)
+  //   LampPost.place(LG, put, M)  coloca as peças de UM poste (matriz M) na lista "bake" (put(key, geo, M, x, y, z, rx, ry, rz))
+  //   LampPost.merge(bake, LM)  junta tudo em 4 malhas.  Cabeça (lanterna) em (ARM, LAMPY, 0) no espaço do poste.
+  // ===================================================================================
+  const LampPost = window.LampPost = (() => {
+    const ARM = 3.9, TOPY = 10.6, LAMPY = TOPY - 0.55;
+    function materials() { return {
+      base: new THREE.MeshLambertMaterial({ map: TX.get('rock', 1, 1), color: 0xc9c3ba }),
+      iron: new THREE.MeshPhongMaterial({ color: 0x23272f, shininess: 40, specular: 0x3a3f48 }),
+      trim: new THREE.MeshPhongMaterial({ color: 0xd8ad4c, shininess: 70, specular: 0x806020 }),
+      glass: new THREE.MeshLambertMaterial({ color: 0xfff1cf, emissive: 0xffc777, emissiveIntensity: 0.12 }) }; }
+    function geometries() {
+      const colP = [[0.36, 0], [0.34, 0.18], [0.24, 0.42], [0.27, 0.52], [0.2, 0.7], [0.17, 1.4], [0.15, 3.2], [0.19, 3.32], [0.15, 3.44], [0.13, TOPY - 1.05],
+        [0.18, TOPY - 0.92], [0.13, TOPY - 0.78], [0.12, TOPY - 0.2], [0.15, TOPY - 0.1], [0.0, TOPY]].map(p => new THREE.Vector2(p[0], p[1]));
+      const swan = new THREE.CubicBezierCurve3(V3(0, TOPY - 0.6, 0), V3(0, TOPY + 1.5, 0), V3(ARM * 0.55, TOPY + 1.6, 0), V3(ARM, TOPY + 0.55, 0));
+      const brace = new THREE.CubicBezierCurve3(V3(0, TOPY - 1.9, 0), V3(0.9, TOPY - 1.7, 0), V3(1.6, TOPY - 0.4, 0), V3(2.2, TOPY + 1.05, 0));
+      const LG = {
+        step1: new THREE.CylinderGeometry(0.95, 1.05, 0.45, 8), step2: new THREE.CylinderGeometry(0.7, 0.8, 0.5, 8), step3: new THREE.CylinderGeometry(0.5, 0.55, 0.2, 8),
+        col: new THREE.LatheGeometry(colP, 18),
+        ring: new THREE.TorusGeometry(0.2, 0.045, 6, 18).rotateX(Math.PI / 2), ringB: new THREE.TorusGeometry(0.3, 0.05, 6, 18).rotateX(Math.PI / 2),
+        arm: new THREE.TubeGeometry(swan, 28, 0.075, 8, false), brace: new THREE.TubeGeometry(brace, 20, 0.04, 6, false),
+        scroll: new THREE.TorusGeometry(0.34, 0.04, 6, 20, Math.PI * 1.6), scroll2: new THREE.TorusGeometry(0.22, 0.035, 6, 16, Math.PI * 1.6),
+        hook: new THREE.CylinderGeometry(0.035, 0.035, 0.45, 6),
+        hood: new THREE.ConeGeometry(0.62, 0.48, 8), hoodRim: new THREE.CylinderGeometry(0.64, 0.64, 0.06, 8),
+        finial: new THREE.SphereGeometry(0.11, 10, 8), spike: new THREE.ConeGeometry(0.05, 0.3, 6),
+        glass: new THREE.CylinderGeometry(0.42, 0.3, 0.72, 8, 1, true), glassIn: new THREE.CylinderGeometry(0.16, 0.16, 0.36, 10),
+        bar: new THREE.CylinderGeometry(0.022, 0.022, 0.76, 4), bottom: new THREE.ConeGeometry(0.31, 0.3, 8), drop: new THREE.SphereGeometry(0.06, 8, 6)
+      };
+      LG.glass.rotateY(Math.PI / 8); LG.hood.rotateY(Math.PI / 8); LG.hoodRim.rotateY(Math.PI / 8); LG.bottom.rotateX(Math.PI).rotateY(Math.PI / 8);
+      return LG;
+    }
+    function place(LG, put, M) {
+      put('base', LG.step1, M, 0, 0.22, 0); put('base', LG.step2, M, 0, 0.67, 0); put('base', LG.step3, M, 0, 1.0, 0);
+      put('iron', LG.col, M, 0, 1.05, 0);
+      [[LG.ringB, 1.12], [LG.ring, 1.9], [LG.ring, 4.38], [LG.ring, TOPY + 1.05 - 0.92], [LG.ringB, TOPY + 1.05 - 1.5]].forEach(([g, yy]) => put('trim', g, M, 0, yy, 0));
+      put('iron', LG.arm, M, 0, 0, 0); put('iron', LG.brace, M, 0, 0, 0);
+      put('iron', LG.scroll, M, 0.55, TOPY - 0.25, 0, 0, 0, -0.6); put('iron', LG.scroll2, M, 1.35, TOPY + 0.45, 0, 0, 0, 2.4);
+      put('trim', LG.finial, M, 0, TOPY + 1.12, 0); put('trim', LG.spike, M, 0, TOPY + 1.34, 0);
+      // lanterna pendurada na ponta do braço
+      const lx = ARM, ly = LAMPY;
+      put('iron', LG.hook, M, lx, ly + 0.9, 0); put('iron', LG.hoodRim, M, lx, ly + 0.4, 0); put('iron', LG.hood, M, lx, ly + 0.66, 0);
+      put('trim', LG.finial, M, lx, ly + 0.95, 0);
+      put('glass', LG.glass, M, lx, ly, 0); put('glass', LG.glassIn, M, lx, ly - 0.02, 0);
+      for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; put('iron', LG.bar, M, lx + Math.cos(a) * 0.37, ly, Math.sin(a) * 0.37, Math.sin(a) * 0.17, 0, -Math.cos(a) * 0.17); }
+      put('iron', LG.bottom, M, lx, ly - 0.5, 0); put('trim', LG.drop, M, lx, ly - 0.7, 0);
+    }
+    // put padrão (para quem não tem um): devolve a função e a lista "bake"
+    function baker() { const bake = { base: [], iron: [], trim: [], glass: [] }, _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
+      const put = (key, geo, M, x, y, z, rx, ry, rz) => { _l.compose(V3(x, y, z), _q.setFromEuler(_e.set(rx || 0, ry || 0, rz || 0)), V3(1, 1, 1)); const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.applyMatrix4(_m.copy(M).multiply(_l)); bake[key].push(g); };
+      return { bake, put }; }
+    function merge(bake, LM) { const out = [];
+        Object.keys(bake).forEach(key => { const L2 = bake[key]; if (!L2.length) return; let n = 0; L2.forEach(g => { n += g.attributes.position.count; });
+          const P = new Float32Array(n * 3), Nn = new Float32Array(n * 3), U = new Float32Array(n * 2); let o = 0;
+          L2.forEach(g => { const c = g.attributes.position.count; if (!g.attributes.normal) g.computeVertexNormals(); P.set(g.attributes.position.array, o * 3); Nn.set(g.attributes.normal.array, o * 3);
+            if (g.attributes.uv) U.set(g.attributes.uv.array, o * 2); o += c; g.dispose(); });
+          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Nn, 3)); g.setAttribute('uv', new THREE.BufferAttribute(U, 2)); g.computeBoundingSphere();
+          const m = new THREE.Mesh(g, LM[key]); m.castShadow = key !== 'glass'; m.receiveShadow = true; if (key === 'glass') m.userData.noOutline = true; out.push(m); });
+      return out; }
+    return { ARM, TOPY, LAMPY, materials, geometries, place, baker, merge };
+  })();
+
   let N = 500;                    // nós por volta: vem de def.N (config); definido em layout() e build()
   const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
   const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
@@ -452,14 +529,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     }
     // grama mais natural: a textura original é um verde-limão muito vivo; aqui ela perde parte da saturação,
     // puxa um pouco para o oliva e escurece de leve (mesmo ajuste no chão grande e na malha do relevo, sem emenda)
-    const GRASS_TONE = { sat: 0.6, mul: [0.88, 0.81, 0.72] };
-    function grassTone(m) {
-      m.userData.unique = true; m.customProgramCacheKey = () => 'grass-tone-v2'; GfxFX.aniso(m.map, 16);
-      // + sem repetição visível do ladrilho, manchas grandes de cor e trechos de grama mais seca (mesma conta nos dois chãos: sem emenda)
-      m.onBeforeCompile = sh => { sh.fragmentShader = GfxFX.NOISE + sh.fragmentShader.replace('#include <map_fragment>', GfxFX.mapCode({ scale: 0.29, blend: 0.55, macro: 0.13, dry: 0.55 }) + `
-        { float gl = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)); diffuseColor.rgb = mix(vec3(gl), diffuseColor.rgb, ${GRASS_TONE.sat.toFixed(3)}) * vec3(${GRASS_TONE.mul.map(v => v.toFixed(3)).join(', ')}); }`); };
-      return m;
-    }
+    const grassTone = m => GfxFX.grassTone(m);   // mesma grama no jogo e no lobby (GfxFX.grassTone)
     // montanhas: material procedural (sem textura esticada). Rocha com camadas e rachaduras em várias escalas,
     // grama nas partes baixas e pouco inclinadas, neve no topo dos picos altos (acumula mais nas faces planas),
     // relevo fino na iluminação (bump) e luz por pixel. Cor do vértice: r = altura relativa 0..1, g = tem neve, b = domo.
@@ -2086,32 +2156,9 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       // mais perto da câmera, trocando com fade (o número de luzes nunca muda: sem recompilar shader). Além disso:
       // poça de luz no chão (queda física cos³/d²), feixe volumétrico sutil, halo na lanterna e brilho grande em volta.
       const NIGHT = () => (window.Env && Env.nightF) || 0;
-      { const LM = {
-          base: new THREE.MeshLambertMaterial({ map: TX.get('rock', 1, 1), color: 0xc9c3ba }),
-          iron: new THREE.MeshPhongMaterial({ color: 0x23272f, shininess: 40, specular: 0x3a3f48 }),
-          trim: new THREE.MeshPhongMaterial({ color: 0xd8ad4c, shininess: 70, specular: 0x806020 }),
-          glass: new THREE.MeshLambertMaterial({ color: 0xfff1cf, emissive: 0xffc777, emissiveIntensity: 0.12 })
-        };
+      { const LM = LampPost.materials();
         LM.glass.userData.unique = true; tr.nightMats.push({ m: LM.glass, max: 1.9, min: 0.12 });
-        const ARM = 3.9, TOPY = 10.6, LAMPY = TOPY - 0.55, SPACING = LO ? 36 : 28;
-        // coluna torneada: sino na base, fuste afinando, colarinho antes do topo
-        const colP = [[0.36, 0], [0.34, 0.18], [0.24, 0.42], [0.27, 0.52], [0.2, 0.7], [0.17, 1.4], [0.15, 3.2], [0.19, 3.32], [0.15, 3.44], [0.13, TOPY - 1.05],
-          [0.18, TOPY - 0.92], [0.13, TOPY - 0.78], [0.12, TOPY - 0.2], [0.15, TOPY - 0.1], [0.0, TOPY]].map(p => new THREE.Vector2(p[0], p[1]));
-        const swan = new THREE.CubicBezierCurve3(V3(0, TOPY - 0.6, 0), V3(0, TOPY + 1.5, 0), V3(ARM * 0.55, TOPY + 1.6, 0), V3(ARM, TOPY + 0.55, 0));
-        const brace = new THREE.CubicBezierCurve3(V3(0, TOPY - 1.9, 0), V3(0.9, TOPY - 1.7, 0), V3(1.6, TOPY - 0.4, 0), V3(2.2, TOPY + 1.05, 0));
-        const LG = {
-          step1: new THREE.CylinderGeometry(0.95, 1.05, 0.45, 8), step2: new THREE.CylinderGeometry(0.7, 0.8, 0.5, 8), step3: new THREE.CylinderGeometry(0.5, 0.55, 0.2, 8),
-          col: new THREE.LatheGeometry(colP, 18),
-          ring: new THREE.TorusGeometry(0.2, 0.045, 6, 18).rotateX(Math.PI / 2), ringB: new THREE.TorusGeometry(0.3, 0.05, 6, 18).rotateX(Math.PI / 2),
-          arm: new THREE.TubeGeometry(swan, 28, 0.075, 8, false), brace: new THREE.TubeGeometry(brace, 20, 0.04, 6, false),
-          scroll: new THREE.TorusGeometry(0.34, 0.04, 6, 20, Math.PI * 1.6), scroll2: new THREE.TorusGeometry(0.22, 0.035, 6, 16, Math.PI * 1.6),
-          hook: new THREE.CylinderGeometry(0.035, 0.035, 0.45, 6),
-          hood: new THREE.ConeGeometry(0.62, 0.48, 8), hoodRim: new THREE.CylinderGeometry(0.64, 0.64, 0.06, 8),
-          finial: new THREE.SphereGeometry(0.11, 10, 8), spike: new THREE.ConeGeometry(0.05, 0.3, 6),
-          glass: new THREE.CylinderGeometry(0.42, 0.3, 0.72, 8, 1, true), glassIn: new THREE.CylinderGeometry(0.16, 0.16, 0.36, 10),
-          bar: new THREE.CylinderGeometry(0.022, 0.022, 0.76, 4), bottom: new THREE.ConeGeometry(0.31, 0.3, 8), drop: new THREE.SphereGeometry(0.06, 8, 6)
-        };
-        LG.glass.rotateY(Math.PI / 8); LG.hood.rotateY(Math.PI / 8); LG.hoodRim.rotateY(Math.PI / 8); LG.bottom.rotateX(Math.PI).rotateY(Math.PI / 8);
+        const ARM = LampPost.ARM, LAMPY = LampPost.LAMPY, SPACING = LO ? 36 : 28, LG = LampPost.geometries();
         const bake = { base: [], iron: [], trim: [], glass: [] }, _m = new THREE.Matrix4(), _l = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler();
         const put = (key, geo, M, x, y, z, rx, ry, rz) => { _l.compose(V3(x, y, z), _q.setFromEuler(_e.set(rx || 0, ry || 0, rz || 0)), V3(1, 1, 1)); const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.applyMatrix4(_m.copy(M).multiply(_l)); bake[key].push(g); };
         const heads = [], halos = [], auras = [];
@@ -2120,19 +2167,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           if (def.wall && sd < 0 && i >= def.wall[0] - 3 && i <= def.wall[1] + 3) continue;
           const y0 = gy(q.x, q.z) - 0.1, dx = -sd * T[i].z, dz = sd * T[i].x, ang = Math.atan2(-dz, dx);   // +x local aponta para a pista
           const M = new THREE.Matrix4().compose(V3(q.x, y0, q.z), new THREE.Quaternion().setFromAxisAngle(V3(0, 1, 0), ang), V3(1, 1, 1));
-          put('base', LG.step1, M, 0, 0.22, 0); put('base', LG.step2, M, 0, 0.67, 0); put('base', LG.step3, M, 0, 1.0, 0);
-          put('iron', LG.col, M, 0, 1.05, 0);
-          [[LG.ringB, 1.12], [LG.ring, 1.9], [LG.ring, 4.38], [LG.ring, TOPY + 1.05 - 0.92], [LG.ringB, TOPY + 1.05 - 1.5]].forEach(([g, yy]) => put('trim', g, M, 0, yy, 0));
-          put('iron', LG.arm, M, 0, 0, 0); put('iron', LG.brace, M, 0, 0, 0);
-          put('iron', LG.scroll, M, 0.55, TOPY - 0.25, 0, 0, 0, -0.6); put('iron', LG.scroll2, M, 1.35, TOPY + 0.45, 0, 0, 0, 2.4);
-          put('trim', LG.finial, M, 0, TOPY + 1.12, 0); put('trim', LG.spike, M, 0, TOPY + 1.34, 0);
-          // lanterna pendurada na ponta do braço
-          const lx = ARM, ly = LAMPY;
-          put('iron', LG.hook, M, lx, ly + 0.9, 0); put('iron', LG.hoodRim, M, lx, ly + 0.4, 0); put('iron', LG.hood, M, lx, ly + 0.66, 0);
-          put('trim', LG.finial, M, lx, ly + 0.95, 0);
-          put('glass', LG.glass, M, lx, ly, 0); put('glass', LG.glassIn, M, lx, ly - 0.02, 0);
-          for (let k = 0; k < 8; k++) { const a = (k + 0.5) / 8 * Math.PI * 2; put('iron', LG.bar, M, lx + Math.cos(a) * 0.37, ly, Math.sin(a) * 0.37, Math.sin(a) * 0.17, 0, -Math.cos(a) * 0.17); }
-          put('iron', LG.bottom, M, lx, ly - 0.5, 0); put('trim', LG.drop, M, lx, ly - 0.7, 0);
+          LampPost.place(LG, put, M); const ly = LAMPY;
           const wx = q.x + dx * ARM, wz = q.z + dz * ARM;
           const h = glowSpr(0xfff0d0, 1.6, 0); h.position.set(wx, y0 + ly, wz); halos.push(h);
           const au = glowSpr(0xffb766, 6, 0); au.position.set(wx, y0 + ly - 0.1, wz); auras.push(au);
@@ -2140,12 +2175,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           heads.push({ x: wx, y: y0 + ly - 0.4, z: wz, g: (ni.dist < W + CB ? tr.roadBase + hAt(ni.i + ni.f) : gy(wx, wz)) });
           tr.obstacles.push({ x: q.x, z: q.z, r: 0.75 }); }
         // malhas assadas (posições, normais e uv somadas)
-        Object.keys(bake).forEach(key => { const L2 = bake[key]; if (!L2.length) return; let n = 0; L2.forEach(g => { n += g.attributes.position.count; });
-          const P = new Float32Array(n * 3), Nn = new Float32Array(n * 3), U = new Float32Array(n * 2); let o = 0;
-          L2.forEach(g => { const c = g.attributes.position.count; if (!g.attributes.normal) g.computeVertexNormals(); P.set(g.attributes.position.array, o * 3); Nn.set(g.attributes.normal.array, o * 3);
-            if (g.attributes.uv) U.set(g.attributes.uv.array, o * 2); o += c; g.dispose(); });
-          const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(Nn, 3)); g.setAttribute('uv', new THREE.BufferAttribute(U, 2)); g.computeBoundingSphere();
-          const m = new THREE.Mesh(g, LM[key]); m.castShadow = key !== 'glass'; m.receiveShadow = true; m.userData.dynamic = true; if (key === 'glass') m.userData.noOutline = true; add(m); });
+        LampPost.merge(bake, LM).forEach(m => { m.userData.dynamic = true; add(m); });
         Object.values(LG).forEach(g => g.dispose());
         // ---- LUZ DE VERDADE: SpotLights levados para os postes mais próximos da câmera ----
         if (heads.length) {

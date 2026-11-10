@@ -234,5 +234,6 @@
       return { tires: tires.length, cones: cones.length, posts: posts.length };
     }
   };
+  Props.coneAssets = coneAssets; Props.tireAssets = tireAssets; Props.TIRE = TIRE;   // a vitrine do lobby usa os mesmos modelos
   window.Props = Props;
 })();

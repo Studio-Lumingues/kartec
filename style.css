@@ -1237,3 +1237,6 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .lobbySetup.ro .seg button { pointer-events: none; }                 /* quem não é o anfitrião só vê as escolhas */
 .lobbySetup.ro .stepper { justify-content: center; }
 @media (max-width: 760px) { .lobbySetup { grid-template-columns: minmax(0, 1fr); } .lobbyTrackCard strong { font-size: 20px; } }
+
+/* aba Piloto: o personagem fica em destaque (as setas trocam Menino / Menina; os pontinhos dos veículos somem) */
+#garage.pilotView .gDots { visibility: hidden; }

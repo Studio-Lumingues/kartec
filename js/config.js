@@ -32,7 +32,7 @@ window.CFG = {
   //   SENSOR_MM: altura do sensor (24 = full frame); FOCUS_RANGE: metros nítidos atrás do kart antes de começar a desfocar
   //   MAX_PX: desfoque máximo em px (numa tela de 1080 de altura); SAMPLES: amostras do disco (16 = leve, 32 = bonito, 48 = máximo)
   //   AF_SPEED: velocidade do autofoco (o foco "anda" suave até o kart); DEBUG: true pinta de laranja o quanto cada ponto desfoca
-  GFX: { POSTFX: true, AO: 0.45, INK: 0.25, BLOOM: 0.12, SAT: 1.04, CONTRAST: 0.1, VIGNETTE: 0.08, SCATTER: 1, RAYS: 0.25, SHARPEN: 0.3, DOF: 1,
+  GFX: { POSTFX: true, AO: 0.45, INK: 0, BLOOM: 0.12, SAT: 1.04, CONTRAST: 0.1, VIGNETTE: 0.08, SCATTER: 1, RAYS: 0.25, SHARPEN: 0.3, DOF: 1,
     DOF_LENS: { FSTOP: 4, FOCAL_MM: 85, SENSOR_MM: 24, FOCUS_RANGE: 250, MAX_PX: 8, SAMPLES: 32, AF_SPEED: 4, DEBUG: false } },
   // ONLINE: endereço do servidor quando o jogo e o servidor ficam em lugares diferentes
   // (ex.: jogo na Vercel e servidor no Render). Vazio = mesmo endereço da página.

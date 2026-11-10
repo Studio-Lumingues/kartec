@@ -83,12 +83,7 @@
             float dist = z0 / max(-vd.z, 0.05), fogF = smoothstep(uFogN, uFogF, dist);
             c += scatter(normalize(mat3(uCamW) * vd)) * fogF * uScatter;
           }
-          if (uInk > 0.0) {
-            float wl = wOf(vUv - vec2(uPx.x, 0.0)), wr = wOf(vUv + vec2(uPx.x, 0.0)), wd = wOf(vUv - vec2(0.0, uPx.y)), wu = wOf(vUv + vec2(0.0, uPx.y));
-            float lap = (abs(wl + wr - 2.0 * w0) + abs(wu + wd - 2.0 * w0)) / w0;
-            float e = smoothstep(0.1, 0.35, lap) * (1.0 - smoothstep(60.0, 200.0, z0)) * step(0.7, z0);
-            c = mix(c, c * 0.45, e * uInk);
-          }
+          // (contorno de cel shading removido)
         }
       }
       c += (texture2D(tB1, vUv).rgb * 0.7 + texture2D(tB2, vUv).rgb * 0.3) * uBloom;
@@ -184,7 +179,7 @@
     }`;
 
   function create(renderer, opts) {
-    const O = { ink: 0.25, bloom: 0.12, threshold: 0.97, sat: 1.04, con: 0.1, vig: 0.08, ao: 0.45, scatter: 1, rays: 0.25, sharpen: 0.3, dof: 1, dofLens: null }; Object.keys(opts || {}).forEach(k => { if (opts[k] != null) O[k] = opts[k]; });
+    const O = { ink: 0, bloom: 0.12, threshold: 0.97, sat: 1.04, con: 0.1, vig: 0.08, ao: 0.45, scatter: 1, rays: 0.25, sharpen: 0.3, dof: 1, dofLens: null }; Object.keys(opts || {}).forEach(k => { if (opts[k] != null) O[k] = opts[k]; });
     // fx.sky: definido pelo main.js a cada quadro (direção e cor do sol, início/fim da névoa)
     const fx = { ok: true, opts: O, focus: 15, sky: { dir: new THREE.Vector3(0.4, 0.7, 0.3).normalize(), col: new THREE.Color(0, 0, 0), fogN: 500, fogF: 1500 } };
     try {
@@ -253,7 +248,7 @@
                 B.tSrc.value = rRb.texture; B.uLen.value = 0.18; pass(mRBlur, rRa); } } }
           const U = mComp.uniforms; U.tCol.value = rtS.texture; U.tDep.value = rtS.depthTexture || null; U.tB1.value = b1a.texture; U.tB2.value = b2a.texture;
           U.uPx.value.set(1 / w, 1 / h); U.uNear.value = camera.near; U.uFar.value = camera.far;
-          U.uFocal.value = 0.5 / Math.tan(camera.fov * Math.PI / 360); U.uAsp.value = h / w; U.uAO.value = O.ao; U.uInk.value = O.ink; U.uBloom.value = O.bloom; U.uSat.value = O.sat; U.uCon.value = O.con; U.uVig.value = O.vig; mBright.uniforms.uTh.value = O.threshold;
+          U.uFocal.value = 0.5 / Math.tan(camera.fov * Math.PI / 360); U.uAsp.value = h / w; U.uAO.value = O.ao; U.uInk.value = 0; U.uBloom.value = O.bloom; U.uSat.value = O.sat; U.uCon.value = O.con; U.uVig.value = O.vig; mBright.uniforms.uTh.value = O.threshold;
           U.uInvProj.value.copy(camera.projectionMatrixInverse); U.uCamW.value.copy(camera.matrixWorld); U.uSun.value.copy(SK.dir); U.uSunCol.value.copy(SK.col);
           U.uFogN.value = SK.fogN; U.uFogF.value = SK.fogF; U.uScatter.value = O.scatter; U.tRay.value = rRa.texture; U.uRays.value = rayK; mFxaa.uniforms.uSharp.value = O.sharpen;
           pass(mComp, rtC);

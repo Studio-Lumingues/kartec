@@ -67,7 +67,7 @@
       if (R) { const want = sz > 0;
         if (R.shadowMap.enabled !== want) { R.shadowMap.enabled = want; this.eachScene(sc => sc.traverse(o => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true); })); }
         if (window.Env && Env.sun && sz) { if (Env.sun.shadow.mapSize.x !== sz) { Env.sun.shadow.mapSize.set(sz, sz); if (Env.sun.shadow.map) { Env.sun.shadow.map.dispose(); Env.sun.shadow.map = null; } } } }
-      // contornos de tinta
+      // modo leve (o antigo 'contornos' agora só liga/desliga o modo leve dos presets; o cel shading saiu do jogo)
       if (window.Game) { Game.lite = !g.outlines; this.eachScene(sc => sc.traverse(o => { if (o.material && o.material.userData && o.material.userData.outline) o.visible = g.outlines; }));
         (Game.karts || []).forEach(k => { k._near = undefined; }); }
       // resolução fixa: aplica já (a automática é ajustada pelo laço do jogo)
@@ -137,7 +137,6 @@
         opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Completo: sombra de contato, brilho e raios de sol. Simples: só cor e antisserrilhado') +
         opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo total']], 'O reflexo redesenha a cena: desligar ganha muito FPS perto do rio') +
         tog('dof', 'Desfoque de distância', 'O que está longe do kart fica levemente desfocado. Só com o pós-efeito Completo') +
-        tog('outlines', 'Contornos de desenho', 'Traço escuro em volta dos karts e objetos') +
         opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Montanhas, terreno, névoa da cachoeira e enfeites. Vale na próxima corrida') +
         opt('textures', 'Texturas', [['flat', 'Massinha (cor lisa)'], ['full', 'Detalhadas']], 'Vale na próxima corrida') +
         opt('texRes', 'Resolução das texturas 3D', [['512', '512'], ['1024', '1024'], ['2048', '2048'], ['max', 'Original']], 'Piloto, karts, garagem e fadinha. O que mais gasta memória de vídeo. Vale ao recarregar o jogo (F5)') +

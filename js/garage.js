@@ -44,7 +44,7 @@
         d.addEventListener('click', () => { const cur = this.index(); if (i !== cur) this.go(i > cur ? 1 : -1, i); });
         dots.appendChild(d);
       });
-      Custom.onChange(id => { if (id === 'model') this.plate(); else this.syncSwatches(); });
+      Custom.onChange(id => { if (id === 'model' || id === 'pilot') this.plate(); this.syncSwatches(); });
       this.show(this.tab); this.plate(true); this.built = true;
     },
 
@@ -53,6 +53,10 @@
     // dir: +1 próximo (entra pela direita), -1 anterior. to: índice de destino (pontinhos)
     go(dir, to) {
       const now = performance.now(); if (now - (this._lock || 0) < SWAP_LOCK) return; this._lock = now;
+      if (this.tab === 'pilot' && window.Pilot) {   // aba Piloto: as setas trocam o personagem (Menino / Menina)
+        const C = Pilot.characters, n = C.length; if (n < 2) return; const cur = Math.max(0, C.findIndex(c => c.id === Custom.spec.pilot));
+        const i = to !== undefined ? to : (cur + dir + n) % n; this.slideDir = dir; Custom.set('pilot', C[i].id); this.plate(); this.syncSwatches();
+        try { UI.Sfx.tone(dir > 0 ? 520 : 620, dir > 0 ? 820 : 420, 0.12, 'triangle', 0.05); } catch (e) { } return; }
       const L = KartModels.list(), n = L.length; if (n < 2) return;
       const i = to !== undefined ? to : (this.index() + dir + n) % n;
       this.slideDir = dir; Showroom.swapDir = dir;
@@ -62,9 +66,10 @@
     press(id) { const b = $(id); if (!b) return; b.classList.remove('hit'); void b.offsetWidth; b.classList.add('hit'); },
     // placa com nome + descrição: sai para o lado contrário da seta e a nova entra pelo lado da seta
     plate(instant) {
-      const m = KartModels.get(Custom.spec.model), box = $('gPlate'), name = $('gName'), desc = $('gDesc');
+      const pv = this.tab === 'pilot' && window.Pilot, ch = pv && (Pilot.characters.find(c => c.id === Custom.spec.pilot) || Pilot.characters[0]);
+      const m = pv ? { name: ch ? ch.name : 'Piloto', desc: 'Piloto · arraste para girar, role o mouse para aproximar' } : KartModels.get(Custom.spec.model), box = $('gPlate'), name = $('gName'), desc = $('gDesc');
       [...$('gDots').children].forEach((d, i) => { const on = i === this.index(); d.classList.toggle('on', on); d.setAttribute('aria-current', on ? 'true' : 'false'); });
-      $('garage').setAttribute('aria-label', 'Garagem: ' + m.name);
+      $('garage').setAttribute('aria-label', 'Garagem: ' + m.name); $('garage').classList.toggle('pilotView', !!pv);
       if (instant || !this.slideDir) { name.textContent = m.name; desc.textContent = m.desc; return; }
       const dir = this.slideDir; this.slideDir = 0;
       box.style.setProperty('--dir', dir);
@@ -78,7 +83,9 @@
 
     // ---------- doca: abas, chips de parte e cores ----------
     show(id) {
-      this.tab = id;
+      const was = this.tab; this.tab = id;
+      if (window.Showroom && Showroom.setFocus) Showroom.setFocus(id === 'pilot' ? 'pilot' : 'vehicle');   // aba Piloto: personagem 3D em destaque
+      if (this.built && was !== id) { this.slideDir = 0; this.plate(true); }
       document.querySelectorAll('#garageTabs .gTab').forEach(b => { const on = b.dataset.tab === id; b.classList.toggle('on', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
       this.renderBody();
     },
@@ -133,6 +140,7 @@
     enter() {
       if (!this.built) return;
       this.slideDir = 0; this.plate(true); this.syncSwatches();
+      if (window.Showroom && Showroom.setFocus) Showroom.setFocus(this.tab === 'pilot' ? 'pilot' : 'vehicle', true);
       const g = $('garage'); g.classList.remove('enter'); void g.offsetWidth; g.classList.add('enter');
     }
   };

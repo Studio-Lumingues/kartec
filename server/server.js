@@ -242,14 +242,23 @@ function onJson(p, m) {
       broadcast(r, { t: 'finished', id: p.id, time: r.race.finish.get(p.id) });
       if (!r.race.firstFinish) { r.race.firstFinish = now(); clearTimeout(r.race.timer); r.race.timer = setTimeout(() => endRace(r), FINISH_GRACE_MS); }
       checkRace(r); return; }
-    case 'item': {   // caixas e itens: repassa aos outros jogadores da corrida (pegou caixa, soltou banana, escorregou, turbo)
+    case 'item': {   // caixas e itens: repassa aos outros jogadores da corrida (caixa, banana, turbo, tijolo, bazuca, escudo)
       if (!r || !r.race || r.state !== 'racing' || m.raceId !== r.race.id) return;
-      const k = ['box', 'banana', 'hitb', 'dino'].includes(m.k) ? m.k : null; if (!k) return;
+      // ANTES só 'box', 'banana', 'hitb' e 'dino' passavam: o arremesso do tijolo ('brick'), a confirmação do acerto ('hitk'),
+      // a bazuca ('rocket', 'hitr', 'boomr') e o escudo eram descartados aqui e nunca chegavam aos outros jogadores.
+      const KINDS = ['box', 'banana', 'hitb', 'dino', 'brick', 'hitk', 'rocket', 'hitr', 'boomr', 'shield'];
+      const k = KINDS.includes(m.k) ? m.k : null; if (!k) return;
       const o = { t: 'item', k, from: p.id, raceId: r.race.id }, num = v => Number.isFinite(v) ? Math.round(v * 100) / 100 : undefined;
       if (k === 'box') o.i = Math.max(0, Math.min(511, m.i | 0));
       if (typeof m.id === 'string') o.id = m.id.slice(0, 24);
       if (k === 'banana') { o.x = num(m.x); o.y = num(m.y); o.z = num(m.z); if (o.x === undefined || o.z === undefined || !o.id) return; }
-      if (k === 'hitb' && !o.id) return;
+      if (k === 'brick' || k === 'rocket') {             // alvo: só um jogador desta mesma sala
+        if (!o.id) return;
+        const to = m.to == null ? null : players.get(Number(m.to));
+        o.to = to && to.room === r.id && to !== p ? to.id : null;
+        if (k === 'brick' && o.to == null) return;        // tijolo sempre tem alvo
+      }
+      if ((k === 'hitb' || k === 'hitk' || k === 'hitr' || k === 'boomr') && !o.id) return;
       broadcast(r, o, p); return; }
     case 'bump': {
       if (!r || r.state !== 'racing') return; const to = players.get(m.to); if (!to || to.room !== r.id) return;

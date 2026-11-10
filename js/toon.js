@@ -1,5 +1,5 @@
 // =====================================================================================
-// toon.js — o "visual de desenho animado" do jogo inteiro, num lugar só
+// toon.js — (LEGADO) o cel shading foi removido: as funções continuam com o mesmo nome, mas devolvem materiais PBR/padrão
 //
 // * Toon.mat(params, opts): MeshToonMaterial com rampa de 3 tons (luz / meio-tom / sombra, sem
 //   degradê realista) + brilho de plástico (mancha especular de borda dura) + luz de contorno (rim).
@@ -58,25 +58,20 @@
     '  gl_FragColor.rgb += vec3(sp * uGloss); }'
   ].join('\n');
 
-  // opts: { gloss (0..1), rim (0..1), hook(shader) para shaders extras (adesivo, recolor), key }
+  // CEL SHADING REMOVIDO: Toon.mat agora devolve um material PBR padrão (MeshStandardMaterial), sem rampa de 3 tons,
+  // sem mancha de brilho dura e sem luz de contorno. gloss vira aspereza (roughness) e os hooks de shader continuam valendo
+  // (eles só mexem em <map_fragment> e <tonemapping_fragment>, que o Standard também tem).
+  // opts: { gloss (0..1), rim (ignorado), hook(shader), key, metal }
   function mat(params, opts) {
     opts = opts || {}; params = Object.assign({}, params);
-    ['shininess', 'specular', 'flatShading', 'roughness', 'metalness', 'envMap', 'envMapIntensity', 'reflectivity', 'combine', 'normalMap', 'normalScale'].forEach(k => delete params[k]);
-    if (params.color !== undefined) params.color = opts.sat === 0 ? new THREE.Color(params.color) : vivid(params.color, opts.sat);
+    ['shininess', 'specular', 'flatShading', 'gradientMap', 'combine', 'reflectivity'].forEach(k => delete params[k]);
+    if (params.color !== undefined) params.color = new THREE.Color(params.color);
     if (params.emissive !== undefined) params.emissive = new THREE.Color(params.emissive);
-    const m = new THREE.MeshToonMaterial(Object.assign({ gradientMap: gradient() }, params));
-    const gloss = opts.gloss || 0, rim = opts.rim === undefined ? 0.25 : opts.rim;
-    if (gloss || rim || opts.hook) {
-      const u = m.userData.toonU = { uGloss: { value: gloss }, uRim: { value: rim } };
-      m.onBeforeCompile = sh => {
-        Object.assign(sh.uniforms, u);
-        sh.fragmentShader = 'uniform float uGloss; uniform float uRim;\n' + sh.fragmentShader.replace('#include <tonemapping_fragment>', GLOSS + '\n#include <tonemapping_fragment>');
-        if (opts.hook) opts.hook(sh);
-      };
-      m.customProgramCacheKey = () => 'toon-' + (opts.key || 'g');
-      // materiais toon iguais (sem shader extra) podem ser agrupados pelo mergeByMaterial
-      if (!opts.hook) m.userData.mergeKey = 'toon:' + gloss + ':' + rim + ':' + (opts.key || 'g');
-    }
+    const gloss = Math.max(0, Math.min(1, opts.gloss || 0));
+    const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.82 - 0.62 * gloss, metalness: opts.metal || (gloss > 0.85 ? 0.35 : 0) }, params));
+    const env = window.KartMats && KartMats.env; if (env && !m.envMap) { m.envMap = env; m.envMapIntensity = 0.25 + 0.6 * gloss; }
+    if (opts.hook) { m.onBeforeCompile = sh => opts.hook(sh); m.customProgramCacheKey = () => 'std-' + (opts.key || 'g'); }
+    else m.userData.mergeKey = 'std:' + gloss + ':' + (opts.key || 'g');
     return m;
   }
 
@@ -157,27 +152,8 @@
     return new THREE.BufferAttribute(out, 3);
   }
   // color (opcional): cor do traço; os pneus usam preto neutro em vez da tinta roxa
-  function outline(root, t, filter, color, push) {
-    const list = [];
-    root.traverse(o => {
-      if (!o.isMesh || o.userData.outline || o.userData.noOutline || !o.geometry.attributes.normal) return;
-      if (o.isInstancedMesh && o.instanceColor && !o.userData.outlineInstanced) return;
-      const m = Array.isArray(o.material) ? o.material[0] : o.material;
-      if (!m || m.transparent || m.isMeshBasicMaterial || m.isSpriteMaterial || (filter && !filter(o))) return;
-      list.push(o);
-    });
-    list.forEach(o => {
-      const hg = hullGeometry(o.geometry);
-      let h;
-      if (o.isSkinnedMesh) { h = new THREE.SkinnedMesh(hg, outlineMat(t, true, color, push)); h.bind(o.skeleton, o.bindMatrix); h.frustumCulled = false; }
-      else if (o.isInstancedMesh) { h = new THREE.InstancedMesh(hg, outlineMat(t, false, color, push), o.count); h.instanceMatrix = o.instanceMatrix; h.frustumCulled = o.frustumCulled; }
-      else h = new THREE.Mesh(hg, outlineMat(t, false, color, push));
-      h.position.copy(o.position); h.quaternion.copy(o.quaternion); h.scale.copy(o.scale);
-      h.userData.outline = true; h.castShadow = false; h.receiveShadow = false; h.renderOrder = o.renderOrder;
-      o.parent.add(h);
-    });
-    return list.length;
-  }
+  // contorno de tinta (cel shading) removido: nada é criado. A assinatura fica para quem ainda chama.
+  function outline() { return 0; }
 
   // ---------- fábrica: Lambert/Phong -> toon (exceto pisos) ----------
   const GROUND = ['grass', 'asphalt', 'sand', 'dirt', 'curb', 'paint', 'concrete', 'pebble', 'startLine'];   // pisos de Cidade/Praia removidos
@@ -194,9 +170,12 @@
       return mat(params, { gloss: Base === Phong ? 0.35 : 0, rim: isWater ? 0.15 : 0.18, key: Base === Phong ? 'p' : 'l' });
     };
   }
+  // antes: trocava todo Lambert/Phong criado dentro de fn por toon. Agora cada material fica com o sombreado padrão.
   function during(fn) {
-    THREE.MeshLambertMaterial = factory(Lambert); THREE.MeshPhongMaterial = factory(Phong);
-    try { return fn(); } finally { THREE.MeshLambertMaterial = Lambert; THREE.MeshPhongMaterial = Phong; }
+    // só limpa parâmetros que o Lambert não aceita (flatShading vinha para o toon); o sombreado continua o padrão
+    THREE.MeshLambertMaterial = function (p) { p = p ? Object.assign({}, p) : {}; delete p.flatShading; delete p.shininess; delete p.specular; return new Lambert(p); };
+    THREE.MeshLambertMaterial.prototype = Lambert.prototype;
+    try { return fn(); } finally { THREE.MeshLambertMaterial = Lambert; }
   }
 
   window.Toon = { INK, gradient, gradientSoft, vivid, mat, outline, smoothNormals, during, Lambert };

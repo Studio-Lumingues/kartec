@@ -23,6 +23,35 @@
   }, (window.CFG && window.CFG.LOGO3D) || {});
 
   const L3 = window.Logo3D = { status: 'carregando' };
+  // ---- logo oficial como malha 3D para OUTRAS cenas (letreiro e parede da garagem: showroom.js) ----
+  // L3.whenReady(fn): chama fn quando o .glb estiver pronto. L3.mesh(altura, { self }): grupo centrado com a logo na
+  // altura pedida (largura proporcional, ou limitada por maxW), mesmo shader de cores da logo do menu/pórtico.
+  L3.whenReady = fn => { if (L3.geo) { fn(); return; } const on = () => { removeEventListener('kartec-logo', on); fn(); }; addEventListener('kartec-logo', on); };
+  L3.mesh = (height, o) => {
+    o = o || {}; const geo = L3.geo, bb = L3.bb, size = bb.getSize(new THREE.Vector3()), mid = bb.getCenter(new THREE.Vector3()), lay = L3.layers || [0.193, 0.165];
+    const U = { uZ: { value: new THREE.Vector2(lay[0], lay[1]) }, uY: { value: new THREE.Vector2(bb.max.y - 0.04, bb.min.y + 0.06) },
+      uG0: { value: new THREE.Color('#FFA79A') }, uG1: { value: new THREE.Color('#FF4D5E') }, uG2: { value: new THREE.Color('#E8213A') }, uG3: { value: new THREE.Color('#C4102B') },
+      uWhite: { value: new THREE.Color('#FFFFFF') }, uInk: { value: new THREE.Color('#2B2B2E') }, uSelf: { value: o.self == null ? 0.18 : o.self } };
+    const m = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.05 }); m.__ink = true;
+    if (window.KartMats && KartMats.env) { m.envMap = KartMats.env; m.envMapIntensity = 0.6; }
+    m.customProgramCacheKey = () => 'kartec-logo-std';
+    m.onBeforeCompile = sh => { Object.assign(sh.uniforms, U);
+      sh.vertexShader = 'varying vec3 vLP;\nvarying vec3 vLN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvLP = position; vLN = normal;');
+      sh.fragmentShader = 'varying vec3 vLP;\nvarying vec3 vLN;\nuniform vec2 uZ;\nuniform vec2 uY;\nuniform vec3 uG0;\nuniform vec3 uG1;\nuniform vec3 uG2;\nuniform vec3 uG3;\nuniform vec3 uWhite;\nuniform vec3 uInk;\nuniform float uSelf;\n' +
+        sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+          vec3 ln = normalize(vLN); float face = smoothstep(0.55, 0.8, abs(ln.z)); float az = abs(vLP.z);
+          float t = clamp((uY.x - vLP.y) / (uY.x - uY.y), 0.0, 1.0);
+          vec3 gold = t < 0.38 ? mix(uG0, uG1, t / 0.38) : t < 0.78 ? mix(uG1, uG2, (t - 0.38) / 0.4) : mix(uG2, uG3, (t - 0.78) / 0.22);
+          gold = mix(uG3 * 0.8, gold, face);
+          vec3 white = mix(uWhite * 0.8, uWhite * 0.97, face);
+          vec3 ink = uInk * mix(0.75, 1.25, clamp((vLP.y - uY.y) / (uY.x - uY.y), 0.0, 1.0)); ink = mix(ink * 0.7, ink, face);
+          float wW = smoothstep(uZ.y - 0.004, uZ.y + 0.004, az), wG = smoothstep(uZ.x - 0.004, uZ.x + 0.004, az);
+          diffuseColor.rgb = mix(mix(ink, white, wW), gold, wG);`)
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * uSelf;'); };
+    const k = Math.min(height / size.y, o.maxW ? o.maxW / size.x : 1e9), g = new THREE.Group(), mesh = new THREE.Mesh(geo, m);
+    mesh.position.copy(mid).negate(); mesh.castShadow = true; g.add(mesh); g.scale.setScalar(k);
+    g.userData = { U, mat: m, w: size.x * k, h: size.y * k, d: size.z * k }; return g;
+  };
 
   // 1) esconde a logo 2D (SUPER, linhas, KARTEC) já no modelo (template), antes de ela ser montada
   const tpl = document.getElementById('logoTpl');
