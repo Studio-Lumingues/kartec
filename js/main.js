@@ -1172,7 +1172,7 @@
       // logo na tela (e enquanto ela voa para o canto): o 3D fica congelado no último quadro -> a GPU fica só para a animação
       if ((this.state === 'intro' && Intro.phase === 'logo') || (window.Logo && Logo.exiting)) return;
       if (this.state === 'intro' && Intro.phase === 'film') renderer.render(Intro.scene, Intro.cam);
-      else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') renderer.render(Showroom.scene, Showroom.cam);
+      else if (this.state === 'intro' || this.state === 'menu' || this.state === 'garage' || this.state === 'lobby') { if (Showroom.render) Showroom.render(renderer); else renderer.render(Showroom.scene, Showroom.cam); }   // vitrine: com profundidade de campo (showroom.js)
       else if (this.state === 'podium') renderer.render(Podium.scene, Podium.camera);
       else if (this.scene) { this.cullTrack(); this.kartCull();
         if (postFX && this.player) { camera.updateMatrixWorld(); const e = camera.matrixWorld.elements, p = this.state === 'showcase' && this.sc ? this.sc.focus : this.player.pos;   // foco do desfoque: seu kart (no showcase: o ponto que a câmera mira)
