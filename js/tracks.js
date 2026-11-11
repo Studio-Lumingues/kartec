@@ -542,7 +542,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       // iluminação suave (Phong de verdade, fora do toon): a rocha tem relevo contínuo, e os 3 degraus do toon recortavam
       // cada ondulação em faixas duras quando a câmera chegava perto
       const m = new PHONG_ORIG({ vertexColors: true, shininess: 4, specular: 0x060606 });   // quase sem brilho: rocha é fosca (o brilho dava cara de massinha)
-      m.userData.unique = true; m.userData.noToon = true; m.customProgramCacheKey = () => 'mountain-proc-v4' + (LO ? '-lite' : '');
+      m.userData.unique = true; m.userData.noToon = true; m.customProgramCacheKey = () => 'mountain-proc-v5' + (LO ? '-lite' : '');
       if (!mountainMat.logged) { mountainMat.logged = true; console.info(m.isMeshToonMaterial ? '[montanhas] ainda em toon (o Toon.during converteu depois): mande o js/toon.js' : '[montanhas] iluminação suave (fora do toon)'); }
       m.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vMW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
@@ -575,7 +575,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
             float gr = max(gU * gH, 1.0 - smoothstep(0.04, 0.16, hr + jag * 0.3));
             float sn = tall * smoothstep(0.55, 0.63, hr + (n1 - 0.5) * 0.16 + (up - 0.55) * 0.32 + (n3 - 0.5) * 0.05);
             float rk = (1.0 - gr) * (1.0 - 0.75 * sn);          // quanto de "rocha exposta" tem no ponto
-            vec3 wn = wn0; float crev = 0.0, tone = 0.5;
+            vec3 wn = wn0; float crev = 0.0, tone = 0.5, rim = 0.0, fine = 0.0;
             ${LO ? '' : `{
               // placas grandes (~22 m), achatadas na vertical (camadas), e placas pequenas (~7 m) só de perto
               // posição "torcida" por ruído: as placas perdem o formato de ladrilho e viram lascas irregulares;
@@ -588,7 +588,18 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
               crev = (1.0 - smoothstep(0.0, mix(0.07, 0.035, fm), a2 - a1)) * smoothstep(0.35, 0.65, mn3(P * 0.035 + 2.0));
               if (fd > 0.001) { float b1, b2; vec3 id2; mCell(P * vec3(0.11, 0.24, 0.11) + wq * 2.5 + 5.0, b1, b2, id2);
                 vec3 r2 = mh33(id2 + 41.0) * 2.0 - 1.0; wn = normalize(wn + (r2 - dot(r2, wn) * wn) * 0.2 * rk * fd);
-                crev = max(crev, (1.0 - smoothstep(0.0, 0.05, b2 - b1)) * 0.45 * fd * smoothstep(0.4, 0.7, mn3(P * 0.09 + 6.0))); tone = mix(tone, mh3(id2), 0.25 * fd); }
+                crev = max(crev, (1.0 - smoothstep(0.0, 0.05, b2 - b1)) * 0.45 * fd * smoothstep(0.4, 0.7, mn3(P * 0.09 + 6.0))); tone = mix(tone, mh3(id2), 0.25 * fd);
+                // borda lascada: logo ao lado da fenda a quina da placa pega luz (relevo de verdade)
+                rim = smoothstep(0.03, 0.09, b2 - b1) * (1.0 - smoothstep(0.09, 0.2, b2 - b1)) * fd;
+                // terceiro nível: lascas pequenas (~2,5 m) bem de perto
+                float fc = 1.0 - smoothstep(40.0, 140.0, dist);
+                if (fc > 0.001) { float c1, c2; vec3 id3; mCell(P * vec3(0.32, 0.6, 0.32) + wq * 3.0 + 11.0, c1, c2, id3);
+                  vec3 r3 = mh33(id3 + 63.0) * 2.0 - 1.0; wn = normalize(wn + (r3 - dot(r3, wn) * wn) * 0.24 * rk * fc);
+                  crev = max(crev, (1.0 - smoothstep(0.0, 0.045, c2 - c1)) * 0.6 * fc); tone = mix(tone, mh3(id3 + 9.0), 0.35 * fc);
+                  rim = max(rim, smoothstep(0.02, 0.06, c2 - c1) * (1.0 - smoothstep(0.06, 0.13, c2 - c1)) * 0.9 * fc); }
+                // grão da pedra (micro-relevo) muito de perto
+                fine = (mn3(P * 3.1) - 0.5) * 0.7 + (mn3(P * 9.0 + 2.0) - 0.5) * 0.3;
+                wn = normalize(wn + vec3(mn3(P * 2.3) - 0.5, 0.0, mn3(P * 2.3 + 5.0) - 0.5) * 0.18 * rk * fc); }
             }`}
             normal = normalize((viewMatrix * vec4(wn, 0.0)).xyz);
             // rocha: cinza-pedra com variação por placa, camadas suaves, líquen nas partes mais planas
@@ -598,7 +609,28 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
             float st = sin(P.y * 0.35 + n1 * 7.0);
             rock *= 1.0 + 0.05 * st;
             rock = mix(rock, vec3(0.44, 0.5, 0.31), smoothstep(0.65, 0.84, n2) * 0.3 * smoothstep(0.3, 0.75, up));
-            rock *= 1.0 - 0.35 * crev;                                       // fendas entre as placas
+            // camadas sedimentares finas (linhas horizontais irregulares) e veios claros
+            float strata = smoothstep(0.82, 0.97, sin(P.y * 1.6 + n1 * 11.0 + mn3(P * 0.2) * 3.0) * 0.5 + 0.5);
+            rock = mix(rock, rock * vec3(0.86, 0.84, 0.8), strata * 0.5);
+            rock = mix(rock, vec3(0.72, 0.7, 0.66), smoothstep(0.93, 0.99, mn3(P * vec3(0.4, 0.06, 0.4) + 3.0)) * 0.4);
+            // escorridos de umidade/minério descendo das fendas (riscos verticais escuros e ferrugem)
+            float drip = smoothstep(0.62, 0.9, mn3(vec3(P.x * 0.9, P.y * 0.05, P.z * 0.9))) * smoothstep(0.2, 0.7, 1.0 - up);
+            rock = mix(rock, rock * vec3(0.66, 0.62, 0.58), drip * 0.55);
+            rock = mix(rock, vec3(0.52, 0.36, 0.24), drip * smoothstep(0.6, 0.8, n2) * 0.25);
+            // líquen em manchinhas (amarelo-esverdeado e cinza-claro) nas faces viradas para cima
+            float lich = smoothstep(0.68, 0.78, mn3(P * 0.9 + 4.0)) * smoothstep(0.2, 0.6, up);
+            rock = mix(rock, mix(vec3(0.62, 0.64, 0.38), vec3(0.74, 0.74, 0.68), step(0.5, mn3(P * 0.31))), lich * 0.45);
+            rock *= 1.0 + fine * 0.26;                                       // grão
+            rock *= 0.9 + 0.2 * tone;                                        // cada lasca com um tom próprio
+            ${LO ? '' : `{ // de perto: poros, pintas de mineral e manchas dentro de cada lasca (a placa não fica lisa)
+              float fcc = 1.0 - smoothstep(30.0, 120.0, dist);
+              float pit = smoothstep(0.7, 0.92, mn3(P * 6.5)) * fcc, spk = smoothstep(0.74, 0.95, mn3(P * 11.0 + 7.0)) * fcc;   // bordas macias (não parecem adesivos)
+              float mot = (mn3(P * 1.3 + 9.0) - 0.5) * fcc;
+              rock *= 1.0 - 0.22 * pit; rock = mix(rock, vec3(0.78, 0.76, 0.72), spk * 0.2); rock *= 1.0 + mot * 0.3;
+              rock = mix(rock, vec3(dot(rock, vec3(0.333))), 0.12 * fcc); }`}
+            rock = mix(rock, rock * 1.25 + 0.04, rim * 0.5);                 // quina lascada pega luz
+            rock *= 1.0 - 0.55 * crev;                                       // fendas entre as placas (mais fundas)
+            rock = mix(rock, rock * 0.55, crev * crev * 0.5);
             vec3 grass = mix(vec3(0.25, 0.39, 0.15), vec3(0.40, 0.52, 0.22), n2);
             grass = mix(grass, vec3(0.53, 0.5, 0.28), smoothstep(0.62, 0.86, n1) * 0.45) * (0.9 + 0.18 * n3);
             vec3 scree = vec3(0.56, 0.51, 0.43) * (0.85 + 0.25 * n3);

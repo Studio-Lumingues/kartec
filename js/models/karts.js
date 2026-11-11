@@ -348,7 +348,7 @@
       void main(){
         float t = vUv.y, sp = uT * 9.0;
         float n = vn(vec2(vUv.x * 7.0, t * 5.0 - sp)) * 0.6 + vn(vec2(vUv.x * 15.0, t * 11.0 - sp * 1.7)) * 0.4;
-        float core = pow(abs(dot(vN, vV)), 1.6);                          // miolo forte, casca suave
+        float core = 0.45 + 0.55 * pow(abs(dot(vN, vV)), 1.6);            // miolo forte, casca suave (sem sumir visto por trás)
         float body = (1.0 - t) * smoothstep(0.0, 0.06, t);
         float tongue = smoothstep(0.0, 0.45, n + 0.35 - t * 0.85);        // a ponta se desfaz em línguas
         vec3 cBlue = vec3(0.45, 0.62, 1.0), cWhite = vec3(1.0, 0.95, 0.8), cYel = vec3(1.0, 0.78, 0.32), cOr = vec3(1.0, 0.42, 0.1), cRed = vec3(0.55, 0.08, 0.02);
@@ -360,10 +360,20 @@
     const fireMat = (core, amp) => { const m = new THREE.ShaderMaterial({ uniforms: { uT: fireU.uT, uCore: { value: core }, uAmp: { value: amp } }, vertexShader: FIRE_VS, fragmentShader: FIRE_FS,
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }); m.userData.unique = true; return m; };
     const plumeM = fireMat(0, 0.09), coreM = fireMat(1, 0.03);
+    // sprites radiais (viram para a câmera: aparecem de qualquer ângulo, inclusive de trás, que é a câmera da corrida)
+    const glowTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,.75)'); gr.addColorStop(0.45, 'rgba(255,255,255,.22)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c); })();
+    const spr = (col, op) => { const m = new THREE.SpriteMaterial({ map: glowTex, color: col, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }); m.userData.unique = true; const o = new THREE.Sprite(m); o.userData.noOutline = true; o.userData.noShadow = true; o.renderOrder = 5; return o; };
+    const emberSprites = [];
     const flames = tpl.flames.map(fl => {
       const L = 1.8, f = new THREE.Mesh(new THREE.CylinderGeometry(fl.r * 0.12, fl.r * 1.05, L, 18, 14, true).translate(0, 0, 0), plumeM);
       f.position.copy(fl.pos).addScaledVector(fl.dir, L / 2); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; f.userData.noShadow = true;
       const c = new THREE.Mesh(new THREE.CylinderGeometry(fl.r * 0.05, fl.r * 0.62, L * 0.42, 14, 6, true), coreM); c.position.y = -L / 2 + L * 0.21; c.userData.noOutline = true; c.userData.noShadow = true; f.add(c);
+      // clarão do fogo: um forte azul-branco colado no bocal e um laranja maior logo atrás (visível de trás)
+      const s1 = spr(0xbfd4ff, 0.95); s1.scale.setScalar(fl.r * 7); s1.position.y = -L / 2 + 0.08; f.add(s1);
+      const s2 = spr(0xff8a2a, 0.7); s2.scale.setScalar(fl.r * 13); s2.position.y = -L / 2 + 0.38; f.add(s2);
+      const s3 = spr(0xff4a12, 0.35); s3.scale.setScalar(fl.r * 18); s3.position.y = -L / 2 + 0.8; f.add(s3);
       f.renderOrder = 4; body.add(f); return f; });
     // ESCAPAMENTO SUPERAQUECIDO: uma "luva" por cima de cada ponteira (um pouco mais larga que o cano) que vai pegando
     // a cor de metal muito quente com o nitro: na ponta brilha laranja/vermelho, para trás vem o "azulado" de titânio
@@ -379,7 +389,7 @@
           vec3 straw = vec3(0.80, 0.70, 0.50), bronze = vec3(0.66, 0.48, 0.36), plum = vec3(0.50, 0.38, 0.52), steel = vec3(0.38, 0.46, 0.62), ember = vec3(0.95, 0.38, 0.16);
           float x = a + (1.0 - h) * 0.45;                            // as faixas avançam para dentro do cano conforme esquenta
           vec3 c = straw; c = mix(c, bronze, smoothstep(0.25, 0.5, x)); c = mix(c, plum, smoothstep(0.45, 0.72, x)); c = mix(c, steel, smoothstep(0.65, 0.92, x));
-          float glow = smoothstep(0.86, 1.0, a) * smoothstep(0.55, 1.0, h) * (0.9 + 0.1 * sin(uT * 19.0));   // brasa só na pontinha, com calor alto
+          float glow = smoothstep(0.8, 1.0, a) * smoothstep(0.25, 0.8, h) * (0.9 + 0.1 * sin(uT * 19.0));   // brasa só na pontinha, com calor alto
           float fres = pow(1.0 - abs(dot(vN, vV)), 2.0);
           vec3 col = mix(c * (0.85 + 0.25 * fres), ember, glow * 0.8);
           float alpha = (0.62 * smoothstep(0.0, 0.5, h) + 0.35 * glow) * smoothstep(0.0, 0.3, a);
@@ -390,7 +400,8 @@
     const heatParts = tpl.flames.map(fl => { const L = fl.r * 7, g = new THREE.CylinderGeometry(fl.r * 1.12, fl.r * 1.12, L, 20, 8, true);
       const sl = new THREE.Mesh(g, heatM); sl.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); sl.position.copy(fl.pos).addScaledVector(fl.dir, -L / 2 + fl.r * 0.15);
       sl.userData.dynamic = true; sl.userData.noOutline = true; sl.userData.noShadow = true; sl.renderOrder = 2; body.add(sl);
-      const gl = new THREE.Mesh(new THREE.SphereGeometry(fl.r * 1.7, 14, 10), heatGlowM); gl.position.copy(fl.pos); gl.userData.dynamic = true; gl.userData.noOutline = true; gl.userData.noShadow = true; body.add(gl);
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(fl.r * 1.25, 14, 10), heatGlowM); gl.position.copy(fl.pos); gl.userData.dynamic = true; gl.userData.noOutline = true; gl.userData.noShadow = true; body.add(gl);
+      const em = spr(0xff5a1e, 0); em.scale.setScalar(fl.r * 9); em.position.copy(fl.pos).addScaledVector(fl.dir, fl.r * 0.4); em.userData.dynamic = true; body.add(em); emberSprites.push(em);
       return sl; });
     // lente dos faróis (acende à noite) sobre o farol do modelo
     const lensPos = tpl.lights.map(l => { const lensM = new THREE.MeshBasicMaterial({ color: 0xd8d2b0 }); lensM.userData.unique = true;
@@ -420,7 +431,7 @@
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
       // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
-      setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.55) * 0.55 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
+      setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.25) * 0.7 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); emberSprites.forEach(e => { e.material.opacity = Math.max(0, h - 0.15) * 0.85 * (0.85 + 0.15 * Math.sin((t || 0) * 23)); e.visible = h > 0.02; }); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; flatPaints.forEach(m => m.color.set(hex).convertSRGBToLinear()); },

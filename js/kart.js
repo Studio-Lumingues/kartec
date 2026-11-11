@@ -620,7 +620,7 @@
       { const ft = performance.now() / 1000, fl = 0.95 + 0.12 * Math.sin(ft * 37) + 0.08 * Math.sin(ft * 61 + 1.3);   // tremor contínuo (antes: sorteio a cada quadro = pisca-pisca)
         this.m.flames.forEach((f, i) => { f.visible = boosting; f.scale.set(1, fl + 0.05 * Math.sin(ft * 43 + i * 2.1), 1); }); }
       // escapamento esquenta rápido no turbo e esfria devagar (a cor de metal queimado fica um tempo)
-      this.exHeat = Math.max(0, Math.min(1, (this.exHeat || 0) + (boosting ? 1.1 : -0.16) * dt)); if (this.m.setHeat) this.m.setHeat(this.exHeat, (this.fxT || 0));
+      this.exHeat = Math.max(0, Math.min(1, (this.exHeat || 0) + (boosting ? 2.4 : -0.14) * dt)); if (this.m.setHeat) this.m.setHeat(this.exHeat, (this.fxT || 0));
       // MARCHAS (visual + som): 5 marchas pela velocidade. Troca para cima acelerando = "quicadinha": o torque corta
       // (bico desce um tiquinho) e volta na marcha nova (traseira agacha, bico sobe) e a carroceria assenta.
       { const GB = [0, 0.16, 0.33, 0.52, 0.74], sp = Math.abs(this.speed) / P.MAX, a = (Math.abs(this.speed) - (this._spPrev || 0)) / Math.max(dt, 1e-3); this._spPrev = Math.abs(this.speed);
