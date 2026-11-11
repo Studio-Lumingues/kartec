@@ -730,19 +730,22 @@
     finishBoard() {
       let el = this._fb;
       if (!el) { const st = document.createElement('style');
-        st.textContent = '#finishBoard{position:fixed;right:max(18px,env(safe-area-inset-right));top:50%;transform:translateY(-50%) translateX(30px);opacity:0;z-index:5;pointer-events:none;width:min(640px,46vw);font-size:clamp(14px,min(2.3vw,3.1vh),30px);font-family:"Titan One","Arial Black",sans-serif;transition:opacity .4s ease,transform .4s ease}' +
+        st.textContent = '#finishBoard{position:fixed;right:max(18px,env(safe-area-inset-right));top:50%;transform:translateY(-50%) translateX(30px);opacity:0;z-index:5;pointer-events:none;width:min(540px,40vw);font-size:clamp(13px,min(1.95vw,2.6vh),25px);font-family:"Titan One","Arial Black",sans-serif;transition:opacity .4s ease,transform .4s ease}' +
           '#finishBoard.on{opacity:1;transform:translateY(-50%)}#finishBoard h3{margin:0 0 .5em;font-size:1.33em;color:#fff;text-shadow:0 2px 0 #0c0c0e,0 0 10px rgba(0,0,0,.5);letter-spacing:1px}' +
-          '#finishBoard .r{display:flex;align-items:center;gap:.55em;margin:.33em 0;padding:.4em .67em;border-radius:.8em;background:rgba(18,18,28,.72);border:3px solid rgba(255,255,255,.12);color:#fff;font-size:1em;animation:fbIn .35s ease both}' +
+          '#finishBoard .r{display:flex;align-items:center;gap:.55em;margin:.33em 0;padding:.4em .67em;border-radius:.8em;background:rgba(18,18,28,.72);border:3px solid rgba(255,255,255,.12);color:#fff;font-size:1em;position:relative;overflow:hidden;transition:opacity .3s}' +
           '#finishBoard .r.me{background:rgba(255,77,94,.85);border-color:#fff}#finishBoard .r.run{opacity:.45}#finishBoard .p{width:1.9em;text-align:center;font-size:1.2em}#finishBoard .d{width:.8em;height:.8em;border-radius:50%;border:3px solid #fff;flex:none}' +
-          '#finishBoard .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#finishBoard .t{font-variant-numeric:tabular-nums}@keyframes fbIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}';
+          '#finishBoard .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#finishBoard .t{font-variant-numeric:tabular-nums}#finishBoard .r.in{animation:fbIn .45s cubic-bezier(.2,1.3,.4,1) both}#finishBoard .r.new{animation:fbArr .6s cubic-bezier(.2,1.5,.4,1) both}#finishBoard .r.new::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 20%,rgba(255,255,255,.75) 45%,transparent 70%);transform:translateX(-120%);animation:fbSweep .7s ease-out .25s forwards}#finishBoard .r.new .p{animation:fbNum .5s cubic-bezier(.2,1.8,.4,1) .15s both}#finishBoard .r.new .t{animation:fbTime .5s ease-out .3s both}#finishBoard .r.new{box-shadow:0 0 0 0 rgba(255,214,90,.9);animation:fbArr .6s cubic-bezier(.2,1.5,.4,1) both,fbRing 1s ease-out .2s}@keyframes fbIn{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}@keyframes fbArr{0%{opacity:0;transform:translateX(110%) scale(.9)}60%{opacity:1;transform:translateX(-4%) scale(1.06)}100%{transform:none}}@keyframes fbSweep{to{transform:translateX(120%)}}@keyframes fbNum{from{transform:scale(2.2);opacity:0}to{transform:none;opacity:1}}@keyframes fbTime{from{opacity:0;transform:translateY(60%)}to{opacity:1;transform:none}}@keyframes fbRing{from{box-shadow:0 0 0 0 rgba(255,214,90,.9)}to{box-shadow:0 0 0 14px rgba(255,214,90,0)}}';
         st.textContent += 'body.raceDone #hud,body.raceDone #touch,body.raceDone #itemSlot,body.raceDone #rocketWarn,body.raceDone #speedo3d,body.raceDone #boost3d{display:none!important}';
         document.head.appendChild(st); el = this._fb = document.createElement('div'); el.id = 'finishBoard'; document.body.appendChild(el); }
       document.body.classList.add('raceDone');   // chegada: some o HUD da corrida, fica só o placar
       if (!this._fbBanner) { this.finishBanner(); this._fbT0 = performance.now(); }
+      if (this.finishPhase() <= 0) return;   // a tabela só monta depois que o CHEGADA! sai
       const ks = this.karts.slice(), fin = ks.filter(k => k.finished).sort((a, b) => a.finishTime - b.finishTime), run = ks.filter(k => !k.finished).sort((a, b) => b.progress - a.progress);
       const key = fin.map(k => k.name).join('|') + '#' + run.length;
-      if (key !== this._fbKey) { this._fbKey = key;
-        const row = (k, i, done) => '<div class="r' + (k === this.player ? ' me' : '') + (done ? '' : ' run') + '"><span class="p">' + (i + 1) + 'º</span><span class="d" style="background:' + (k.mapColor || '#fff') + '"></span><span class="n">' + (k === this.player ? 'Você' : (k.name || 'Piloto')) + '</span><span class="t">' + (done ? fmt(k.finishTime) : '…') + '</span></div>';
+      if (key !== this._fbKey) { const first = !this._fbKey, seen = this._fbSeen || (this._fbSeen = new Set()); this._fbKey = key;
+        // 1ª vez: todas as linhas entram em cascata; depois só quem acabou de cruzar a linha ganha a animação de chegada
+        const row = (k, i, done) => { const nw = done && !first && !seen.has(k); if (done) seen.add(k);
+          return '<div class="r' + (k === this.player ? ' me' : '') + (done ? '' : ' run') + (first ? ' in' : nw ? ' new' : '') + '"' + (first ? ' style="animation-delay:' + (i * 0.08).toFixed(2) + 's"' : '') + '><span class="p">' + (i + 1) + 'º</span><span class="d" style="background:' + (k.mapColor || '#fff') + '"></span><span class="n">' + (k === this.player ? 'Você' : (k.name || 'Piloto')) + '</span><span class="t">' + (done ? fmt(k.finishTime) : '…') + '</span></div>'; };
         el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
       if (this.finishPhase() > 0 && !el.classList.contains('on')) el.classList.add('on');
     },
@@ -769,7 +772,7 @@
       el.innerHTML = '<span class="w"><span class="halo"></span><b>CHEGADA!</b>' + [[-4, 10, 0], [96, 4, .3], [88, 78, .6], [6, 82, .45], [50, -14, .15]].map(([x, y, d]) => '<i style="left:' + x + '%;top:' + y + '%;animation-delay:' + d + 's"></i>').join('') + '</span>';
       document.body.appendChild(el); clearTimeout(this._fbBT); this._fbBT = setTimeout(() => { if (el.parentNode) el.remove(); }, 3400);
     },
-    hideFinishBoard() { this._fbBanner = false; this._fbT0 = 0; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
+    hideFinishBoard() { this._fbBanner = false; this._fbT0 = 0; this._fbSeen = null; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
     endRace() {
       this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
@@ -1058,7 +1061,7 @@
       camera.position.copy(F.pos); camera.lookAt(P.pos.x, P.pos.y + 1.0, P.pos.z);
       // enquadra o kart no terço da esquerda: desloca a "janela" da lente para a direita (o kart vai para a esquerda)
       const w = innerWidth, h = innerHeight, off = Math.round(w * 0.24 * this.finishPhase());
-      if (!camera.view || !camera.view.enabled || camera.view.offsetX !== off || camera.view.fullWidth !== w || camera.fov !== F.fov) { camera.fov = F.fov; camera.setViewOffset(w, h, off, 0, w, h); camera.updateProjectionMatrix(); }
+      if (!camera.view || !camera.view.enabled || camera.view.offsetX !== off || camera.view.fullWidth !== w || camera.fov !== F.fov * 1.35) { camera.fov = F.fov * 1.35; camera.setViewOffset(w, h, off, 0, w, h); camera.updateProjectionMatrix(); }
     },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
