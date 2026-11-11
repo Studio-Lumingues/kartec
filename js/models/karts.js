@@ -29,12 +29,10 @@
   const VEH = {
     gt: { glb: 'kart', face: 1, scale: 6.4, ground: -0.1485, midX: 0.0412, refV: 0.92,
       wheels: [['wheel_FL', 1], ['wheel_FR', 1], ['wheel_RL', 0], ['wheel_RR', 0]],   // 1 = esterça (kart.js)
-      steer: { c: [0.184, 0.0897, 0.0023], n: [0.9, -0.436, 0.004], rim: 0.058, cutH: 0.05, cutBack: -0.05, cutR: 0.092, colH: 0.135, colR: 0.07, col2H: 0.2, col2R: 0.05, grip: 1.36, k: 0.9 },   // col*: coluna antiga (também sai)
+      steer: { lift: 0.015, c: [0.184, 0.0897, 0.0023], n: [0.9, -0.436, 0.004], rim: 0.058, cutH: 0.05, cutBack: -0.05, cutR: 0.092, colH: 0.135, colR: 0.07, col2H: 0.2, col2R: 0.05, grip: 1.36, k: 0.9 },   // col*: coluna antiga (também sai)
       pilot: { p: 0.75, hip: [0.05, -0.0127, 0], feet: [0.165, -0.03, 0.06], lean: 0.05, headTilt: 0.02, footPitch: -0.45, leanK: 1, boostLean: -0.08, knee: [0.25, 0.55, 0.8] },
       exhaust: [[[-0.482, 0.069, 0.056], [-0.956, 0.292, 0.035]], [[-0.484, 0.061, -0.051], [-0.963, 0.269, -0.004]]], exR: 0.03,
-      lights: [[0.452, -0.014, 0.188], [0.452, -0.014, -0.188]], lightR: 0.022, lean: -0.12,
-      seat: { z0: 0.0, y0: 0.5 },
-      cuts: [{ mat: 'kart_plastic', x: [-0.13, 0.15], y: [-0.08, 0.14], z: [-0.115, 0.115], not: [{ x: [-1, -0.09], y: [-1, 1], z: [-1, -0.05] }] }] },   // banco antigo (o novo é montado em buildSeat)
+      lights: [[0.452, -0.014, 0.188], [0.452, -0.014, -0.188]], lightR: 0.022, lean: -0.12, },
     moto: { glb: 'motoca', face: -1, scale: 3.84, ground: -0.399, midX: -0.0004, refV: 0.95,
       wheels: [['wheel_front', 2], ['wheel_rear', 0]],                                   // 2 = esterça pelo garfo (aqui, com amplitude de moto)
       grips: { c: [-0.112, 0.218, 0.212], r: 0.025 }, forkK: 0.22,
@@ -157,16 +155,9 @@
       return [d.a[o], d.a[o + 1], d.a[o + 2]];
     } catch (e) { return null; } };
     const redAt = (mesh, cb, t) => { const c = texAt(mesh, cb, t); return !!c && c[0] > 70 && c[0] > c[1] * 1.6 && c[0] > c[2] * 1.6; };
-    // caixas de recorte (ex.: o banco antigo, trocado por um banco novo feito aqui): material do .glb + caixa em unidades do arquivo
-    const boxCut = (mesh, cb, t) => (d.cuts || []).some(k => { const m0 = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material; if (k.mat && (!m0 || m0.name !== k.mat)) return false;
-      let x = 0, y = 0, z = 0; for (let j = 0; j < 3; j++) { const i = cb.I[t * 3 + j]; x += cb.P[i * 3]; y += cb.P[i * 3 + 1]; z += cb.P[i * 3 + 2]; } x /= 3; y /= 3; z /= 3;
-      if (!(x > k.x[0] && x < k.x[1] && y > k.y[0] && y < k.y[1] && z > k.z[0] && z < k.z[1])) return false;
-      if (k.minLum) { const c = texAt(mesh, cb, t); if (!c || (c[0] + c[1] + c[2]) / 3 < k.minLum) return false; }
-      return !(k.not || []).some(n => x > n.x[0] && x < n.x[1] && y > n.y[0] && y < n.y[1] && z > n.z[0] && z < n.z[1]); });
     cMeshes.forEach(mesh => {
       const cls = classify(mesh); if (!cls) return;
       const cb = GLBAssets.bake(mesh, mesh.matrixWorld);
-      if (d.cuts) { const nt0 = cb.I.length / 3, keep = []; for (let t = 0; t < nt0; t++) if (!boxCut(mesh, cb, t)) keep.push(cb.I[t * 3], cb.I[t * 3 + 1], cb.I[t * 3 + 2]); cb.I = Uint32Array.from(keep); }
       if (sw) {
         const nt = cb.I.length / 3, inW = new Uint8Array(nt), c = V(0, 0, 0), dv = V(0, 0, 0); let any = 0;
         for (let t = 0; t < nt; t++) { c.set(0, 0, 0); for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; c.x += cb.P[i * 3]; c.y += cb.P[i * 3 + 1]; c.z += cb.P[i * 3 + 2]; }
@@ -184,7 +175,7 @@
     if (sw) {
       tpl.steerParts = finish(steerB);
       const r = sw.rim * S, a = sw.grip;
-      tpl.steer = { pos: V().setFromMatrixPosition(pm), quat: new THREE.Quaternion().setFromRotationMatrix(pm), k: sw.k, colLen: Math.max(sw.colH || 0, sw.col2H || 0) * S * 0.92,
+      tpl.steer = { pos: V().setFromMatrixPosition(pm), quat: new THREE.Quaternion().setFromRotationMatrix(pm), k: sw.k, lift: (sw.lift || 0) * S, colLen: Math.max(sw.colH || 0, sw.col2H || 0) * S * 0.92,
         // mão esquerda (+x do jogo = -x local) e direita; t = sentido do polegar (para as 12 horas, ao longo do aro)
         grips: [{ pos: V(-r * Math.sin(a), r * Math.cos(a), 0), t: V(Math.cos(a), Math.sin(a), 0) }, { pos: V(r * Math.sin(a), r * Math.cos(a), 0), t: V(-Math.cos(a), Math.sin(a), 0) }] };
     }
@@ -279,65 +270,6 @@
   }
 
   // =====================================================================================
-  // BANCO DE COMPETIÇÃO (concha de fibra com acabamento de carbono, tipo banco de kart profissional): perfil lateral
-  // (assento -> dobra -> encosto alto inclinado), seção em U que envolve o quadril e as costelas, borda enrolada para
-  // fora, estofado acolchoado (losangos com costura vermelha) no assento e no encosto, e dois tirantes cromados.
-  // Unidades do jogo (o kart anda para +z); p = { z0, y0 } = ponto mais baixo do assento.
-  // =====================================================================================
-  let SEATA = null;
-  function seatAssets() {
-    if (SEATA) return SEATA;
-    const cv = (w, h, f, srgb) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = srgb === false ? THREE.LinearEncoding : THREE.sRGBEncoding; t.anisotropy = 8; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
-    // carbono em sarja 2x2 (repete)
-    const carbon = cv(256, 256, (g, W, H) => { const n = 16, s = W / n; g.fillStyle = '#0d0e10'; g.fillRect(0, 0, W, H);
-      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const hor = ((i + j * 2) >> 1) % 2 === 0, x = i * s, y = j * s;
-        const gr = hor ? g.createLinearGradient(x, y, x, y + s) : g.createLinearGradient(x, y, x + s, y); gr.addColorStop(0, '#1b1d21'); gr.addColorStop(0.5, '#3a3d44'); gr.addColorStop(1, '#16181b');
-        g.fillStyle = gr; g.fillRect(x + 0.5, y + 0.5, s - 1, s - 1); } });
-    // estofado: tecido preto (camurça) em losangos com costura vermelha; vem com o mapa de relevo
-    const quilt = (H) => cv(256, 256, (g, W, Hh) => { g.fillStyle = H ? '#a0a0a0' : '#1c1d20'; g.fillRect(0, 0, W, Hh);
-      for (let i = 0; i < 9000; i++) { const v = Math.random() < 0.5 ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${(Math.random() * (H ? 0.12 : 0.05)).toFixed(3)})`; g.fillRect(Math.random() * W, Math.random() * Hh, 1.5, 1.5); }
-      const s = W / 4; for (let i = -1; i <= 4; i++) for (let j = -1; j <= 4; j++) { const cx = i * s + (j % 2 ? s / 2 : 0), cy = j * s / 1.4;
-        if (H) { const gr = g.createRadialGradient(cx, cy, 0, cx, cy, s * 0.55); gr.addColorStop(0, '#f2f2f2'); gr.addColorStop(1, 'rgba(160,160,160,0)'); g.fillStyle = gr; g.fillRect(cx - s, cy - s, 2 * s, 2 * s); } }
-      g.strokeStyle = H ? '#303030' : '#c4182e'; g.lineWidth = H ? 4 : 2; if (!H) g.setLineDash([5, 4]);
-      for (let k = -8; k <= 8; k++) { g.beginPath(); g.moveTo(k * s / 2, 0); g.lineTo(k * s / 2 + Hh / 1.4, Hh); g.stroke(); g.beginPath(); g.moveTo(k * s / 2, 0); g.lineTo(k * s / 2 - Hh / 1.4, Hh); g.stroke(); } }, !H);
-    return (SEATA = { carbon, quilt: quilt(false), quiltH: quilt(true) });
-  }
-  function buildSeat(p, env) {
-    const A = seatAssets(), G = new THREE.Group();
-    const fix = m => { m.envMap = env; m.envMapIntensity = ENV_I; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <encodings_fragment>', 'gl_FragColor = LinearTosRGB(gl_FragColor);'); }; return m; };
-    // perfil lateral do centro do banco (z, y) e, em cada ponto, largura e altura das abas laterais
-    const prof = [[0.46, 0.17, 0.62, 0.09], [0.3, 0.06, 0.74, 0.17], [0.05, 0.0, 0.8, 0.21], [-0.2, 0.02, 0.82, 0.24], [-0.38, 0.12, 0.84, 0.27], [-0.5, 0.4, 0.84, 0.28], [-0.6, 0.72, 0.84, 0.27], [-0.69, 1.02, 0.8, 0.24], [-0.76, 1.26, 0.72, 0.18]];
-    const curve = new THREE.CatmullRomCurve3(prof.map(q => new THREE.Vector3(0, p.y0 + q[1], p.z0 + q[0]))), NS = 40, NT = 24;
-    const wAt = s => { const f = s * (prof.length - 1), i = Math.min(prof.length - 2, Math.floor(f)), k = f - i; return [prof[i][2] + (prof[i + 1][2] - prof[i][2]) * k, prof[i][3] + (prof[i + 1][3] - prof[i][3]) * k]; };
-    const pt = (s, th, off) => { const C = curve.getPointAt(s), T = curve.getTangentAt(s), N = new THREE.Vector3(0, T.z, -T.y).normalize();   // N: para dentro do banco (para cima/para a frente)
-      if (N.y + N.z < 0) N.negate(); const [w, h] = wAt(s), a = Math.abs(th), lip = Math.max(0, a - Math.PI / 2);
-      const x = Math.sign(th) * (w / 2) * Math.sin(Math.min(a, Math.PI / 2)) + Math.sign(th) * lip * 0.06, up = h * (1 - Math.cos(Math.min(a, Math.PI / 2))) - lip * 0.05;
-      return new THREE.Vector3(x, 0, 0).add(C).addScaledVector(N, up + (off || 0)); };
-    const surf = (s0, s1, t0, t1, off, ns, nt) => { const P = [], Uv = [], I = [];
-      for (let i = 0; i <= ns; i++) for (let j = 0; j <= nt; j++) { const s = s0 + (s1 - s0) * i / ns, th = t0 + (t1 - t0) * j / nt, v = pt(s, th, off); P.push(v.x, v.y, v.z); Uv.push(j / nt * 2.2, i / ns * 4); }
-      for (let i = 0; i < ns; i++) for (let j = 0; j < nt; j++) { const a = i * (nt + 1) + j, b = a + nt + 1; I.push(a, b, a + 1, b, b + 1, a + 1); }
-      const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(Uv, 2)); g.setIndex(I); g.computeVertexNormals(); return g; };
-    const LIP = Math.PI / 2 + 0.55;
-    const shellM = fix(new THREE.MeshStandardMaterial({ map: A.carbon, roughness: 0.22, metalness: 0.15, side: THREE.DoubleSide }));
-    const padM = fix(new THREE.MeshStandardMaterial({ map: A.quilt, bumpMap: A.quiltH, bumpScale: 0.012, roughness: 0.92, metalness: 0, side: THREE.DoubleSide }));
-    const add = (g, m) => { const o = new THREE.Mesh(g, m); o.castShadow = true; o.receiveShadow = true; G.add(o); return o; };
-    add(surf(0, 1, -LIP, LIP, 0, NS, NT), shellM);
-    // borda enrolada (dá espessura à concha) ao longo da aba e do topo do encosto
-    const edge = sd => new THREE.CatmullRomCurve3(Array.from({ length: 24 }, (_, i) => pt(i / 23, sd * LIP, 0)));
-    [1, -1].forEach(sd => add(new THREE.TubeGeometry(edge(sd), 60, 0.022, 8, false), shellM));
-    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 20 }, (_, j) => pt(1, -LIP + 2 * LIP * j / 19, 0))), 40, 0.024, 8, false), shellM);
-    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(Array.from({ length: 20 }, (_, j) => pt(0, -LIP + 2 * LIP * j / 19, 0))), 40, 0.024, 8, false), shellM);
-    // estofado (assento e encosto) um pouco acima da concha
-    add(surf(0.1, 0.42, -1.05, 1.05, 0.03, 16, 16), padM); add(surf(0.5, 0.93, -1.0, 1.0, 0.03, 16, 16), padM);
-    // tirantes: das laterais do encosto até a traseira do chassi
-    const chrome = fix(new THREE.MeshStandardMaterial({ color: 0xdfe2e7, roughness: 0.15, metalness: 1 }));
-    [1, -1].forEach(sd => { const a = pt(0.66, sd * (Math.PI / 2), -0.02), b = new THREE.Vector3(sd * 0.5, p.y0 - 0.05, p.z0 - 1.05), dir = b.clone().sub(a), L = dir.length();
-      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, L, 10), chrome); r.position.copy(a).add(b).multiplyScalar(0.5); r.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize()); r.castShadow = true; G.add(r);
-      [a, b].forEach(q => { const k = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), chrome); k.position.copy(q); G.add(k); }); });
-    return { group: G, mats: [shellM, padM, chrome] };
-  }
-
-  // =====================================================================================
   // MODELOS
   // =====================================================================================
   const MODELS = [
@@ -376,7 +308,7 @@
     // volante (kart: gira com a direção e leva as mãos) / manoplas fixas (moto)
     let steerRig, hands;
     if (tpl.steer) {
-      const piv = new THREE.Group(); piv.position.copy(tpl.steer.pos); piv.quaternion.copy(tpl.steer.quat); body.add(piv);
+      const piv = new THREE.Group(); piv.position.copy(tpl.steer.pos); piv.position.y += tpl.steer.lift || 0; piv.quaternion.copy(tpl.steer.quat); body.add(piv);   // lift: volante um pouco mais alto (o recorte do antigo não muda)
       const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin);
       // volante de drift no lugar do volante recortado do modelo (+ coluna de direção até o painel)
       const r0 = tpl.steer.grips[0].pos.length(), dw = buildDriftWheel(r0, env); spin.add(dw.group); dw.mats.forEach((m, i) => { matCache['driftwheel' + i] = m; });
@@ -399,7 +331,6 @@
       hands = (tpl.grips || []).map(g => { const o = new THREE.Object3D(); o.position.copy(g.pos); o.userData.t = g.t.clone(); body.add(o); return o; });
       steerRig = { spin: null, axis: 'y', fork, k: tpl.forkK || 0 };
     }
-    if (def.veh.seat) { const st = buildSeat(def.veh.seat, env); body.add(st.group); st.mats.forEach((m, i) => { matCache['seat' + i] = m; }); }
     const feet = tpl.cockpit.feet.map(p => { const o = new THREE.Object3D(); o.position.copy(p); body.add(o); return o; });
     const cockpit = Object.assign({}, tpl.cockpit, { hands, feet });
     // chama do turbo na ponta de cada escapamento
