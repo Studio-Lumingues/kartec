@@ -728,11 +728,8 @@
         const mk = (c, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); sp.position.copy(H); sp.scale.setScalar(s); Wg.add(sp); return sp; };
         out.halos.push(mk(0xfff0d0, 2), mk(0xffb766, 7)); });
     }
-    // cones e pilhas de pneus da corrida
-    if (window.Props && Props.coneAssets) {
-      const C = Props.coneAssets();
-      [[4.3, 2.9], [5.1, -1.4]].forEach(([x, z], i) => { const g = new THREE.Group(); g.position.set(x * U, 0.02, z * U); g.rotation.y = i * 0.7; g.scale.setScalar(1.15);
-        const b = new THREE.Mesh(C.geo, C.body), bs = new THREE.Mesh(C.base, C.baseM); b.castShadow = true; bs.receiveShadow = true; g.add(b, bs); Wg.add(g); });
+    // pilhas de pneus da corrida (os cones do pátio foram tirados)
+    if (window.Props && Props.tireAssets) {
       const T = Props.tireAssets(), TR = Props.TIRE, STEP = TR.H * 2 * 0.96;
       [[-25.2, 7.8, 3], [-23.2, 7.8, 4], [-21.2, 7.8, 3], [-22.2, 9.8, 2]].forEach(([x, z, n], k) => { for (let h = 0; h < n; h++) { const m = new THREE.Mesh(T.geo, T.mat);
         m.position.set(x + Math.sin(k * 7 + h) * 0.05, TR.H - 0.04 + h * STEP, z); m.rotation.y = k * 1.3 + h * 0.8; m.castShadow = m.receiveShadow = true; Wg.add(m); } });
