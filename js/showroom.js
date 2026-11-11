@@ -317,11 +317,6 @@
   const graniteTex = (base, a) => mkM(1, 1, 256, g => { g.fillStyle = base; g.fillRect(0, 0, 1, 1);
     inPx(g, (W, H) => { blotches(g, W, H, 20, 10, 40, [[255, 255, 255, 0.06], [0, 0, 0, 0.08]]); for (let i = 0; i < 6000; i++) { const v = RND() < 0.5 ? 255 : 0, s = 0.6 + RND() * 1.8;
       g.fillStyle = `rgba(${v},${v},${v},${(RND() * a).toFixed(3)})`; g.fillRect(RND() * W, RND() * H, s, s); } }); });
-  const sidewalkTex = () => mkM(1.5, 1.5, 512 / 1.5, g => { g.fillStyle = '#b6b6b2'; g.fillRect(0, 0, 1.5, 1.5);
-    inPx(g, (W, H) => { blotches(g, W, H, 60, 15, 90, [[255, 255, 250, 0.14], [90, 88, 80, 0.08], [120, 110, 90, 0.05]]); speckle(g, W, H, 26000, 0.08); });
-    g.fillStyle = 'rgba(40,40,40,.45)'; g.fillRect(0, 0, 1.5, 0.008); g.fillRect(0, 0, 0.008, 1.5);
-    g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(0, 0.008, 1.5, 0.006); g.fillRect(0.008, 0, 0.006, 1.5);
-    for (let k = 0; k < 6; k++) { g.fillStyle = 'rgba(70,68,64,.3)'; g.beginPath(); g.arc(0.05 + RND() * 1.4, 0.05 + RND() * 1.4, 0.008 + RND() * 0.02, 0, 6.2832); g.fill(); } });
   // floreira: fibrocimento grafite; terra com casca de pinus e pedriscos
   const fiberTex = () => mkM(1, 1, 256, g => { g.fillStyle = '#4b4e54'; g.fillRect(0, 0, 1, 1);
     inPx(g, (W, H) => { blotches(g, W, H, 40, 10, 60, [[255, 255, 255, 0.06], [0, 0, 0, 0.1]]); speckle(g, W, H, 9000, 0.09); }); });
@@ -474,23 +469,83 @@
       const g = K.grp(x, z, R); g.rotation.y = ry; const pole = K.std('#d6d9de', 0.3, 0.75);
       K.cyl(0.18, 0.2, 0.12, K.std('#2a2d33', 0.8, 0), 0, Y + 0.06, 0, g, 18); K.cyl(0.02, 0.02, 2.6, pole, 0, Y + 1.3, 0, g, 8); K.cyl(0.012, 0.012, 0.6, pole, 0.3, Y + 2.52, 0, g, 6).rotation.z = Math.PI / 2;
       const fm = K.std(null, 0.85, 0, flagTex(a, c, bg, fg), 0.6); fm.side = THREE.DoubleSide; K.plane(0.55, 1.8, fm, 0.3, Y + 1.6, 0, 0, g).castShadow = true; });
-    { const g = K.grp(2.75, 1.2, R); g.rotation.y = -0.45; const wood = K.std('#8a5a2b', 0.8, 0), ch = K.std(null, 0.9, 0, chalkTex(), 0.5);
+    { const g = K.grp(2.75, 0.85, R); g.rotation.y = -0.45; const wood = K.std('#8a5a2b', 0.8, 0), ch = K.std(null, 0.9, 0, chalkTex(), 0.5);
       [[-0.2, 0.11, 0], [0.2, -0.11, Math.PI]].forEach(([a, z, ry]) => { const p = new THREE.Group(); p.position.set(0, Y + 0.42, z); p.rotation.set(a, ry, 0); g.add(p);
         K.box(0.58, 0.84, 0.03, wood, 0, 0, 0, p); K.plane(0.5, 0.72, ch, 0, 0.01, 0.017, 0, p).receiveShadow = false; }); }
     return R;
   }
-  // calçada de concreto com meio-fio de granito na frente da loja e da garagem, rebaixada no portão; batentes das vagas
+  // ---- calçada (padrão brasileiro): faixa livre de placas de concreto 50x50, linha de piso tátil direcional amarelo,
+  // piso de alerta nas rampas do rebaixo, faixa de serviço de bloquete escuro junto ao meio-fio (poste e lixeira ficam
+  // nela), meio-fio de granito com quina boleada e sarjeta de concreto. Cada piso tem textura de cor + de relevo (bump).
+  // par de texturas (cor sRGB + relevo linear) desenhadas em metros com o mesmo traçado
+  const mkPair = (wm, hm, ppm, draw) => { const col = mkM(wm, hm, ppm, (g, w, h) => draw(g, w, h, false)), hgt = mkM(wm, hm, ppm, (g, w, h) => draw(g, w, h, true));
+    hgt.encoding = THREE.LinearEncoding; return [col, hgt]; };
+  // placas de concreto 50x50 (ladrilho de 1 m) com junta, bisotê e agregado
+  const plateTex = () => mkPair(1, 1, 512, (g, w, h, H) => {
+    g.fillStyle = H ? '#202020' : '#3e3f42'; g.fillRect(0, 0, 1, 1);
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const x = i * 0.5 + 0.006, y = j * 0.5 + 0.006, s = 0.488, v = 116 + ((RND() * 24) | 0);
+      g.fillStyle = H ? '#b4b4b4' : `rgb(${v},${v - 1},${v - 5})`; g.fillRect(x, y, s, s);
+      if (H) { g.fillStyle = '#c8c8c8'; g.fillRect(x + 0.008, y + 0.008, s - 0.016, s - 0.016); }
+      else { g.fillStyle = 'rgba(255,255,255,.22)'; g.fillRect(x, y, s, 0.005); g.fillRect(x, y, 0.005, s); g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(x, y + s - 0.005, s, 0.005); g.fillRect(x + s - 0.005, y, 0.005, s); } }
+    inPx(g, (W, Hh) => { if (!H) blotches(g, W, Hh, 50, 10, 70, [[255, 255, 250, 0.1], [70, 66, 58, 0.1], [120, 104, 80, 0.06]]);
+      for (let i = 0; i < 16000; i++) { const v = RND() < 0.5 ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${(RND() * (H ? 0.25 : 0.1)).toFixed(3)})`; const s = 0.7 + RND() * 1.6; g.fillRect(RND() * W, RND() * Hh, s, s); } });
+    if (!H) for (let k = 0; k < 4; k++) { g.fillStyle = 'rgba(55,52,48,.28)'; g.beginPath(); g.arc(0.05 + RND() * 0.9, 0.05 + RND() * 0.9, 0.006 + RND() * 0.016, 0, 6.2832); g.fill(); } });
+  // bloquete retangular 20x10 em "espinha" de cesto (ladrilho de 0,8 m), cinza-grafite
+  const pavTex = () => mkPair(0.8, 0.8, 640, (g, w, h, H) => {
+    g.fillStyle = H ? '#1a1a1a' : '#3b3c3e'; g.fillRect(0, 0, 0.8, 0.8);
+    for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) { const x0 = i * 0.2, y0 = j * 0.2, hor = (i + j) % 2 === 0;
+      for (let k = 0; k < 2; k++) { const x = hor ? x0 : x0 + k * 0.1, y = hor ? y0 + k * 0.1 : y0, ww = hor ? 0.2 : 0.1, hh = hor ? 0.1 : 0.2, v = 92 + ((RND() * 26) | 0);
+        g.fillStyle = H ? '#b0b0b0' : `rgb(${v},${v + 1},${v + 3})`; g.fillRect(x + 0.004, y + 0.004, ww - 0.008, hh - 0.008);
+        if (H) { g.fillStyle = '#c4c4c4'; g.fillRect(x + 0.01, y + 0.01, ww - 0.02, hh - 0.02); } } }
+    inPx(g, (W, Hh) => speckle(g, W, Hh, 9000, H ? 0.2 : 0.09)); });
+  // piso tátil (placas 25x25): direcional = 4 barras em relevo ao longo do caminho; alerta = 6x6 botões
+  const tactileTex = alert => mkPair(0.25, 0.25, 1024, (g, w, h, H) => {
+    g.fillStyle = H ? '#1c1c1c' : '#7a6420'; g.fillRect(0, 0, 0.25, 0.25);
+    g.fillStyle = H ? '#7a7a7a' : '#d8b42c'; g.fillRect(0.003, 0.003, 0.244, 0.244);
+    const sh = (x, y, ww, hh, r) => { if (H) { g.fillStyle = rad(g, x + ww / 2, y + hh / 2, Math.max(ww, hh) * 0.6, [[0, '#f0f0f0'], [0.7, '#d0d0d0'], [1, '#7a7a7a']]); rrect(g, x, y, ww, hh, r); g.fill(); }
+      else { g.fillStyle = 'rgba(0,0,0,.2)'; rrect(g, x + 0.004, y + 0.005, ww, hh, r); g.fill(); g.fillStyle = '#e6c33a'; rrect(g, x, y, ww, hh, r); g.fill(); g.fillStyle = 'rgba(255,255,255,.3)'; rrect(g, x + 0.003, y + 0.002, ww - 0.006, hh * 0.35, r * 0.6); g.fill(); } };
+    if (alert) { for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) sh(0.017 + i * 0.038, 0.017 + j * 0.038, 0.026, 0.026, 0.013); }
+    else for (let j = 0; j < 4; j++) sh(0.01, 0.025 + j * 0.058, 0.23, 0.026, 0.013);
+    inPx(g, (W, Hh) => speckle(g, W, Hh, 4000, H ? 0.15 : 0.1)); });
+  // concreto liso (sarjeta, piso do rebaixo): textura de 1,5 m com junta serrada
+  const concTex = () => mkPair(1.5, 1.5, 512 / 1.5, (g, w, h, H) => {
+    g.fillStyle = H ? '#a0a0a0' : '#84837e'; g.fillRect(0, 0, 1.5, 1.5);
+    inPx(g, (W, Hh) => { if (!H) blotches(g, W, Hh, 40, 15, 80, [[255, 255, 250, 0.1], [60, 58, 52, 0.12]]); speckle(g, W, Hh, 20000, H ? 0.2 : 0.08); });
+    g.fillStyle = H ? '#202020' : 'rgba(40,40,40,.5)'; g.fillRect(0, 0, 1.5, 0.008); });
+
   function buildFrontage(K) {
-    const W = WALK, R = K.grp(0, 0), zc = FZ + W.d / 2, sw = sidewalkTex(), gr = graniteTex('#a9abad', 0.22), walk = (w, d) => K.std(null, 0.88, 0, rep(sw, w / 1.5, d / 1.5), 0.3);
-    [[W.x0, -W.cut], [W.cut, W.x1]].forEach(([a, c]) => K.box(c - a, W.h, W.d, walk(c - a, W.d), (a + c) / 2, W.h / 2, zc, R, false));
-    [1, -1].forEach(s => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(0, W.h); sh.lineTo(-s * W.ramp, 0); sh.closePath();   // rampas do rebaixo
-      K.put(new THREE.ExtrudeGeometry(sh, { depth: W.d, bevelEnabled: false }), walk(1, W.d), s * W.cut, 0, FZ, R, false); });
-    K.box(2 * W.cut, 0.02, W.d, walk(2 * W.cut, W.d), 0, 0.01, zc, R, false);
-    const zk = FZ + W.d + 0.07; [[W.x0, -W.cut, W.h + 0.02], [W.cut, W.x1, W.h + 0.02], [-W.cut, W.cut, 0.04]].forEach(([a, c, h]) => K.box(c - a, h, 0.14, K.std(null, 0.5, 0.05, rep(gr, c - a, 0.2), 0.3), (a + c) / 2, h / 2, zk, R));
-    const ws = K.std(null, 0.75, 0, wheelStopTex(), 0.35), zs = FZ + W.d + 0.85, mid = (L, x0) => L.slice(0, -1).map((v, i) => x0 + (v + L[i + 1]) / 2);
+    const W = WALK, R = K.grp(0, 0), Y = W.h, zb = FZ + W.d;   // zb: borda da calçada (encosto do meio-fio)
+    const surf = (pair, rx, ry, rough, bump, tint) => { const m = K.std(null, rough, 0, rep(pair[0], rx, ry), 0.22); m.bumpMap = rep(pair[1], rx, ry); m.bumpScale = bump; if (tint) m.color.set(tint); return m; };
+    const PL = plateTex(), PV = pavTex(), TD = tactileTex(false), TA = tactileTex(true), CC = concTex(), GR = graniteTex('#77797c', 0.26);
+    const SV = 0.75, TZ = 1.3, TW = 0.25, AW = 0.5;   // largura da faixa de serviço; posição e largura da linha tátil; largura do alerta
+    const flat = (w, d, mat, x, z, y) => { const p = K.plane(w, d, mat, x, y, z, 0, R); p.rotation.x = -Math.PI / 2; p.castShadow = false; return p; };
+    // os dois trechos (esquerda: loja + garagem até o portão; direita: depois do portão)
+    [[W.x0, -W.cut, 1], [W.cut, W.x1, -1]].forEach(([a, c, side]) => { const w = c - a, xm = (a + c) / 2;
+      K.box(w, Y, W.d, surf(PL, w, W.d, 0.85, 0.012), xm, Y / 2, FZ + W.d / 2, R, false).castShadow = false;
+      flat(w, SV, surf(PV, w / 0.8, SV / 0.8, 0.9, 0.018), xm, zb - SV / 2, Y + 0.002);                                   // faixa de serviço
+      const xr = side > 0 ? c - AW : a + AW, tl = Math.abs(xr - (side > 0 ? a + 0.4 : c - 0.4));                                   // linha tátil até o alerta da rampa
+      flat(tl, TW, surf(TD, tl / 0.25, 1, 0.75, 0.03), side > 0 ? (a + 0.4 + xr) / 2 : (xr + c - 0.4) / 2, FZ + TZ, Y + 0.003);
+      flat(AW, W.d - SV, surf(TA, AW / 0.25, (W.d - SV) / 0.25, 0.75, 0.03), side > 0 ? c - AW / 2 : a + AW / 2, FZ + (W.d - SV) / 2, Y + 0.003);   // alerta junto à rampa
+      // meio-fio de granito com quina boleada (perfil extrudado ao longo de x)
+      const sh = new THREE.Shape(), t = Y + 0.02; sh.moveTo(0, 0); sh.lineTo(0, t); sh.lineTo(-0.11, t); sh.quadraticCurveTo(-0.14, t, -0.142, t - 0.03); sh.lineTo(-0.15, 0); sh.closePath();
+      const cg = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false, curveSegments: 4 }); cg.rotateY(Math.PI / 2);
+      const cm = K.std(null, 0.45, 0.05, rep(GR, 1, 1), 0.25); cm.map.wrapS = cm.map.wrapT = THREE.RepeatWrapping; K.put(cg, cm, a, 0, zb, R); });
+    // rebaixo do portão: rampas com placas, piso de concreto e meio-fio baixo
+    [1, -1].forEach(s => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(0, Y); sh.lineTo(-s * W.ramp, 0); sh.closePath();
+      K.put(new THREE.ExtrudeGeometry(sh, { depth: W.d, bevelEnabled: false }), surf(CC, 1, 1, 0.85, 0.01), s * W.cut, 0, FZ, R, false); });
+    K.box(2 * W.cut, 0.02, W.d, surf(CC, 2 * W.cut / 1.5, W.d / 1.5, 0.85, 0.01), 0, 0.01, FZ + W.d / 2, R, false).castShadow = false;
+    K.box(2 * W.cut, 0.04, 0.15, K.std(null, 0.45, 0.05, rep(GR, 2 * W.cut, 0.2), 0.25), 0, 0.02, zb + 0.075, R);
+    // sarjeta de concreto ao longo de todo o meio-fio (no nível do asfalto)
+    { const w = W.x1 - W.x0; K.box(w, 0.025, 0.4, surf(CC, w / 1.5, 0.4 / 1.5, 0.8, 0.008, '#b4b3ae'), (W.x0 + W.x1) / 2, 0.0125, zb + 0.15 + 0.2, R, false).castShadow = false; }
+    // sujeira junto ao pé das paredes (faixa escura que some para fora)
+    { const gt = mkM(1, 0.5, 64, (g, w, h) => { g.fillStyle = lin(g, 0, 0, 0, h, 'rgba(30,26,20,.38)', 'rgba(30,26,20,0)'); g.fillRect(0, 0, w, h); });
+      const gm2 = K.tag(new THREE.MeshBasicMaterial({ map: gt, transparent: true, depthWrite: false })); const p = flat(W.x1 - W.x0, 0.5, gm2, (W.x0 + W.x1) / 2, FZ + 0.25, Y + 0.004); p.receiveShadow = false; }
+    // batentes das vagas
+    const ws = K.std(null, 0.75, 0, wheelStopTex(), 0.35), zs = zb + 0.15 + 0.4 + 0.75, mid = (L, x0) => L.slice(0, -1).map((v, i) => x0 + (v + L[i + 1]) / 2);
     mid(STALLS.store, STORE.x).concat(mid(STALLS.right, 0)).forEach(x => K.box(1.6, 0.11, 0.16, ws, x, 0.055, zs, R));
     return R;
   }
+
 
   // ---------------------------------------------------------------- vidro 3D (reflexo de ambiente + Fresnel + transparência)
   // tEnv: cubemap da própria cena (CubeCamera, atualizado de tempos em tempos: acompanha o dia/noite).
@@ -545,7 +600,7 @@
       const skid = (cx, cz, r, a0, a1) => [-0.8, 0.8].forEach(o => { g.strokeStyle = 'rgba(14,14,15,.38)'; g.lineWidth = 0.45; g.beginPath(); g.arc(cx, cz, r + o, a0, a1); g.stroke(); });
       skid(17, 15, 5, 0.3, 3.9); skid(1, 22, 7, 3.6, 5.6); skid(23, 25, 4, 1.5, 5.2); skid(-20, 18, 6, 4.4, 6.0);
       const oil = (x, z, r, a) => { g.fillStyle = rad(g, x, z, r, [[0, 'rgba(12,12,14,' + a + ')'], [0.7, 'rgba(12,12,14,' + (a * 0.55).toFixed(3) + ')'], [1, 'rgba(12,12,14,0)']]); g.fillRect(x - r, z - r, 2 * r, 2 * r); };
-      const curb = (FZ + WALK.d) * U + 0.28, sd = STALLS.depth * U, mids = STALLS.store.slice(0, -1).map((v, i) => (v + STALLS.store[i + 1]) / 2);
+      const curb = (FZ + WALK.d + 0.6) * U, sd = STALLS.depth * U, mids = STALLS.store.slice(0, -1).map((v, i) => (v + STALLS.store[i + 1]) / 2);
       mids.forEach((lx, i) => { if (i !== STALLS.pcd) for (let k = 0; k < 4; k++) oil(sx(lx) + (RND() - 0.5) * 2.2, curb + sd * 0.55 + (RND() - 0.5) * 3.5, 0.6 + RND() * 1.4, 0.3); });
       for (let k = 0; k < 10; k++) oil(X0 + RND() * AW, Z0 + RND() * AD, 0.4 + RND() * 1.2, 0.22);
       // tampa de bueiro e grelha de drenagem junto ao meio-fio
