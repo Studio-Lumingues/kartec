@@ -197,6 +197,65 @@
   }
 
   // =====================================================================================
+  // VOLANTE DE DRIFT (inspirado num volante esportivo de prato fundo): aro de couro preto com faixas amarelas no topo e
+  // embaixo e a palavra DRIFTING na parte de cima à esquerda; três raios de titânio escovado vazados; prato fundo (o cubo
+  // fica para trás); cubo com 6 parafusos e botão da buzina. Referencial do volante: z aponta para o piloto, y = 12 horas.
+  // r = raio do aro (centro do tubo). Texturas feitas uma vez e compartilhadas.
+  // =====================================================================================
+  let DW = null;
+  function driftWheelAssets() {
+    if (DW) return DW;
+    const cv = (w, h, f) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 8; return t; };
+    // aro: u = volta do aro (0 = 3 horas, sentido anti-horário visto pelo piloto), v = volta do tubo (0 = fora, .25 = frente, .5 = dentro)
+    const rimT = cv(2048, 256, (g, W, H) => {
+      g.fillStyle = '#161616'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 26000; i++) { const v = Math.random() < 0.5 ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${(Math.random() * 0.07).toFixed(3)})`; g.fillRect(Math.random() * W, Math.random() * H, 1.5, 1.5); }   // grão do couro
+      // costura do lado de dentro (v = .5 -> y = H/2 no canvas, que vem de cabeça para baixo)
+      g.strokeStyle = 'rgba(120,120,120,.55)'; g.lineWidth = 2; g.setLineDash([10, 8]); [H * 0.47, H * 0.53].forEach(y => { g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke(); }); g.setLineDash([]);
+      // faixas amarelas: duas em cima (12 h +- 17 graus) e duas embaixo (6 h +- 17 graus)
+      [90 - 17, 90 + 17, 270 - 17, 270 + 17].forEach(a => { const x = a / 360 * W; g.fillStyle = '#f2c214'; g.fillRect(x - 13, 0, 26, H); g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(x - 13, 0, 4, H); g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(x + 9, 0, 4, H); });
+      // DRIFTING: no alto à esquerda, lendo de baixo para cima, com o topo das letras para fora (no canvas: girado 180 graus)
+      g.save(); g.translate(150 / 360 * W, H * 0.75); g.rotate(Math.PI); g.font = 'italic 900 30px "Arial Black", Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.scale(1.25, 1); g.lineWidth = 3; g.strokeStyle = '#f2c214'; g.strokeText('DRIFTING', 0, 0); g.fillStyle = '#161616'; g.fillText('DRIFTING', 0, 0); g.restore(); });
+    const brushT = cv(256, 256, (g, W, H) => { g.fillStyle = '#9a9ea4'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 900; i++) { const y = Math.random() * H, v = 120 + Math.random() * 110; g.fillStyle = `rgba(${v},${v},${v + 4},.35)`; g.fillRect(0, y, W, 0.6 + Math.random()); } });   // titânio escovado
+    brushT.wrapS = brushT.wrapT = THREE.RepeatWrapping;
+    return (DW = { rimT, brushT });
+  }
+  function buildDriftWheel(r, env) {
+    const A = driftWheelAssets(), G = new THREE.Group(), dish = 0.42 * r;
+    const fix = m => { m.envMap = env; m.envMapIntensity = ENV_I; m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <encodings_fragment>', 'gl_FragColor = LinearTosRGB(gl_FragColor);'); }; return m; };
+    const leather = fix(new THREE.MeshStandardMaterial({ map: A.rimT, roughness: 0.62, metalness: 0 }));
+    const ti = fix(new THREE.MeshStandardMaterial({ map: A.brushT, color: 0xb9bdc4, roughness: 0.34, metalness: 0.85 }));
+    const black = fix(new THREE.MeshStandardMaterial({ color: 0x0c0c0d, roughness: 0.5, metalness: 0.3 }));
+    const chrome = fix(new THREE.MeshStandardMaterial({ color: 0xe6e8ec, roughness: 0.12, metalness: 1 }));
+    const yellow = fix(new THREE.MeshStandardMaterial({ color: 0xf2c214, roughness: 0.4, metalness: 0.1 }));
+    const add = (geo, m, x, y, z) => { const o = new THREE.Mesh(geo, m); o.position.set(x || 0, y || 0, z || 0); G.add(o); return o; };
+    // aro
+    add(new THREE.TorusGeometry(r, r * 0.125, 16, 96), leather);
+    // raios: 9 h, 3 h e 6 h (como na foto); placa afinando do cubo ao aro, com rasgo; descem para o cubo (prato fundo)
+    const x0 = r * 0.2, x1 = r * 0.93, tilt = Math.asin(dish / (x1 - x0)), th = r * 0.045;
+    const spokeShape = () => { const s = new THREE.Shape(), w0 = r * 0.2, w1 = r * 0.13;
+      s.moveTo(x0, -w0); s.lineTo(x1, -w1); s.quadraticCurveTo(x1 + r * 0.04, 0, x1, w1); s.lineTo(x0, w0); s.closePath();
+      const hole = new THREE.Path(), hx0 = x0 + r * 0.3, hx1 = x1 - r * 0.2, hw = r * 0.035; hole.moveTo(hx0, -hw); hole.lineTo(hx1, -hw); hole.absarc(hx1, 0, hw, -Math.PI / 2, Math.PI / 2, false); hole.lineTo(hx0, hw); hole.absarc(hx0, 0, hw, Math.PI / 2, Math.PI * 1.5, false);
+      s.holes.push(hole); return s; };
+    const sg = new THREE.ExtrudeGeometry(spokeShape(), { depth: th, bevelEnabled: true, bevelThickness: th * 0.3, bevelSize: th * 0.3, bevelSegments: 2, curveSegments: 10 });
+    sg.translate(0, 0, -th / 2);
+    [Math.PI, 0, -Math.PI / 2].forEach(a => { const piv = new THREE.Group(); piv.rotation.z = a; G.add(piv);
+      const sp = new THREE.Mesh(sg, ti); sp.rotation.y = -tilt; sp.position.z = -(x1 * Math.sin(tilt)); piv.add(sp);
+      const boss = new THREE.Mesh(new THREE.SphereGeometry(r * 0.17, 16, 10), leather); boss.scale.set(1.1, 0.75, 0.75); boss.position.set(r * 0.97, 0, -r * 0.01); piv.add(boss); });   // couro grosso onde o raio encontra o aro
+    // cubo: disco escovado, 6 parafusos, anel preto, botão cromado com aro amarelo
+    const hz = -dish - th * 0.2;
+    add(new THREE.CylinderGeometry(r * 0.27, r * 0.27, r * 0.05, 32), ti, 0, 0, hz).rotation.x = Math.PI / 2;
+    for (let k = 0; k < 6; k++) { const a = k / 6 * Math.PI * 2 + Math.PI / 6; add(new THREE.CylinderGeometry(r * 0.028, r * 0.028, r * 0.04, 10), black, Math.cos(a) * r * 0.21, Math.sin(a) * r * 0.21, hz + r * 0.035).rotation.x = Math.PI / 2; }
+    add(new THREE.CylinderGeometry(r * 0.15, r * 0.15, r * 0.06, 28), black, 0, 0, hz + r * 0.04).rotation.x = Math.PI / 2;
+    add(new THREE.TorusGeometry(r * 0.105, r * 0.016, 8, 32), yellow, 0, 0, hz + r * 0.075);
+    add(new THREE.CylinderGeometry(r * 0.1, r * 0.1, r * 0.05, 28), chrome, 0, 0, hz + r * 0.08).rotation.x = Math.PI / 2;
+    G.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    return { group: G, mats: [leather, ti, black, chrome, yellow] };
+  }
+
+  // =====================================================================================
   // MODELOS
   // =====================================================================================
   const MODELS = [
@@ -236,7 +295,10 @@
     let steerRig, hands;
     if (tpl.steer) {
       const piv = new THREE.Group(); piv.position.copy(tpl.steer.pos); piv.quaternion.copy(tpl.steer.quat); body.add(piv);
-      const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin); meshesFor(tpl.steerParts || []).forEach(me => spin.add(me));
+      const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin);
+      // volante de drift no lugar do volante recortado do modelo (+ coluna de direção até o painel)
+      const r0 = tpl.steer.grips[0].pos.length(), dw = buildDriftWheel(r0, env); spin.add(dw.group); dw.mats.forEach((m, i) => { matCache['driftwheel' + i] = m; });
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(r0 * 0.07, r0 * 0.09, r0 * 1.1, 14), matCache.driftwheel2); col.rotation.x = Math.PI / 2; col.position.z = -r0 * 0.42 - r0 * 0.55; col.castShadow = true; piv.add(col);
       hands = tpl.steer.grips.map(g => { const o = new THREE.Object3D(); o.position.copy(g.pos); o.userData.t = g.t.clone(); spin.add(o); return o; });
       steerRig = { spin, axis: 'z', k: tpl.steer.k };
     } else {

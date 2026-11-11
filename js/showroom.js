@@ -513,28 +513,49 @@
     inPx(g, (W, Hh) => { if (!H) blotches(g, W, Hh, 40, 15, 80, [[255, 255, 250, 0.1], [60, 58, 52, 0.12]]); speckle(g, W, Hh, 20000, H ? 0.2 : 0.08); });
     g.fillStyle = H ? '#202020' : 'rgba(40,40,40,.5)'; g.fillRect(0, 0, 1.5, 0.008); });
 
+  // concreto da rampa de garagem com ranhuras antiderrapantes em diagonal (ladrilho de 0,5 m)
+  const grooveTex = () => mkPair(0.5, 0.5, 512, (g, w, h, H) => {
+    g.fillStyle = H ? '#b0b0b0' : '#8d8c87'; g.fillRect(0, 0, 0.5, 0.5);
+    inPx(g, (W2, H2) => { if (!H) blotches(g, W2, H2, 25, 15, 70, [[255, 255, 250, 0.08], [50, 48, 44, 0.12]]); speckle(g, W2, H2, 9000, H ? 0.2 : 0.08); });
+    g.save(); g.beginPath(); g.rect(0, 0, 0.5, 0.5); g.clip(); g.lineWidth = 0.012;
+    for (let t = -0.5; t <= 1.0; t += 0.0625) { g.strokeStyle = H ? '#303030' : 'rgba(45,44,40,.55)'; g.beginPath(); g.moveTo(t, 0); g.lineTo(t - 0.5, 0.5); g.stroke();
+      if (!H) { g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 0.004; g.beginPath(); g.moveTo(t + 0.008, 0); g.lineTo(t - 0.492, 0.5); g.stroke(); g.lineWidth = 0.012; } }
+    g.restore(); });
   function buildFrontage(K) {
     const W = WALK, R = K.grp(0, 0), Y = W.h, zb = FZ + W.d;   // zb: borda da calçada (encosto do meio-fio)
     const surf = (pair, rx, ry, rough, bump, tint) => { const m = K.std(null, rough, 0, rep(pair[0], rx, ry), 0.22); m.bumpMap = rep(pair[1], rx, ry); m.bumpScale = bump; if (tint) m.color.set(tint); return m; };
-    const PL = plateTex(), PV = pavTex(), TD = tactileTex(false), TA = tactileTex(true), CC = concTex(), GR = graniteTex('#77797c', 0.26);
-    const SV = 0.75, TZ = 1.3, TW = 0.25, AW = 0.5;   // largura da faixa de serviço; posição e largura da linha tátil; largura do alerta
+    const PL = plateTex(), PV = pavTex(), TD = tactileTex(false), CC = concTex(), GV = grooveTex(), GR = graniteTex('#77797c', 0.26);
+    const SV = 0.75, TZ = 1.3, TW = 0.25;   // largura da faixa de serviço; posição e largura da linha tátil
     const flat = (w, d, mat, x, z, y) => { const p = K.plane(w, d, mat, x, y, z, 0, R); p.rotation.x = -Math.PI / 2; p.castShadow = false; return p; };
-    // os dois trechos (esquerda: loja + garagem até o portão; direita: depois do portão)
-    [[W.x0, -W.cut, 1], [W.cut, W.x1, -1]].forEach(([a, c, side]) => { const w = c - a, xm = (a + c) / 2;
-      K.box(w, Y, W.d, surf(PL, w, W.d, 0.85, 0.012), xm, Y / 2, FZ + W.d / 2, R, false).castShadow = false;
-      flat(w, SV, surf(PV, w / 0.8, SV / 0.8, 0.9, 0.018), xm, zb - SV / 2, Y + 0.002);                                   // faixa de serviço
-      const xr = side > 0 ? c - AW : a + AW, tl = Math.abs(xr - (side > 0 ? a + 0.4 : c - 0.4));                                   // linha tátil até o alerta da rampa
-      flat(tl, TW, surf(TD, tl / 0.25, 1, 0.75, 0.03), side > 0 ? (a + 0.4 + xr) / 2 : (xr + c - 0.4) / 2, FZ + TZ, Y + 0.003);
-      flat(AW, W.d - SV, surf(TA, AW / 0.25, (W.d - SV) / 0.25, 0.75, 0.03), side > 0 ? c - AW / 2 : a + AW / 2, FZ + (W.d - SV) / 2, Y + 0.003);   // alerta junto à rampa
-      // meio-fio de granito com quina boleada (perfil extrudado ao longo de x)
-      const sh = new THREE.Shape(), t = Y + 0.02; sh.moveTo(0, 0); sh.lineTo(0, t); sh.lineTo(-0.11, t); sh.quadraticCurveTo(-0.14, t, -0.142, t - 0.03); sh.lineTo(-0.15, 0); sh.closePath();
-      const cg = new THREE.ExtrudeGeometry(sh, { depth: w, bevelEnabled: false, curveSegments: 4 }); cg.rotateY(Math.PI / 2);
-      const cm = K.std(null, 0.45, 0.05, rep(GR, 1, 1), 0.25); cm.map.wrapS = cm.map.wrapT = THREE.RepeatWrapping; K.put(cg, cm, a, 0, zb, R); });
-    // rebaixo do portão: rampas com placas, piso de concreto e meio-fio baixo
-    [1, -1].forEach(s => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(0, Y); sh.lineTo(-s * W.ramp, 0); sh.closePath();
-      K.put(new THREE.ExtrudeGeometry(sh, { depth: W.d, bevelEnabled: false }), surf(CC, 1, 1, 0.85, 0.01), s * W.cut, 0, FZ, R, false); });
-    K.box(2 * W.cut, 0.02, W.d, surf(CC, 2 * W.cut / 1.5, W.d / 1.5, 0.85, 0.01), 0, 0.01, FZ + W.d / 2, R, false).castShadow = false;
-    K.box(2 * W.cut, 0.04, 0.15, K.std(null, 0.45, 0.05, rep(GR, 2 * W.cut, 0.2), 0.25), 0, 0.02, zb + 0.075, R);
+    // faixa livre (placas + linha tátil) contínua e nivelada na frente de tudo, inclusive do portão
+    const FL = W.d - SV, xr0 = -W.cut - W.ramp, xr1 = W.cut + W.ramp;
+    K.box(W.x1 - W.x0, Y, FL, surf(PL, W.x1 - W.x0, FL, 0.85, 0.012), (W.x0 + W.x1) / 2, Y / 2, FZ + FL / 2, R, false).castShadow = false;
+    { const tl = W.x1 - W.x0 - 0.8; flat(tl, TW, surf(TD, tl / 0.25, 1, 0.75, 0.03), (W.x0 + W.x1) / 2, FZ + TZ, Y + 0.003); }
+    // faixa de serviço (bloquete) dos dois lados do rebaixo
+    [[W.x0, xr0], [xr1, W.x1]].forEach(([a, c]) => { const w = c - a, xm = (a + c) / 2;
+      K.box(w, Y, SV, surf(PL, w, SV, 0.85, 0.012), xm, Y / 2, zb - SV / 2, R, false).castShadow = false;
+      flat(w, SV, surf(PV, w / 0.8, SV / 0.8, 0.9, 0.018), xm, zb - SV / 2, Y + 0.002); });
+    // rebaixo do portão (guia rebaixada): só a faixa de serviço desce até a rua; as laterais abrem em leque (abas) e se
+    // fundem na calçada, sem degrau. Concreto com ranhuras antiderrapantes em diagonal.
+    { const wx = xr1 - xr0, nx = 40, nz = 8, g = new THREE.PlaneGeometry(wx, SV, nx, nz); g.rotateX(-Math.PI / 2);
+      const p = g.attributes.position, low = 0.035;
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), s = (z + SV / 2) / SV, ax = Math.abs(x);   // s: 0 na faixa livre, 1 no meio-fio
+        const k = ax <= W.cut ? 1 : Math.max(0, 1 - (ax - W.cut) / W.ramp), e = k * k * (3 - 2 * k), q = s * s * (3 - 2 * s) * 0.35 + s * 0.65;
+        p.setY(i, Y - (Y - low) * e * q); }
+      g.computeVertexNormals();
+      const m = surf(GV, wx / 0.5, SV / 0.5, 0.85, 0.02); const me = K.put(g, m, 0, 0, zb - SV / 2, R, false); me.castShadow = false;
+      // frente do rebaixo (atrás do meio-fio baixo) e sujeira de pneu nas ranhuras
+      const tr = mkM(1, 1, 64, (gg, w, h) => { gg.fillStyle = lin(gg, 0, 0, 0, h, 'rgba(20,20,22,0)', 'rgba(20,20,22,.28)'); gg.fillRect(0, 0, w, h); });
+      [-1.25, 1.25].forEach(x => { const t = K.plane(0.55, SV, K.tag(new THREE.MeshBasicMaterial({ map: tr, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })), x, 0, zb - SV / 2, 0, R);
+        t.rotation.x = -Math.PI / 2 + Math.atan((Y - low) / SV); t.position.y = (Y + low) / 2 + 0.006; t.castShadow = false; t.receiveShadow = false; }); }
+    // meio-fio de granito com quina boleada: alto nos trechos normais, baixo no rebaixo, com transição inclinada nas abas
+    const cm = () => { const m = K.std(null, 0.45, 0.05, rep(GR, 1, 1), 0.25); return m; };
+    const curbProfile = t => { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.lineTo(0, t); sh.lineTo(-0.11, t); sh.quadraticCurveTo(-0.14, t, -0.142, Math.max(0, t - 0.03)); sh.lineTo(-0.15, 0); sh.closePath(); return sh; };
+    const curbRun = (a, c, t) => { const cg = new THREE.ExtrudeGeometry(curbProfile(t), { depth: c - a, bevelEnabled: false, curveSegments: 4 }); cg.rotateY(Math.PI / 2); K.put(cg, cm(), a, 0, zb, R); };
+    curbRun(W.x0, xr0, Y + 0.02); curbRun(xr1, W.x1, Y + 0.02); curbRun(-W.cut, W.cut, 0.06);
+    [1, -1].forEach(s => { const sh = new THREE.Shape(), hi = Y + 0.02, lo = 0.06;   // transição: perfil lateral em x, extrudado na largura do meio-fio
+      if (s > 0) { sh.moveTo(0, 0); sh.lineTo(W.ramp, 0); sh.lineTo(W.ramp, hi); sh.lineTo(0, lo); } else { sh.moveTo(0, 0); sh.lineTo(W.ramp, 0); sh.lineTo(W.ramp, lo); sh.lineTo(0, hi); }
+      sh.closePath(); K.put(new THREE.ExtrudeGeometry(sh, { depth: 0.15, bevelEnabled: false }), cm(), s > 0 ? W.cut : -W.cut - W.ramp, 0, zb, R); });
     // sarjeta de concreto ao longo de todo o meio-fio (no nível do asfalto)
     { const w = W.x1 - W.x0; K.box(w, 0.025, 0.4, surf(CC, w / 1.5, 0.4 / 1.5, 0.8, 0.008, '#b4b3ae'), (W.x0 + W.x1) / 2, 0.0125, zb + 0.15 + 0.2, R, false).castShadow = false; }
     // sujeira junto ao pé das paredes (faixa escura que some para fora)
@@ -666,10 +687,10 @@
         const im = new THREE.InstancedMesh(Pines.attach(Pines.single('hi', v), L.map(() => v)), mat, L.length);
         L.forEach((t, n) => { const [x, z] = V(t[0], t[1]); d.position.set(x, 0, z); d.rotation.set(0, t[0] * 1.7, 0); d.scale.setScalar(0.55 + t[2] * 0.3); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
         im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.customDepthMaterial = Pines.depthMaterial(); im.frustumCulled = false; Wg.add(im); }); }
-    // floreiras na calçada: cocho de fibrocimento grafite com cantos arredondados e bisotê, borda saliente mais clara,
-    // terra com casca e pedriscos e base recuada (sombra embaixo: parece "flutuar" um dedo acima do piso)
+    // floreiras na calçada: cocho de fibrocimento grafite com cantos arredondados e bisotê, tampo de madeira (ripas) em
+    // volta da boca, terra com casca e pedriscos e um rodapé escuro. A moita é medida e encaixada DENTRO da boca do vaso.
     const PL = [-8.0, -3.55, 3.55, 8.0], PZ = FZ + 0.6;
-    { const pw = 1.25, pd = 0.62, ph = 0.5, r = 0.1, bev = 0.018, y0 = WALK.h + 0.045;
+    { const pw = 1.4, pd = 0.74, ph = 0.6, r = 0.1, bev = 0.018, y0 = WALK.h + 0.03;
       const rs = (w, d, rr) => { const s = new THREE.Shape(), x = -w / 2, y = -d / 2; s.moveTo(x + rr, y); s.lineTo(x + w - rr, y); s.quadraticCurveTo(x + w, y, x + w, y + rr); s.lineTo(x + w, y + d - rr);
         s.quadraticCurveTo(x + w, y + d, x + w - rr, y + d); s.lineTo(x + rr, y + d); s.quadraticCurveTo(x, y + d, x, y + d - rr); s.lineTo(x, y + rr); s.quadraticCurveTo(x, y, x + rr, y); return s; };
       const ex = (w, d, h, rr, bv) => { const g = new THREE.ExtrudeGeometry(rs(w, d, rr), { depth: h, bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv, bevelSegments: 3, curveSegments: 8 }); g.rotateX(-Math.PI / 2); return g; };
@@ -677,13 +698,22 @@
       const body = new THREE.MeshStandardMaterial({ map: fT, roughness: 0.82, metalness: 0.02 }), rim = new THREE.MeshStandardMaterial({ color: 0x5d6168, roughness: 0.6, metalness: 0.1 });
       const foot = new THREE.MeshStandardMaterial({ color: 0x141517, roughness: 0.9 }), soil = new THREE.MeshStandardMaterial({ map: sT, roughness: 1 });
       [body, rim, foot, soil].forEach(m => { m.__ink = true; m.userData.envK = 0.35; });
-      const G = { foot: ex(pw - 0.12, pd - 0.12, 0.045, r * 0.6, 0), body: ex(pw, pd, ph - 2 * bev, r, bev), rim: ex(pw + 0.04, pd + 0.04, 0.025, r + 0.02, 0.008), soil: new THREE.ShapeGeometry(rs(pw - 0.08, pd - 0.08, r * 0.8)).rotateX(-Math.PI / 2) };
+      // tampo: moldura de madeira (anel com furo) por cima da borda
+      const ring = (() => { const o = rs(pw + 0.06, pd + 0.06, r + 0.03); o.holes.push(rs(pw - 0.14, pd - 0.14, r * 0.6)); const g = new THREE.ExtrudeGeometry(o, { depth: 0.035, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.006, bevelSegments: 2, curveSegments: 8 }); g.rotateX(-Math.PI / 2); return g; })();
+      const woodT = mkM(1, 1, 256, g => { g.fillStyle = '#8a5a36'; g.fillRect(0, 0, 1, 1); for (let k = 0; k < 9; k++) { const y = k / 9, v = 120 + ((RND() * 40) | 0); g.fillStyle = `rgb(${v + 30},${v - 10},${v - 45})`; g.fillRect(0, y + 0.004, 1, 1 / 9 - 0.008); }
+        inPx(g, (W2, H2) => { g.strokeStyle = 'rgba(60,30,10,.25)'; g.lineWidth = 1; for (let k = 0; k < 120; k++) { const y = RND() * H2; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W2 * 0.3, y + (RND() - 0.5) * 6, W2 * 0.6, y + (RND() - 0.5) * 6, W2, y); g.stroke(); } }); });
+      woodT.wrapS = woodT.wrapT = THREE.RepeatWrapping; const wood = new THREE.MeshStandardMaterial({ map: woodT, roughness: 0.55, metalness: 0 }); wood.__ink = true; wood.userData.envK = 0.4;
+      const G = { foot: ex(pw - 0.04, pd - 0.04, 0.03, r * 0.9, 0), body: ex(pw, pd, ph - 2 * bev, r, bev), rim: ring, soil: new THREE.ShapeGeometry(rs(pw - 0.1, pd - 0.1, r * 0.7)).rotateX(-Math.PI / 2) };
       const top = y0 + ph;
       PL.forEach(x => { const P = new THREE.Group(); P.position.set(x * U, 0, PZ * U); P.scale.setScalar(U); Wg.add(P);
         const add = (g, m, y, cast) => { const o = new THREE.Mesh(g, m); o.position.y = y; o.castShadow = cast; o.receiveShadow = true; P.add(o); };
-        add(G.foot, foot, WALK.h, false); add(G.body, body, y0 + bev, true); add(G.rim, rim, top - 0.012, true); add(G.soil, soil, top - 0.035, false); });
+        add(G.foot, foot, WALK.h, false); add(G.body, body, y0 + bev, true); add(G.rim, wood, top - 0.01, true); add(G.soil, soil, top - 0.05, false); });
       if (window.Bush) { const im = new THREE.InstancedMesh(Bush.geometry('hi'), Bush.material(), PL.length), d = new THREE.Object3D();
-        PL.forEach((x, n) => { d.position.set(x * U, (top - 0.06) * U, PZ * U); d.rotation.set(0, n * 1.9, 0); d.scale.set(1.08, 0.8, 0.66); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
+        // mede a moita e escala para caber na boca do vaso (largura e profundidade), com a base enterrada na terra
+        const bg = Bush.geometry('hi'); if (!bg.boundingBox) bg.computeBoundingBox(); const bb = bg.boundingBox, bw = bb.max.x - bb.min.x, bd = bb.max.z - bb.min.z, bh = bb.max.y - bb.min.y;
+        const kx = (pw - 0.1) * U / bw, kz = (pd - 0.1) * U / bd, ky = Math.max(kx, kz) * 0.95, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
+        PL.forEach((x, n) => { const a = n % 2 ? Math.PI : 0; d.rotation.set(0, a, 0); d.scale.set(kx, ky, kz);
+          d.position.set(x * U - Math.cos(a) * cx * kx, (top - 0.05) * U - (bb.min.y + bh * 0.08) * ky, PZ * U - Math.cos(a) * cz * kz); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
         im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.customDepthMaterial = Bush.depthMaterial(); im.frustumCulled = false; Wg.add(im); } }
     // postes de luz da corrida (lampião clássico) com SpotLight e brilho que acendem à noite
     if (window.LampPost) {
