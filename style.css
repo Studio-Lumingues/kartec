@@ -1149,7 +1149,8 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 }
 .seg button:not(:disabled):not(.soon):active, .tab:active, .trackCard:active, .roomItem:active { transform: none !important; translate: 0 3px !important; box-shadow: 0 1px 0 var(--b-ink) !important; transition-duration: .06s !important; }
 .seg button.on, .tab.on, .trackCard.on, .roomItem.on, .seg button.on:hover, .tab.on:hover, .trackCard.on:hover, .roomItem.on:hover,
-.seg button.on:focus-visible, .trackCard.on:focus-visible { background: var(--b-accent) !important; color: #fff !important; animation: none !important; }
+.seg button.on:focus-visible, .trackCard.on:focus-visible,
+.seg button.on:not(:disabled):not(.soon):hover, .seg button.on:not(:disabled):not(.soon):focus-visible, .tab.on:focus-visible, .roomItem.on:focus-visible { background: var(--b-accent) !important; color: #fff !important; animation: none !important; }   /* selecionado continua vermelho no hover (antes: fundo branco + texto branco = sumia) */
 .seg button.on span, .seg button.on strong, .trackCard.on strong, .trackCard.on span, .trackCard.on em, .roomItem.on, .roomItem.on small { color: #fff !important; }
 .seg button.on span, .trackCard.on span, .roomItem.on small { color: rgba(255, 255, 255, .86) !important; }
 .seg button.soon, .seg button:disabled { background: #e9e9ee !important; color: var(--b-off) !important; border-color: var(--b-off) !important; box-shadow: 0 3px 0 var(--b-off) !important; filter: none !important; translate: 0 0 !important; }
