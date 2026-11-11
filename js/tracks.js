@@ -838,7 +838,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         [hem, H2 - hem - 2 * cq].forEach(y0 => { for (let r = 0; r < 2; r++) for (let x = 0, k = 0; x < W2; x += cq, k++) { g.fillStyle = (k + r) % 2 ? '#111216' : '#f2f2f2'; g.fillRect(x, y0 + r * cq, cq + 1, cq + 1); } });
         g.fillStyle = '#c9182c'; g.fillRect(0, 0, W2, hem); g.fillRect(0, H2 - hem, W2, hem);                                                     // bainha vermelha
         g.setLineDash([22, 14]); g.strokeStyle = 'rgba(255,230,230,.8)'; g.lineWidth = 4; [hem * 0.5, H2 - hem * 0.5].forEach(y => { g.beginPath(); g.moveTo(0, y); g.lineTo(W2, y); g.stroke(); }); g.setLineDash([]);
-        // ---- EMBLEMA KARTEC: placa em pílula azul-marinho com borda dourada, bandeiras quadriculadas cruzadas atrás,
+        // ---- LOGO KARTEC (direto no pano): bandeiras quadriculadas cruzadas atrás,
         // letras KARTEC em itálico com extrusão 3D (camadas vinho), contorno branco + contorno escuro, degradê
         // vermelho-coral, brilho de vidro em cima, faixa de velocidade amarela/vermelha embaixo e estrelinhas.
         { const cx = W2 / 2, cy = H2 * 0.5, eh = H2 * 0.66, ew = eh * 3.6, r = eh / 2;
@@ -850,13 +850,8 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
             const fw = eh * 0.62, fh = eh * 0.44, n = 6, m = 4; g.save(); g.translate(sd * eh * 0.03, -eh * 0.6); g.scale(sd, 1);
             for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { const wv = Math.sin(i * 0.9) * eh * 0.03; g.fillStyle = (i + j) % 2 ? '#15161c' : '#ffffff'; g.fillRect(i * fw / n, j * fh / m + wv, fw / n + 1, fh / m + 1); }
             g.strokeStyle = '#15161c'; g.lineWidth = eh * 0.02; g.strokeRect(0, 0, fw, fh + eh * 0.03); g.restore(); g.restore(); });
-          // placa: sombra, borda dourada, fundo azul com raios de luz
-          g.save(); g.translate(eh * 0.04, eh * 0.06); pill(ew, eh); g.fillStyle = 'rgba(30,10,10,.35)'; g.fill(); g.restore();
-          pill(ew + eh * 0.12, eh * 1.12); const gold = g.createLinearGradient(0, -eh / 2, 0, eh / 2); gold.addColorStop(0, '#fff1a8'); gold.addColorStop(0.45, '#ffc93a'); gold.addColorStop(1, '#c98a10'); g.fillStyle = gold; g.fill();
-          pill(ew, eh); const nav = g.createLinearGradient(0, -eh / 2, 0, eh / 2); nav.addColorStop(0, '#2c3a78'); nav.addColorStop(1, '#141a3c'); g.fillStyle = nav; g.fill();
-          g.save(); pill(ew, eh); g.clip();
-          for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; g.fillStyle = k % 2 ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,0)'; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, ew, a, a + Math.PI / 18); g.closePath(); g.fill(); }
-          const sh = g.createLinearGradient(0, -eh / 2, 0, 0); sh.addColorStop(0, 'rgba(255,255,255,.22)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(-ew / 2, -eh / 2, ew, eh / 2);
+          // (sem placa atrás das letras: o KARTEC fica direto no pano)
+          g.save();
           // faixa de velocidade (swoosh) embaixo
           g.lineCap = 'round'; [['#ffd23f', eh * 0.11, 0.3], ['#e8213a', eh * 0.07, 0.36]].forEach(([c, lw, yy]) => { g.strokeStyle = c; g.lineWidth = lw; g.beginPath(); g.moveTo(-ew * 0.44, eh * yy); g.quadraticCurveTo(0, eh * (yy - 0.12), ew * 0.46, eh * (yy - 0.02)); g.stroke(); });
           g.restore();
