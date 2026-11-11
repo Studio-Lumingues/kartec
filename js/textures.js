@@ -251,29 +251,45 @@
     asphalt() { const S = 128, [c, g] = flat(S, S, '#5b5574');
       for (let k = 0; k < 22; k++) blob(g, rnd() * S, rnd() * S, 1 + rnd() * 2, rnd() < 0.6 ? '#6a6487' : '#524c69', S, S);
       return c; },
-    // zebra: blocos vermelho/branco com cara de zebra de verdade: cada bloco é abaulado (claro no meio, mais escuro nas
-    // bordas laterais), tem friso de luz em cima e sombra embaixo na junta entre blocos, sujeira e borracha de pneu
-    // (marcas escuras puxadas no sentido da pista), lascas na pintura e grão fino. Repete a cada 2 blocos (no sentido da pista).
-    curb() { const SW = 128, SH = 256, n = fbm(SW, SH, 4, 3, 919), m = fbm(SW, SH, 16, 2, 929);
-      const RED = [[222, 44, 58], [246, 92, 100]], WHT = [[236, 230, 222], [255, 252, 246]];
+    // zebra de autódromo (largura inteira de 3,6 m em u: 0 = beira do asfalto, 1 = fora):
+    //  0-3%   junta de borracha escura colada no asfalto
+    //  3-60%  blocos vermelho/branco (2 m cada) com nervuras transversais em relevo pintado (crista clara, vale escuro),
+    //         como as zebras "serrilhadas" de verdade; borracha de pneu mais forte perto do asfalto
+    //  60-66% filete branco que separa a zebra da faixa verde
+    //  66-97% faixa verde pintada (área de escape), com grão e sujeira
+    //  97-100% borda escura
+    // Repete a cada 2 blocos no sentido da pista. As alturas reais (rampinha, blocos altos, faixa baixa) vêm da geometria (curbProf).
+    curb() { const SW = 256, SH = 512, n = fbm(SW, SH, 4, 3, 919), m = fbm(SW, SH, 16, 2, 929);
+      const RED = [[214, 38, 46], [242, 78, 82]], WHT = [[232, 228, 220], [255, 253, 248]], GRN = [[38, 132, 70], [58, 160, 88]];
+      const RIB = 16;   // nervuras por bloco
       const c = paint(SW, SH, (x, y, i) => {
-        const blk = y < SH / 2 ? RED : WHT, yy = y % (SH / 2), u = x / (SW - 1);
-        const crown = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, (u - 0.04) / 0.92))), 0.6);     // abaulado no sentido transversal
-        let col = mixc(blk[0], blk[1], crown * 0.75);
-        if (yy < 5) col = mixc(col, [255, 255, 255], (1 - yy / 5) * 0.35);                      // friso de luz no começo do bloco
-        if (yy > SH / 2 - 7) col = mixc(col, [60, 40, 50], ((yy - (SH / 2 - 7)) / 7) * 0.45);   // sombra na junta
-        if (u < 0.04 || u > 0.96) col = mixc(col, [70, 60, 66], 0.55);                           // filete escuro nas laterais
-        col = mixc(col, [90, 80, 78], Math.max(0, n[i] - 0.62) * 0.9);                           // sujeira
-        col = mixc(col, [40, 36, 40], Math.max(0, 0.32 - u) * 0.5 * (0.6 + n[i]));                // borracha perto da pista
-        return jit(mixc(col, col.map(v => v * 0.92), m[i] > 0.7 ? 0.6 : 0), 6);
+        const u = x / (SW - 1), bh = SH / 2, yy = y % bh; let col;
+        if (u < 0.03) col = mixc([44, 40, 44], [70, 66, 70], n[i]);
+        else if (u < 0.6) {
+          const blk = y < bh ? RED : WHT, r = (yy % (bh / RIB)) / (bh / RIB);                       // posição dentro da nervura (0..1)
+          const ridge = Math.sin(r * Math.PI);                                                          // crista no meio da nervura
+          col = mixc(blk[0], blk[1], ridge * 0.8);
+          if (r < 0.12) col = mixc(col, [255, 255, 255], (1 - r / 0.12) * 0.28);                        // luz na borda de cima da nervura
+          if (r > 0.82) col = mixc(col, [40, 24, 30], ((r - 0.82) / 0.18) * 0.38);                      // sombra no vale
+          const lu = (u - 0.03) / 0.57;
+          if (lu < 0.05 || lu > 0.95) col = mixc(col, col.map(v => v * 0.8), 0.7);                     // quina dos blocos
+          if (yy < 3 || yy > bh - 4) col = mixc(col, [50, 36, 44], 0.5);                               // junta entre blocos
+          col = mixc(col, [38, 34, 38], Math.max(0, 0.45 - lu) * 0.7 * (0.5 + n[i]));                  // borracha perto do asfalto
+        }
+        else if (u < 0.66) { col = mixc([238, 236, 230], [255, 255, 252], m[i]); if (u < 0.605 || u > 0.655) col = mixc(col, [90, 90, 90], 0.4); }
+        else if (u < 0.97) { col = mixc(GRN[0], GRN[1], n[i]); col = mixc(col, [88, 96, 70], Math.max(0, m[i] - 0.6) * 1.2); }
+        else col = [52, 70, 52];
+        col = mixc(col, [92, 82, 76], Math.max(0, n[i] - 0.66) * 0.8);                                 // sujeira
+        return jit(col, 7);
       }), g = c.getContext('2d');
-      // marcas de pneu no sentido da pista (mais fortes do lado de dentro)
-      for (let k = 0; k < 9; k++) { const x = 4 + Math.pow(rnd(), 1.6) * 70, y = rnd() * SH, l = 40 + rnd() * 90, w = 2 + rnd() * 4;
-        wrapXY(SW, SH, x, y, (px, py) => { const gr = g.createLinearGradient(0, py, 0, py + l); gr.addColorStop(0, 'rgba(30,26,30,0)'); gr.addColorStop(0.3, 'rgba(30,26,30,.28)'); gr.addColorStop(0.7, 'rgba(30,26,30,.22)'); gr.addColorStop(1, 'rgba(30,26,30,0)');
+      // marcas de pneu no sentido da pista (nos blocos, mais fortes do lado do asfalto)
+      for (let k = 0; k < 14; k++) { const x = 10 + Math.pow(rnd(), 1.7) * 130, y = rnd() * SH, l = 70 + rnd() * 170, w = 3 + rnd() * 7;
+        wrapXY(SW, SH, x, y, (px, py) => { const gr = g.createLinearGradient(0, py, 0, py + l); gr.addColorStop(0, 'rgba(28,24,28,0)'); gr.addColorStop(0.3, 'rgba(28,24,28,.3)'); gr.addColorStop(0.7, 'rgba(28,24,28,.22)'); gr.addColorStop(1, 'rgba(28,24,28,0)');
           g.fillStyle = gr; g.fillRect(px, py, w, l); }); }
-      // lascas na pintura (aparece o concreto)
-      for (let k = 0; k < 12; k++) { const x = rnd() * SW, y = rnd() * SH, r = 0.8 + rnd() * 1.8;
+      // lascas na pintura (aparece o concreto) e cascalho sobre a faixa verde
+      for (let k = 0; k < 22; k++) { const x = rnd() * SW * 0.6, y = rnd() * SH, r = 1 + rnd() * 2.4;
         wrapXY(SW, SH, x, y, (px, py) => { g.fillStyle = 'rgba(150,140,140,.85)'; g.beginPath(); g.ellipse(px, py, r * 1.4, r, rnd() * 3, 0, 6.2832); g.fill(); }); }
+      for (let k = 0; k < 160; k++) { g.fillStyle = rnd() < 0.5 ? 'rgba(200,190,170,.55)' : 'rgba(60,60,55,.45)'; g.fillRect(SW * (0.67 + rnd() * 0.29), rnd() * SH, 1 + rnd() * 2, 1 + rnd() * 2); }
       return c; },
     paint() { return flat(16, 16, '#ffffff')[0]; },
     dirt() { const c = wavy(128, 128, [226, 150, 92], [95, 214, 65], 0.86), g = c.getContext('2d');

@@ -208,7 +208,7 @@
       if (kinds.leaves) {
         const Lk = kinds.leaves, around = (x, z, s, n) => { for (let q = 0; q < n; q++) {
           const a = lrnd() * 6.283, r = (1.2 + lrnd() * 1.8) * s, px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r, d = dist(px, pz, 400);
-          if (d < W + 3 || !land(px, pz) || (tr.clearAt && tr.clearAt(px, pz)) || (tr.sea && (q2 => q2.e < q2.bw + 4)(tr.sea.info(px, pz)))) continue;
+          if (d < W + (tr.CB || 3.6) + 0.6 || !land(px, pz) || (tr.clearAt && tr.clearAt(px, pz)) || (tr.sea && (q2 => q2.e < q2.bw + 4)(tr.sea.info(px, pz)))) continue;
           Lk.list.push({ x: px, z: pz, d, lo: false }); } };
         if (kinds.bush) kinds.bush.list.slice().forEach(b => around(b.x, b.z, 1, lrnd() < 0.6 ? 1 : 2));
         (tr.leafSpots || []).forEach(b => around(b.x, b.z, Math.max(0.8, b.s || 1), 2));

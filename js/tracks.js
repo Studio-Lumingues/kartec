@@ -384,7 +384,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     // pontes: elevação suave da pista (aceita índice fracionário)
     const bridges = def.bridges || [];
     // ponte: 3,4 m de altura, tabuleiro plano em ±6 nós e rampas suaves até ±18 nós (~75 m de cada lado)
-    const BR = tr.BR = { H: 3.4, FLAT: 6, END: 18, RAIL: W + 1.5 };
+    const BR = tr.BR = { H: 3.4, FLAT: 6, END: 18, RAIL: W + CB - 0.3 };   // guarda-corpo na beira do tabuleiro, depois da zebra
     const bump = tr.bump = u => { let h = 0; for (const b of bridges) { const d = Math.abs(((u - b) % N + N + N / 2) % N - N / 2); h = Math.max(h, d <= BR.FLAT ? BR.H : d >= BR.END ? 0 : BR.H * (0.5 + 0.5 * Math.cos(Math.PI * (d - BR.FLAT) / (BR.END - BR.FLAT)))); } return h; };
     // ---------- relevo (def.elev): altura da pista em cada nó ----------
     // [nó, altura em metros] interpolados com PCHIP (suave, sem "passar do ponto" entre os pontos). Sem elev: pista plana.
@@ -472,7 +472,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     function strip(a, b, y, o) {
       const nx = o.nx || 1, pos = [], col = [], uv = [], idx = [], C = nx + 1, cc = new THREE.Color();
       for (let i = 0; i <= N; i++) { const k = i % N;
-        for (let c = 0; c <= nx; c++) { const f = c / nx, off = a + (b - a) * f, p = side(k, off, y + (o.flat ? H[k] : hAt(k))); pos.push(p.x, p.y, p.z);
+        for (let c = 0; c <= nx; c++) { const f = c / nx, off = a + (b - a) * f, p = side(k, off, y + (o.prof ? o.prof(o.flipU ? 1 - f : f) : 0) + (o.flat ? H[k] : hAt(k))); pos.push(p.x, p.y, p.z);
           uv.push((o.flipU ? 1 - f : f) * o.uSpan, LACC[i] / o.vLen);
           const v = o.col ? o.col(k, f) : 1; if (typeof v === 'number') cc.setRGB(v, v, v); else cc.setRGB(v[0], v[1], v[2]); col.push(cc.r, cc.g, cc.b); } }
       for (let i = 0; i < N; i++) { if (o.skip && o.skip(i)) continue; for (let c = 0; c < nx; c++) { const p0 = i * C + c, p1 = p0 + C; idx.push(p0, p1, p0 + 1, p0 + 1, p1, p1 + 1); } }
@@ -729,9 +729,11 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: LO ? null : { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: !LO, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
     [-1, 1].forEach(s => strip(s * (W - 0.85), s * (W - 0.4), 0.06, { map: TX.get('paint'), uSpan: 0.2, vLen: 3, po: -2 }));
     strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
-    strip(W, W + CB, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4 }); strip(-W - CB, -W, 0.085, { map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true });
+    // zebra com relevo: sobe da beira do asfalto (rampinha), fica alta nos blocos e desce para a faixa verde de fora
+    const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.05 * (u - 0.03) / 0.09 : u < 0.6 ? 0.05 : u < 0.66 ? 0.05 - 0.04 * (u - 0.6) / 0.06 : 0.01;
+    strip(W, W + CB, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, prof: curbProf }); strip(-W - CB, -W, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true, prof: curbProf });
     strip(W + CB, W + CB + 3.4, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
-    strip(-W - 5.2, -W - CB, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
+    strip(-W - CB - 3.4, -W - CB, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
 
     // ---------- linha de largada + pórtico ----------
     const si = def.startIdx, sAng = Math.atan2(T[si].x, T[si].z);
@@ -747,7 +749,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     // em LETRAS 3D (traços extrudados, sem imagem e sem arquivo de fonte), faixa quadriculada de cubos,
     // lâmpadas no contorno do painel (acendem à noite) e o semáforo de largada embaixo.
     const arch = new THREE.Group(); arch.position.set(S[si].x, hAt(si), S[si].z); arch.rotation.y = sAng; add(arch);
-    const AW = W + 3.2, archFlags = [];
+    const AW = W + CB + 1.4, archFlags = [];   // pilares do pórtico depois da zebra
     { const UP = V3(0, 1, 0), tmpQ = new THREE.Quaternion();
       const put = (o, x, y, z, cast) => { o.position.set(x, y, z); o.castShadow = cast !== false; arch.add(o); return o; };
       const gadd = (g, m, x, y, z) => put(new THREE.Mesh(g, m), x, y, z);
@@ -2393,7 +2395,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           const mk = (Pp, U, C, I, mat, extra) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(Pp, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(U, 2));
             g.setAttribute('color', new THREE.Float32BufferAttribute(C, 3)); if (extra) g.setAttribute('aS', new THREE.Float32BufferAttribute(extra, 1)); g.setIndex(I); g.computeVertexNormals();
             if (tr.vert) { const nr = g.attributes.normal.array;                        // mesma normal da grama embaixo: a emenda some (antes a borda que mergulha escurecia e virava um risco)
-              for (let k = 0; k < Pp.length / 3; k++) { const x = Pp[k * 3], z = Pp[k * 3 + 2]; if (roadInfo(x, z).d < W + 3) continue; const q = surfNormal(x, z, true); nr[k * 3] = q.x; nr[k * 3 + 1] = q.y; nr[k * 3 + 2] = q.z; } }
+              for (let k = 0; k < Pp.length / 3; k++) { const x = Pp[k * 3], z = Pp[k * 3 + 2]; if (roadInfo(x, z).d < W + CB + 0.6) continue; const q = surfNormal(x, z, true); nr[k * 3] = q.x; nr[k * 3 + 1] = q.y; nr[k * 3 + 2] = q.z; } }
             const m = new THREE.Mesh(g, mat); m.receiveShadow = true; m.userData.noOutline = true; add(m); return m; };
           if (gI.length) mk(gP, gU, gC, gI, bermM);
           if (tI.length) mk(tP, tU, tC, tI, dirtM, tS).userData.dynamic = true;   // fora da junção de malhas: ela descarta o atributo aS (a terra ficava cheia de buracos verdes)
@@ -2407,7 +2409,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           // toras deitadas na beira, uma a cada ~7 m (só enfeite: não bloqueiam)
           const logs = []; for (let k = 3; k < n - 3; k += 3) [-1, 1].forEach(sd => { const a = P[k - 1], b = P[k + 1]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l;
             const o = sd * (hw + 1.6), x = P[k].x + tz * o, z = P[k].z - tx * o; if (Math.hypot(x - P[0].x, z - P[0].z) < 10 || Math.hypot(x - P[n - 1].x, z - P[n - 1].z) < 10) return;
-            if (tr.nearest({ x, z }, 0).dist < W + 3) return; logs.push({ x, z, y: sc.surf(x, z) + 0.2, r: Math.atan2(tx, tz) + (Math.random() - 0.5) * 0.3 }); });
+            if (tr.nearest({ x, z }, 0).dist < W + CB + 0.6) return; logs.push({ x, z, y: sc.surf(x, z) + 0.2, r: Math.atan2(tx, tz) + (Math.random() - 0.5) * 0.3 }); });
           if (CLUTTER && logs.length) { const im = new THREE.InstancedMesh(logG, logM, logs.length), d = new THREE.Object3D();
             logs.forEach((q, i) => { d.position.set(q.x, q.y, q.z); d.rotation.set(0, q.r, 0); d.updateMatrix(); im.setMatrixAt(i, d.matrix); }); im.castShadow = true; add(im); }
           // ===== VIDA NO ATALHO =====
@@ -2415,7 +2417,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
           const frameAt = k => { const a = P[Math.max(0, k - 1)], b = P[Math.min(n - 1, k + 1)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; return [tx / l, tz / l]; };
           const edgePt = (k, o) => { const [tx, tz] = frameAt(k), x = P[k].x + tz * o, z = P[k].z - tx * o;
             if (Math.hypot(x - P[0].x, z - P[0].z) < 9 || Math.hypot(x - P[n - 1].x, z - P[n - 1].z) < 9) return null;
-            if (tr.nearest({ x, z }, sc.i).dist < W + 3) return null; return { x, z, y: sc.surf(x, z) - 0.02, tx, tz }; };
+            if (tr.nearest({ x, z }, sc.i).dist < W + CB + 0.6) return null; return { x, z, y: sc.surf(x, z) - 0.02, tx, tz }; };
           const inst = (geo, mat, list, setup, shadow) => { if (!CLUTTER || !list.length) return null; const im = new THREE.InstancedMesh(geo, mat, list.length), d = new THREE.Object3D(), c = new THREE.Color();
             list.forEach((q, i) => { setup(d, q); d.updateMatrix(); im.setMatrixAt(i, d.matrix); if (q.c !== undefined) im.setColorAt(i, c.set(q.c)); });
             im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; im.castShadow = !!shadow; im.receiveShadow = true; im.userData.noOutline = true; add(im); return im; };
