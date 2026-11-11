@@ -1010,31 +1010,27 @@
       camera.position.set(P.pos.x - Math.sin(c.ang) * d, P.pos.y + 6.5 * CAMC.HEIGHT / 5.6, P.pos.z - Math.cos(c.ang) * d); camera.lookAt(P.pos.x, P.pos.y + 1.5, P.pos.z);
       if (camera.fov !== CAMC.FOV) { camera.fov = CAMC.FOV; camera.updateProjectionMatrix(); }
     },
-    // CÂMERAS CINEMATOGRÁFICAS DA CHEGADA: depois de cruzar a linha o jogador vê o próprio kart em planos fechados que
-    // trocam a cada ~3 s (corte seco): de costas, de frente, de lado, rente à roda, de cima e de longe (câmera parada
-    // na beira da pista vendo o kart passar). Cada plano tem um movimento lento (dolly) e a câmera segue suave.
+    // CÂMERAS DA CHEGADA (estilo transmissão de TV): câmeras PARADAS e longe, espalhadas em volta da pista. Cada plano
+    // nasce num ponto fixo (na frente, atrás, do lado, lá no alto) e só gira para acompanhar o kart; a troca é um corte
+    // seco (sem deslizar de uma câmera para a outra). Troca a cada ~3,5 s ou antes, se o kart ficar longe demais.
     finishCam(dt) {
-      const P = this.player, F = this.fcam || (this.fcam = { t: 99, i: -1, pos: new THREE.Vector3(), look: new THREE.Vector3(), anchor: new THREE.Vector3() });
+      const P = this.player, tr = this.track, F = this.fcam || (this.fcam = { t: 99, i: -1, pos: new THREE.Vector3(), fov: 30 });
       const SH = [
-        { o: [0.5, 1.5, -4.0], o2: [-0.5, 1.3, -3.2], l: [0, 1.0, 3], fov: 46, d: 3.2 },          // de costas, fechado
-        { o: [-0.8, 1.1, 5.2], o2: [0.8, 1.0, 4.2], l: [0, 1.0, 0], fov: 42, d: 3.0 },            // de frente, fechado
-        { o: [4.0, 0.9, -1.2], o2: [3.6, 1.1, 2.2], l: [0, 0.9, 0.3], fov: 40, d: 3.2 },          // de lado (passa pela câmera)
-        { o: [1.7, 0.35, 2.4], o2: [1.7, 0.35, 1.0], l: [0, 0.55, -2.5], fov: 50, d: 2.6 },       // rente à roda dianteira
-        { o: [0.1, 15, -3], o2: [0.1, 10, -1.5], l: [0, 0, 2], fov: 42, d: 3.2 },                 // de cima, descendo
-        { far: true, fov: 28, d: 3.6 }                                                            // de longe, parada vendo passar
+        { ahead: 60, side: 18, up: 8, fov: 24 },     // longe na frente, de lado, um pouco alto
+        { ahead: -30, side: 9, up: 13, fov: 30 },    // atrás e alto (o kart vai embora)
+        { ahead: 22, side: 3, up: 42, fov: 34 },     // lá do alto (aérea)
+        { ahead: 28, side: 36, up: 5, fov: 20 },     // longe do lado, lente tele
+        { ahead: 75, side: 5, up: 3, fov: 17 }       // bem longe de frente, quase no chão
       ];
-      F.t += dt; let cut = false;
-      if (F.i < 0 || F.t > SH[F.i].d) { F.i = (F.i + 1) % SH.length; F.t = 0; cut = true; }
-      const s = SH[F.i], fx = Math.sin(P.mvAng), fz = Math.cos(P.mvAng), rx = Math.cos(P.mvAng), rz = -Math.sin(P.mvAng);
-      const W = (o, out) => out.set(P.pos.x + rx * o[0] + fx * o[2], P.pos.y + o[1], P.pos.z + rz * o[0] + fz * o[2]);
-      const k = Math.min(1, F.t / s.d), e = k * k * (3 - 2 * k);
-      let tp, tl;
-      if (s.far) { if (cut) { const ahead = 38, side = (Math.random() < 0.5 ? -1 : 1) * 10; F.anchor.set(P.pos.x + fx * ahead + rx * side, P.pos.y + 3.2, P.pos.z + fz * ahead + rz * side); }
-        tp = F.anchor; tl = this._fl || (this._fl = new THREE.Vector3()); tl.set(P.pos.x, P.pos.y + 1.0, P.pos.z); }
-      else { const o = s.o.map((v, i) => v + (s.o2[i] - v) * e); tp = W(o, this._fp || (this._fp = new THREE.Vector3())); tl = W(s.l, this._fl || (this._fl = new THREE.Vector3())); }
-      if (cut) { F.pos.copy(tp); F.look.copy(tl); } else { const a = Math.min(1, 9 * dt); F.pos.lerp(tp, a); F.look.lerp(tl, Math.min(1, 14 * dt)); }
-      camera.position.copy(F.pos); camera.lookAt(F.look);
-      if (camera.fov !== s.fov) { camera.fov = s.fov; camera.updateProjectionMatrix(); }
+      F.t += dt;
+      const far = F.i >= 0 && F.pos.distanceTo(P.pos) > 130;
+      if (F.i < 0 || F.t > 3.5 || far) { F.i = (F.i + 1) % SH.length; F.t = 0;
+        const s = SH[F.i], fx = Math.sin(P.mvAng), fz = Math.cos(P.mvAng), rx = Math.cos(P.mvAng), rz = -Math.sin(P.mvAng), sd = Math.random() < 0.5 ? -1 : 1;
+        F.pos.set(P.pos.x + fx * s.ahead + rx * s.side * sd, 0, P.pos.z + fz * s.ahead + rz * s.side * sd);
+        let gy = P.pos.y; try { const g = tr && tr.groundAt ? tr.groundAt(F.pos, P.idx, P.ang) : null; if (g && isFinite(g.h)) gy = Math.max(gy, g.h); } catch (e) { }
+        F.pos.y = gy + s.up; F.fov = s.fov; }
+      camera.position.copy(F.pos); camera.lookAt(P.pos.x, P.pos.y + 1.0, P.pos.z);
+      if (camera.fov !== F.fov) { camera.fov = F.fov; camera.updateProjectionMatrix(); }
     },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
