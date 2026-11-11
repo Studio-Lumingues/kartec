@@ -743,7 +743,7 @@
         el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
       if (!el.classList.contains('on')) requestAnimationFrame(() => el.classList.add('on'));
     },
-    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } this.pAuto = null; if (this.race) this.race.allT = 0; },
+    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
     endRace() {
       this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
@@ -1010,12 +1010,39 @@
       camera.position.set(P.pos.x - Math.sin(c.ang) * d, P.pos.y + 6.5 * CAMC.HEIGHT / 5.6, P.pos.z - Math.cos(c.ang) * d); camera.lookAt(P.pos.x, P.pos.y + 1.5, P.pos.z);
       if (camera.fov !== CAMC.FOV) { camera.fov = CAMC.FOV; camera.updateProjectionMatrix(); }
     },
+    // CÂMERAS CINEMATOGRÁFICAS DA CHEGADA: depois de cruzar a linha o jogador vê o próprio kart em planos fechados que
+    // trocam a cada ~3 s (corte seco): de costas, de frente, de lado, rente à roda, de cima e de longe (câmera parada
+    // na beira da pista vendo o kart passar). Cada plano tem um movimento lento (dolly) e a câmera segue suave.
+    finishCam(dt) {
+      const P = this.player, F = this.fcam || (this.fcam = { t: 99, i: -1, pos: new THREE.Vector3(), look: new THREE.Vector3(), anchor: new THREE.Vector3() });
+      const SH = [
+        { o: [0.5, 1.5, -4.0], o2: [-0.5, 1.3, -3.2], l: [0, 1.0, 3], fov: 46, d: 3.2 },          // de costas, fechado
+        { o: [-0.8, 1.1, 5.2], o2: [0.8, 1.0, 4.2], l: [0, 1.0, 0], fov: 42, d: 3.0 },            // de frente, fechado
+        { o: [4.0, 0.9, -1.2], o2: [3.6, 1.1, 2.2], l: [0, 0.9, 0.3], fov: 40, d: 3.2 },          // de lado (passa pela câmera)
+        { o: [1.7, 0.35, 2.4], o2: [1.7, 0.35, 1.0], l: [0, 0.55, -2.5], fov: 50, d: 2.6 },       // rente à roda dianteira
+        { o: [0.1, 15, -3], o2: [0.1, 10, -1.5], l: [0, 0, 2], fov: 42, d: 3.2 },                 // de cima, descendo
+        { far: true, fov: 28, d: 3.6 }                                                            // de longe, parada vendo passar
+      ];
+      F.t += dt; let cut = false;
+      if (F.i < 0 || F.t > SH[F.i].d) { F.i = (F.i + 1) % SH.length; F.t = 0; cut = true; }
+      const s = SH[F.i], fx = Math.sin(P.mvAng), fz = Math.cos(P.mvAng), rx = Math.cos(P.mvAng), rz = -Math.sin(P.mvAng);
+      const W = (o, out) => out.set(P.pos.x + rx * o[0] + fx * o[2], P.pos.y + o[1], P.pos.z + rz * o[0] + fz * o[2]);
+      const k = Math.min(1, F.t / s.d), e = k * k * (3 - 2 * k);
+      let tp, tl;
+      if (s.far) { if (cut) { const ahead = 38, side = (Math.random() < 0.5 ? -1 : 1) * 10; F.anchor.set(P.pos.x + fx * ahead + rx * side, P.pos.y + 3.2, P.pos.z + fz * ahead + rz * side); }
+        tp = F.anchor; tl = this._fl || (this._fl = new THREE.Vector3()); tl.set(P.pos.x, P.pos.y + 1.0, P.pos.z); }
+      else { const o = s.o.map((v, i) => v + (s.o2[i] - v) * e); tp = W(o, this._fp || (this._fp = new THREE.Vector3())); tl = W(s.l, this._fl || (this._fl = new THREE.Vector3())); }
+      if (cut) { F.pos.copy(tp); F.look.copy(tl); } else { const a = Math.min(1, 9 * dt); F.pos.lerp(tp, a); F.look.lerp(tl, Math.min(1, 14 * dt)); }
+      camera.position.copy(F.pos); camera.lookAt(F.look);
+      if (camera.fov !== s.fov) { camera.fov = s.fov; camera.updateProjectionMatrix(); }
+    },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
       // zoom do turbo é um "avanço" da câmera em direção ao kart (o FOV fica como sempre foi):
       // desfaz o avanço do quadro anterior antes de calcular a câmera normal
       if (c.zoomOff) { camera.position.sub(c.zoomOff); c.zoomOff = null; }
-      if (this.state === 'finish' && this.online && !(this.player && this.player.finished)) { c.ang += dt * 0.6; this.orbitCam(); return; }   // terminou: câmera normal seguindo o kart
+      if (this.state === 'finish' && P && P.finished) { this.finishCam(dt); return; }   // terminou: planos cinematográficos do próprio kart
+      if (this.state === 'finish') { c.ang += dt * 0.6; this.orbitCam(); return; }
       c.ang += wrapA(P.mvAng - c.ang) * Math.min(1, 5 * dt);
       // C segurado: câmera vira 180° na hora (à frente do kart, olhando para trás); soltou, volta na hora
       if (Input.keys.look && !UI.modal && (this.state === 'race' || this.state === 'countdown')) { this.lookBackCam(dt); return; }
