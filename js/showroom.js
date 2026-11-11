@@ -26,6 +26,7 @@
     ZOOM_MIN: 8.5, ZOOM_MAX: 23.5,   // limites do zoom (roda do mouse / pinça): não entra no veículo nem atravessa a parede da frente
     PILOT_DIST: 19, PILOT_SCALE: 3.0,   // PILOT_SCALE = altura do personagem em pé (unidades; o kart tem ~4)
     PILOT_LOOK_Y: 1.05, PILOT_CAM_H: 2.6,   // aba Piloto: personagem em pé no prato giratório
+    SWAY: 1.4,               // menu: a câmera passeia devagar de um lado para o outro (amplitude em unidades; 0 desliga)
     DAY_START: 0.3, DAY_SECONDS: 240,  // ciclo dia/noite do lobby (mesmo ritmo da corrida: 4 min por dia)
     CLOUD_H: 150,            // base das nuvens acima da câmera no lobby. Na corrida é 300, mas aqui a câmera olha quase na
                              // horizontal com lente fechada: a 300 m as nuvens só apareciam longe demais e sumiam na névoa
@@ -564,7 +565,6 @@
         g.lineWidth = 0.16; g.beginPath(); g.arc(cx - 0.1, cz + 0.3, 0.5, -0.9, 3.6); g.stroke(); }
       const hatch = (x0, z0, x1, z1, c) => { g.save(); g.beginPath(); g.rect(x0, z0, x1 - x0, z1 - z0); g.clip(); g.strokeStyle = c; g.lineWidth = 0.3;
         for (let t = -(z1 - z0); t < x1 - x0; t += 1.1) { g.beginPath(); g.moveTo(x0 + t, z1); g.lineTo(x0 + t + (z1 - z0), z0); g.stroke(); } g.restore(); g.strokeStyle = c; g.lineWidth = 0.24; g.strokeRect(x0, z0, x1 - x0, z1 - z0); };
-      hatch(-DOOR_W * U / 2, curb, DOOR_W * U / 2, curb + 5, 'rgba(226,182,52,.72)');
       g.fillStyle = lin(g, 0, Z0, 0, Z0 + 2.2, 'rgba(0,0,0,.22)', 'rgba(0,0,0,0)'); g.fillRect(X0, Z0, AW, 2.2);   // sujeira junto às paredes
       // grão fino por cima de tudo (também gasta a tinta das faixas)
       inPx(g, (W2, H2) => { for (let i = 0; i < W2 * H2 * 0.05; i++) { const v = (RND() < 0.5 ? 60 : 115) + ((RND() * 30) | 0); g.fillStyle = `rgba(${v},${v},${v + 3},${(RND() * 0.55).toFixed(2)})`; g.fillRect(RND() * W2, RND() * H2, 1 + RND() * 1.6, 1 + RND() * 1.6); } });
@@ -633,7 +633,7 @@
     // postes de luz da corrida (lampião clássico) com SpotLight e brilho que acendem à noite
     if (window.LampPost) {
       const LM = LampPost.materials(), LG = LampPost.geometries(), B = LampPost.baker(), heads = [];
-      [[-10.5, FZ + WALK.d - 0.45, 0], [10.5, FZ + WALK.d - 0.45, Math.PI]].forEach(([x, z, a]) => { const M = new THREE.Matrix4().compose(new THREE.Vector3(x * U, WALK.h * U, z * U), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a), new THREE.Vector3(1, 1, 1));
+      [[10.5, FZ + WALK.d - 0.45, Math.PI]].forEach(([x, z, a]) => { const M = new THREE.Matrix4().compose(new THREE.Vector3(x * U, WALK.h * U, z * U), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a), new THREE.Vector3(1, 1, 1));
         LampPost.place(LG, B.put, M); heads.push(new THREE.Vector3(LampPost.ARM, LampPost.LAMPY, 0).applyMatrix4(M)); });
       LampPost.merge(B.bake, LM).forEach(m => Wg.add(m)); Object.values(LG).forEach(g => g.dispose()); out.lampGlass = LM.glass;
       heads.forEach(H => { const L = new THREE.SpotLight(0xffc685, 0, 62, 1.0, 0.75, 1.4); L.position.copy(H); L.target.position.set(H.x, 0, H.z); Wg.add(L, L.target); out.lights.push(L);
@@ -1010,6 +1010,10 @@
       } else if (this.goal === 'int') { P.set(-1.2, 3.6, 15); L.set(0, 2.6, -13); k = Math.min(1, 1.5 * dt); }
       else if (this.rig === 'setup') { if (wide) { P.set(0, 6.5, 24); L.set(0, 2.2, 0); } else { P.set(0, 8, 27); L.set(0, 4, 0); } }
       else if (wide) { P.set(-6.0, 4.6, 20); L.set(-5.6, 2.2, 0); } else { P.set(0, 7.5, 26); L.set(0, 4.6, 0); }
+      // menu e preparar corrida: balanço suave de um lado para o outro (duas senoides lentas, sem repetir o mesmo vaivém;
+      // o alvo anda menos que a câmera, então ela também gira um pouquinho). Desliga com "reduzir movimento" do sistema.
+      if (!int && this.goal !== 'int' && GAR.SWAY > 0 && !reduceMotion()) { const A = GAR.SWAY, sx = Math.sin(t * 0.21) + 0.35 * Math.sin(t * 0.083 + 1.7);
+        P.x += A * sx; P.y += A * 0.08 * Math.sin(t * 0.29 + 0.6); P.z += A * 0.18 * Math.sin(t * 0.13 + 2.1); L.x += A * 0.3 * sx; }
       if (this.snap || k >= 1) { this.camPos.copy(P); this.camLook.copy(L); this.snap = false; } else { this.camPos.lerp(P, k); this.camLook.lerp(L, k); }
       c.position.copy(this.camPos); c.lookAt(this.camLook);
       if (this.swap) {
