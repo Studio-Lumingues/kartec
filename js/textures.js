@@ -287,6 +287,17 @@
         wrapXY(SW, SH, x, y, (px, py) => { g.fillStyle = 'rgba(150,140,140,.85)'; g.beginPath(); g.ellipse(px, py, r * 1.4, r, rnd() * 3, 0, 6.2832); g.fill(); }); }
       return c; },
     paint() { return flat(16, 16, '#ffffff')[0]; },
+    // relevo da zebra (cinza = altura), alinhado com 'curb': nervuras transversais altas, vales e juntas fundas entre
+    // os blocos, quina arredondada nas laterais, junta de borracha baixa na beira do asfalto. Linear (não sRGB).
+    curbBump() { const SW = 128, SH = 512, n = fbm(SW, SH, 8, 2, 977);
+      return paint(SW, SH, (x, y, i) => { const u = x / (SW - 1), bh = SH / 2, yy = y % bh; let h;
+        if (u < 0.03) h = 0.15;
+        else if (u < 0.95) { const r = (yy % (bh / 16)) / (bh / 16), lu = (u - 0.03) / 0.92;
+          h = 0.35 + 0.5 * Math.pow(Math.sin(r * Math.PI), 0.7);                                // nervura
+          h *= Math.min(1, Math.min(lu, 1 - lu) / 0.06);                                          // quina arredondada
+          if (yy < 3 || yy > bh - 4) h = 0.05; }                                                  // junta funda entre blocos
+        else h = 0.2;
+        const v = Math.max(0, Math.min(255, (h + (n[i] - 0.5) * 0.08) * 255)); return [v, v, v]; }); },
     // faixas da pista (bordas e tracejado do meio): tinta branca com desgaste VARIADO ao longo da pista. A cada trecho de
     // 2 a 6 m sorteia um desgaste (tinta nova, gasta ou bem gasta). Onde gastou aparece o asfalto (alfa 0, com alphaTest):
     // falhas pela borda, pontinhos, rachaduras atravessando e marca de pneu escurecendo. Textura = 0,9 m x 24 m (repete).

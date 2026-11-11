@@ -479,7 +479,8 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals();
       if (o.map) GfxFX.aniso(o.map, o.antiTile ? 16 : 8);
-      const m = o.phong ? new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, map: o.map, shininess: o.phong.shininess, specular: o.phong.specular })
+      const m = o.bump ? (() => { const bm = TX.get(o.bump); bm.encoding = THREE.LinearEncoding; const mm = new PHONG_ORIG({ vertexColors: true, side: THREE.DoubleSide, map: o.map, bumpMap: bm, bumpScale: o.bumpScale || 0.05, shininess: 14, specular: 0x1a1a1a }); mm.userData.noToon = true; mm.userData.unique = true; return mm; })()
+        : o.phong ? new THREE.MeshPhongMaterial({ vertexColors: true, side: THREE.DoubleSide, map: o.map, shininess: o.phong.shininess, specular: o.phong.specular })
         : new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, map: o.map });
       if (o.antiTile) GfxFX.antiTile(m, o.antiTile);
       if (o.roadFx) roadFx(m);
@@ -772,8 +773,8 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     [-1, 1].forEach(s => strip(s * (W - 1.35), s * (W - 0.45), 0.06, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, opVar: [0.62, 0.85], seed: s < 0 ? 7.3 : 0, flipU: s < 0 }));
     strip(-0.4, 0.4, 0.09, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, opVar: [0.62, 0.85], seed: 13.7, skip: i => !((Math.floor(i / 3) % 2)) });
     // zebra com relevo: sobe da beira do asfalto (rampinha), fica alta nos blocos e desce na borda de fora
-    const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.05 * (u - 0.03) / 0.09 : u < 0.9 ? 0.05 : 0.05 - 0.04 * (u - 0.9) / 0.1;
-    strip(W, W + CB, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, prof: curbProf }); strip(-W - CB, -W, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true, prof: curbProf });
+    const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.1 * (u - 0.03) / 0.09 : u < 0.88 ? 0.1 + 0.015 * Math.sin((u - 0.12) / 0.76 * Math.PI) : 0.1 - 0.09 * (u - 0.88) / 0.12;   // mais alta e levemente abaulada
+    strip(W, W + CB, 0.085, { nx: 14, map: TX.get('curb'), bump: 'curbBump', bumpScale: 0.09, uSpan: 1, vLen: 4, prof: curbProf }); strip(-W - CB, -W, 0.085, { nx: 14, map: TX.get('curb'), bump: 'curbBump', bumpScale: 0.09, uSpan: 1, vLen: 4, flipU: true, prof: curbProf });
     strip(W + CB, W + CB + 3.4, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
     strip(-W - CB - 3.4, -W - CB, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
 

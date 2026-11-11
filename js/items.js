@@ -420,7 +420,12 @@
         // faixas de reflexo diagonais (luz da janela/céu correndo pelo vidro)
         '  float band = smoothstep(0.75, 0.95, sin((q.x + q.y) * 3.2 + uTime * 0.35 + vP.y * 0.4) * 0.5 + 0.5) * (0.35 + 0.65 * fres);',
         '  col += vec3(band * 0.5);',
-        '  float a = 0.07 + fres * 0.62 + spec * 0.8 + rim * 0.5 + thick * 0.26 + scr * 0.5 + smudge * 0.16 + frost * 0.06 + band * 0.18;',
+        // EMBAÇADO: véu leitoso por dentro do vidro (o fundo aparece apagado e sem contraste, como vidro jateado);
+        // mais denso no centro da face e com manchas de condensação
+        '  float haze = 0.36 + 0.14 * gn(q * 4.0 + uTime * 0.05) + 0.1 * smoothstep(0.2, 0.9, edge);',
+        '  if (uBack > 0.5) haze *= 0.5;',
+        '  col = mix(col, vec3(0.9, 0.94, 0.97) * (0.7 + 0.3 * env), haze * (1.0 - fres) * 0.8);',
+        '  float a = 0.07 + haze + fres * 0.55 + spec * 0.8 + rim * 0.5 + thick * 0.26 + scr * 0.5 + smudge * 0.16 + frost * 0.1 + band * 0.18;',
         '  if (uBack > 0.5) { a *= 0.45; col *= 0.85; }',
         '  gl_FragColor = vec4(col, clamp(a, 0.0, 0.92) * uFade);',
         '  #include <fog_fragment>',
