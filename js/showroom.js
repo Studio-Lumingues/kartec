@@ -27,6 +27,9 @@
     PILOT_DIST: 19, PILOT_SCALE: 3.0,   // PILOT_SCALE = altura do personagem em pé (unidades; o kart tem ~4)
     PILOT_LOOK_Y: 1.05, PILOT_CAM_H: 2.6,   // aba Piloto: personagem em pé no prato giratório
     DAY_START: 0.3, DAY_SECONDS: 240,  // ciclo dia/noite do lobby (mesmo ritmo da corrida: 4 min por dia)
+    CLOUD_H: 150,            // base das nuvens acima da câmera no lobby. Na corrida é 300, mas aqui a câmera olha quase na
+                             // horizontal com lente fechada: a 300 m as nuvens só apareciam longe demais e sumiam na névoa
+                             // do horizonte (ficava só o céu azul). Mais baixas, entram no quadro com o mesmo shader da pista.
     CAM_HEIGHT: 2.5,         // Garagem: altura da câmera
     LOOK_Y: 0.2,             // Garagem: altura do ponto olhado (menor = veículo mais alto na tela; a doca de cores fica embaixo)
     PILOT_IN_GARAGE: false,  // true mostra o piloto também dentro da Garagem
@@ -585,7 +588,7 @@
         this.rim.intensity = 0.5 * (1 - nf * 0.7);
       }
       { const U2 = S.cloudU; S.cloudOff.x += dt * 18; S.cloudOff.y += dt * 7; S.cloudT += dt; U2.uT.value = S.cloudT;
-        S.cloudLayer.position.set(cp.x, cp.y + 300, cp.z); U2.uR.value = Math.min(2200, Math.sqrt(Math.max(1e4, this.cam.far * this.cam.far * 0.9 - 540 * 540))); U2.uCam.value.copy(cp); U2.uSun.value.copy(this.SUNDIR);
+        S.cloudLayer.position.set(cp.x, cp.y + GAR.CLOUD_H, cp.z); U2.uR.value = Math.min(2200, Math.sqrt(Math.max(1e4, this.cam.far * this.cam.far * 0.9 - 540 * 540))); U2.uCam.value.copy(cp); U2.uSun.value.copy(this.SUNDIR);
         U2.uLit.value.copy(S.cloudM.color); U2.uShade.value.copy(S.cloudM.color).multiplyScalar(0.74).lerp(this.hemi.color, 0.25);
         U2.uSunCol.value.copy(S.sunGlow.material.color).multiplyScalar(sv); U2.uFog.value.copy(this.scene.fog.color); }
       // à noite: cenário perde a luz própria, arandelas/letreiro/postes acendem, vidro reflete menos
