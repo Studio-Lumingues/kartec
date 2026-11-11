@@ -859,7 +859,7 @@
           if (ON) { Net.send({ t: 'finish', raceId: ON.raceId, time: this.race.time }); setTimeout(() => { if (this.state === 'finish' && this.online) UI.toast('Aguardando os outros pilotos…', 4000); }, 2400); } } } });
       if (this.state === 'finish') this.finishBoard();
       if (this.state === 'finish' && !ON) { this.race.endT += dt; if (this.rivals.every(b => b.finished)) this.race.allT = (this.race.allT || 0) + dt;
-        if (((this.race.allT || 0) > 3.5 && this.race.endT > 7.5) || this.race.endT > 25) this.endRace(); }   // espera todos chegarem (até 25 s) e mostra o placar mais um pouco
+        if ((this.race.allT || 0) > 10 || (!this.rivals.every(b => b.finished) && this.race.endT > 25)) this.endRace(); }   // todos chegaram: placar fica 10 s antes do pódio   // espera todos chegarem (até 25 s) e mostra o placar mais um pouco
       if (!this.scene || this.state === 'round' || this.state === 'podium') return;   // a corrida acabou neste quadro
       tr.update(dt, performance.now() / 1000);
       Fx.step(dt);
