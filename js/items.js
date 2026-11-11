@@ -369,22 +369,40 @@
       uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {}]),
       transparent: true, depthWrite: false, fog: true, side: back ? THREE.BackSide : THREE.FrontSide,
       vertexShader: [
-        'varying vec3 vN; varying vec3 vV; varying vec3 vP;',
+        'varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vON;',
         '#include <fog_pars_vertex>',
         'void main() {',
         '  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);',
-        '  vN = normalize(normalMatrix * normal); vV = -mvPosition.xyz; vP = position;',
+        '  vN = normalize(normalMatrix * normal); vV = -mvPosition.xyz; vP = position; vON = normal;',
         '  gl_Position = projectionMatrix * mvPosition;',
         '  #include <fog_vertex>',
         '}'].join('\n'),
       fragmentShader: [
         'uniform float uHue; uniform float uTime; uniform float uBack; uniform float uFade;',
-        'varying vec3 vN; varying vec3 vV; varying vec3 vP;',
+        'varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vON;',
         '#include <fog_pars_fragment>',
+        'float gh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+        'float gn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(gh(i), gh(i + vec2(1, 0)), f.x), mix(gh(i + vec2(0, 1)), gh(i + vec2(1, 1)), f.x), f.y); }',
         'vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }',
         'void main() {',
-        '  vec3 N = normalize(vN); if (uBack > 0.5) N = -N;',
+        // ===== textura de vidro: coordenadas 2D na face (eixos da face pelo normal do objeto) =====
+        '  vec3 an = abs(vON); vec2 fp = an.x > an.y && an.x > an.z ? vP.yz : (an.y > an.z ? vP.xz : vP.xy);',
+        '  float hs = max(max(abs(vP.x), abs(vP.y)), abs(vP.z));',                           // meia-aresta (cubo)
+        '  vec2 q = fp / max(hs, 1e-3);',                                                     // -1..1 na face
+        '  float edge = 1.0 - max(abs(q.x), abs(q.y));',                                      // 0 na aresta, 1 no centro
+        // ondulação do vidro soprado: entorta um pouco a normal (os reflexos ficam levemente ondulados)
+        '  vec2 wv = vec2(gn(q * 3.0 + 1.3), gn(q * 3.0 + 7.7)) - 0.5;',
+        '  vec3 N = normalize(vN + normalize(vN.yzx) * wv.x * 0.07 + normalize(vN.zxy) * wv.y * 0.07); if (uBack > 0.5) N = -N;',
         '  vec3 V = normalize(vV); float ndv = clamp(dot(N, V), 0.0, 1.0);',
+        // riscos finos (microarranhões em várias direções) e manchas de dedo/poeira
+        '  float scr = 0.0;',
+        '  for (int k = 0; k < 3; k++) { float a = float(k) * 2.1 + 0.4; vec2 d = vec2(cos(a), sin(a)); float t = dot(q, d) * 34.0 + float(k) * 3.0, l = dot(q, vec2(-d.y, d.x));',
+        '    scr += smoothstep(0.88, 1.0, gh(vec2(floor(t), float(k)))) * (1.0 - smoothstep(0.0, 0.08, abs(fract(t) - 0.5))) * smoothstep(0.3, 0.7, gn(vec2(l * 3.0, floor(t))));',
+        '  }',
+        '  float smudge = smoothstep(0.55, 0.85, gn(q * 2.2 + 3.0)) * 0.6 + smoothstep(0.6, 0.9, gn(q * 5.0 + 11.0)) * 0.4;',
+        '  float frost = gh(floor(q * 90.0)) * 0.5 + gn(q * 18.0) * 0.5;',                    // grão bem fino (vidro levemente fosco)
+        // espessura: perto das arestas o vidro fica mais grosso -> faixa esverdeada/azulada mais densa (como vidro de verdade)
+        '  float thick = 1.0 - smoothstep(0.0, 0.16, edge);',
         '  float fres = pow(1.0 - ndv, 2.2);',                                                    // borda forte, centro transparente
         // película fina (bolha de sabão): a cor varia com o ângulo e com uma ondinha que passeia pela superfície
         '  float wave = sin(vP.x * 2.3 + vP.y * 1.7 + uTime * 0.9) * 0.5 + sin(vP.z * 2.9 - vP.y * 1.3 - uTime * 0.7) * 0.5;',
@@ -397,7 +415,12 @@
         '  float rim = pow(1.0 - ndv, 7.0);',
         '  float spec = s1 + s2;',
         '  vec3 col = film * (0.22 + 0.78 * fres) + env * fres * 0.45 + vec3(spec) + vec3(rim * 0.9);',
-        '  float a = 0.05 + fres * 0.62 + spec * 0.8 + rim * 0.5;',
+        '  col = mix(col, vec3(0.62, 0.86, 0.84), thick * 0.45);',                           // borda grossa esverdeada
+        '  col += vec3(0.9, 0.95, 1.0) * (scr * 0.75 + smudge * 0.18 + frost * 0.08) * (0.55 + 0.45 * env.r);',
+        // faixas de reflexo diagonais (luz da janela/céu correndo pelo vidro)
+        '  float band = smoothstep(0.75, 0.95, sin((q.x + q.y) * 3.2 + uTime * 0.35 + vP.y * 0.4) * 0.5 + 0.5) * (0.35 + 0.65 * fres);',
+        '  col += vec3(band * 0.5);',
+        '  float a = 0.07 + fres * 0.62 + spec * 0.8 + rim * 0.5 + thick * 0.26 + scr * 0.5 + smudge * 0.16 + frost * 0.06 + band * 0.18;',
         '  if (uBack > 0.5) { a *= 0.45; col *= 0.85; }',
         '  gl_FragColor = vec4(col, clamp(a, 0.0, 0.92) * uFade);',
         '  #include <fog_fragment>',
