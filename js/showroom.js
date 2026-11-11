@@ -34,6 +34,8 @@
     CAM_HEIGHT: 2.5,         // Garagem: altura da câmera
     LOOK_Y: 0.2,             // Garagem: altura do ponto olhado (menor = veículo mais alto na tela; a doca de cores fica embaixo)
     PILOT_IN_GARAGE: false,  // true mostra o piloto também dentro da Garagem
+    PILOT_OUTSIDE: false,    // true mostra o piloto no kart da tela principal (pátio)
+    WHEEL_STOPS: false,      // true volta os batentes amarelo e preto das vagas
     DOOR_TIME: 1.15,         // segundos para o portão abrir/fechar
     FADE_TIME: 0.38,         // segundos de cada fade (out e in)
     DOF: 1,                  // profundidade de campo (0 desliga; 1 = padrão; 2 = o dobro do desfoque)
@@ -563,7 +565,7 @@
       const gm2 = K.tag(new THREE.MeshBasicMaterial({ map: gt, transparent: true, depthWrite: false })); const p = flat(W.x1 - W.x0, 0.5, gm2, (W.x0 + W.x1) / 2, FZ + 0.25, Y + 0.004); p.receiveShadow = false; }
     // batentes das vagas
     const ws = K.std(null, 0.75, 0, wheelStopTex(), 0.35), zs = zb + 0.15 + 0.4 + 0.75, mid = (L, x0) => L.slice(0, -1).map((v, i) => x0 + (v + L[i + 1]) / 2);
-    mid(STALLS.store, STORE.x).concat(mid(STALLS.right, 0)).forEach(x => K.box(1.6, 0.11, 0.16, ws, x, 0.055, zs, R));
+    if (GAR.WHEEL_STOPS) mid(STALLS.store, STORE.x).concat(mid(STALLS.right, 0)).forEach(x => K.box(1.6, 0.11, 0.16, ws, x, 0.055, zs, R));
     return R;
   }
 
@@ -928,7 +930,7 @@
       else { if (!first) this.setDoor(this.door.lin = 1); this.setFocus('vehicle', true); }
     },
     pilotVis() {
-      const K = this.kart; if (!K) return; const show = this.mode !== 'int' || !!GAR.PILOT_IN_GARAGE;
+      const K = this.kart; if (!K) return; const show = this.mode === 'int' ? !!GAR.PILOT_IN_GARAGE : !!GAR.PILOT_OUTSIDE;
       const po = K.pilot, obj = po && (po.isObject3D ? po : (po.group || po.root || po.obj || po.model));
       if (obj && obj.isObject3D) { if (obj.visible !== show) obj.visible = show; return; }
       K.group.traverse(o => { if ((o.isSkinnedMesh || o.isBone) && o.visible !== show) o.visible = show; });
