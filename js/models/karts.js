@@ -29,7 +29,7 @@
   const VEH = {
     gt: { glb: 'kart', face: 1, scale: 6.4, ground: -0.1485, midX: 0.0412, refV: 0.92,
       wheels: [['wheel_FL', 1], ['wheel_FR', 1], ['wheel_RL', 0], ['wheel_RR', 0]],   // 1 = esterça (kart.js)
-      steer: { c: [0.184, 0.0897, 0.0023], n: [0.9, -0.436, 0.004], rim: 0.058, cutH: 0.02, cutBack: -0.05, cutR: 0.08, grip: 1.36, k: 0.9 },
+      steer: { c: [0.184, 0.0897, 0.0023], n: [0.9, -0.436, 0.004], rim: 0.058, cutH: 0.05, cutBack: -0.05, cutR: 0.092, colH: 0.135, colR: 0.07, col2H: 0.2, col2R: 0.05, grip: 1.36, k: 0.9 },   // col*: coluna antiga (também sai)
       pilot: { p: 0.75, hip: [0.05, -0.0127, 0], feet: [0.165, -0.03, 0.06], lean: 0.05, headTilt: 0.02, footPitch: -0.45, leanK: 1, boostLean: -0.08, knee: [0.25, 0.55, 0.8] },
       exhaust: [[[-0.482, 0.069, 0.056], [-0.956, 0.292, 0.035]], [[-0.484, 0.061, -0.051], [-0.963, 0.269, -0.004]]], exR: 0.03,
       lights: [[0.452, -0.014, 0.188], [0.452, -0.014, -0.188]], lightR: 0.022, lean: -0.12 },
@@ -145,6 +145,15 @@
       const up = V(0, 1, 0).addScaledVector(n, -n.y).normalize(), Zl = D(n.toArray()).negate(), Yl = D(up.toArray()), Xl = V().crossVectors(Yl, Zl).normalize();
       pm = new THREE.Matrix4().makeBasis(Xl, Yl, Zl).setPosition(G(sw.c)); pmi = pm.clone().invert();
     }
+    // cor da textura no centro do triângulo: a lataria vermelha que passa perto da coluna não sai (só a peça escura do suporte)
+    const pix = new Map();
+    const redAt = (mesh, cb, t) => { try {
+      const m = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material, mp = m && m.map, im = mp && mp.image; if (!im || !im.width) return false;
+      let d = pix.get(im); if (!d) { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height; const g = c.getContext('2d'); g.drawImage(im, 0, 0); d = { w: c.width, h: c.height, a: g.getImageData(0, 0, c.width, c.height).data }; pix.set(im, d); }
+      let u = 0, v = 0; for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; u += cb.U[i * 2]; v += cb.U[i * 2 + 1]; } u = u / 3 * mp.repeat.x + mp.offset.x; v = v / 3 * mp.repeat.y + mp.offset.y;
+      u -= Math.floor(u); v -= Math.floor(v); const x = Math.min(d.w - 1, (u * d.w) | 0), y = Math.min(d.h - 1, ((mp.flipY ? 1 - v : v) * d.h) | 0), o = (y * d.w + x) * 4;
+      const r = d.a[o], gg = d.a[o + 1], b = d.a[o + 2]; return r > 70 && r > gg * 1.6 && r > b * 1.6;
+    } catch (e) { return false; } };
     cMeshes.forEach(mesh => {
       const cls = classify(mesh); if (!cls) return;
       const cb = GLBAssets.bake(mesh, mesh.matrixWorld);
@@ -152,7 +161,11 @@
         const nt = cb.I.length / 3, inW = new Uint8Array(nt), c = V(0, 0, 0), dv = V(0, 0, 0); let any = 0;
         for (let t = 0; t < nt; t++) { c.set(0, 0, 0); for (let k = 0; k < 3; k++) { const i = cb.I[t * 3 + k]; c.x += cb.P[i * 3]; c.y += cb.P[i * 3 + 1]; c.z += cb.P[i * 3 + 2]; }
           c.multiplyScalar(1 / 3); dv.subVectors(c, C); const h = dv.dot(n), rr = dv.addScaledVector(n, -h).length();
-          if (h < sw.cutH && h > sw.cutBack && rr < sw.cutR) { inW[t] = 1; any++; } }
+          if (h < sw.cutH && h > sw.cutBack && rr < sw.cutR) { inW[t] = 1; any++; continue; }
+          // coluna antiga: só sai o triângulo com os 3 vértices dentro do tubo (as placas grandes do bico, que passam por ali, ficam)
+          if (sw.colH) { let all = true; for (let k = 0; k < 3 && all; k++) { const i = cb.I[t * 3 + k]; dv.set(cb.P[i * 3] - C.x, cb.P[i * 3 + 1] - C.y, cb.P[i * 3 + 2] - C.z);
+              const hv = dv.dot(n), rv = dv.addScaledVector(n, -hv).length(); all = hv > sw.cutBack && ((hv < sw.colH && rv < sw.colR) || (hv < sw.col2H && rv < sw.col2R)); }
+            if (all && !redAt(mesh, cb, t)) { inW[t] = 1; any++; } } }
         if (any < nt) addTo(bodyB, cls, GLBAssets.geometry(cb, t => !inW[t], M));
         if (any) addTo(steerB, cls, GLBAssets.geometry(cb, t => inW[t], pmi.clone().multiply(M)));
       } else addTo(bodyB, cls, GLBAssets.geometry(cb, null, M));
@@ -161,7 +174,7 @@
     if (sw) {
       tpl.steerParts = finish(steerB);
       const r = sw.rim * S, a = sw.grip;
-      tpl.steer = { pos: V().setFromMatrixPosition(pm), quat: new THREE.Quaternion().setFromRotationMatrix(pm), k: sw.k,
+      tpl.steer = { pos: V().setFromMatrixPosition(pm), quat: new THREE.Quaternion().setFromRotationMatrix(pm), k: sw.k, colLen: Math.max(sw.colH || 0, sw.col2H || 0) * S * 0.92,
         // mão esquerda (+x do jogo = -x local) e direita; t = sentido do polegar (para as 12 horas, ao longo do aro)
         grips: [{ pos: V(-r * Math.sin(a), r * Math.cos(a), 0), t: V(Math.cos(a), Math.sin(a), 0) }, { pos: V(r * Math.sin(a), r * Math.cos(a), 0), t: V(-Math.cos(a), Math.sin(a), 0) }] };
     }
@@ -298,7 +311,13 @@
       const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin);
       // volante de drift no lugar do volante recortado do modelo (+ coluna de direção até o painel)
       const r0 = tpl.steer.grips[0].pos.length(), dw = buildDriftWheel(r0, env); spin.add(dw.group); dw.mats.forEach((m, i) => { matCache['driftwheel' + i] = m; });
-      const col = new THREE.Mesh(new THREE.CylinderGeometry(r0 * 0.07, r0 * 0.09, r0 * 1.1, 14), matCache.driftwheel2); col.rotation.x = Math.PI / 2; col.position.z = -r0 * 0.42 - r0 * 0.55; col.castShadow = true; piv.add(col);
+      // coluna nova: tubo do cubo até a frente do chassi (onde ficava a antiga), mancal com abraçadeira no meio e flange no fim
+      const L = (tpl.steer.colLen || r0 * 2.8), z0 = -r0 * 0.47, mk = (geo, m, z) => { const o = new THREE.Mesh(geo, m); o.rotation.x = Math.PI / 2; o.position.z = z; o.castShadow = true; piv.add(o); return o; };
+      mk(new THREE.CylinderGeometry(r0 * 0.065, r0 * 0.065, L, 14), matCache.driftwheel1, z0 - L / 2);
+      mk(new THREE.CylinderGeometry(r0 * 0.12, r0 * 0.12, r0 * 0.16, 16), matCache.driftwheel2, z0 - r0 * 0.06);            // cubo de engate rápido
+      mk(new THREE.CylinderGeometry(r0 * 0.13, r0 * 0.13, r0 * 0.14, 16), matCache.driftwheel2, z0 - L * 0.55);             // mancal
+      { const cl = new THREE.Mesh(new THREE.BoxGeometry(r0 * 0.34, r0 * 0.1, r0 * 0.12), matCache.driftwheel2); cl.position.set(0, -r0 * 0.13, z0 - L * 0.55); cl.castShadow = true; piv.add(cl); }
+      mk(new THREE.CylinderGeometry(r0 * 0.15, r0 * 0.15, r0 * 0.05, 16), matCache.driftwheel1, z0 - L + r0 * 0.02);
       hands = tpl.steer.grips.map(g => { const o = new THREE.Object3D(); o.position.copy(g.pos); o.userData.t = g.t.clone(); spin.add(o); return o; });
       steerRig = { spin, axis: 'z', k: tpl.steer.k };
     } else {
