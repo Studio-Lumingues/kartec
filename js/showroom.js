@@ -34,6 +34,7 @@
     CAM_HEIGHT: 2.5,         // Garagem: altura da câmera
     LOOK_Y: 0.2,             // Garagem: altura do ponto olhado (menor = veículo mais alto na tela; a doca de cores fica embaixo)
     PILOT_IN_GARAGE: false,  // true mostra o piloto também dentro da Garagem
+    SIDE_PANELS: false,      // true volta os painéis de luz (pareciam janelas) nas paredes laterais da garagem
     KART_OUTSIDE: false,     // true mostra o kart no pátio da tela principal (a Garagem sempre mostra)
     PILOT_OUTSIDE: false,    // true mostra o piloto no kart da tela principal (pátio)
     WHEEL_STOPS: false,      // true volta os batentes amarelo e preto das vagas
@@ -56,7 +57,7 @@
   const ZI = -38;                                      // centro da plataforma interna (z, em unidades); a fachada fica em z = -13
   const RW = 15, Z0 = -5.5, Z1 = 12.5, RD = Z1 - Z0, RH = 4;   // sala interna em metros (origem na plataforma)
   const DOOR_W = 5, DOOR_H = 2.9, FZ = -6.5, FW = 17, FH = 4.4;
-  const WINS = [];   // janelas laterais da fachada da garagem: tiradas (antes: x ±5,5 m, 3,7 x 1,5 m)
+  const WINS = [{ x: -5.5, y: 1.95, w: 3.7, h: 1.5 }, { x: 5.5, y: 1.95, w: 3.7, h: 1.5 }];   // janelas da frente (a da direita fica onde era o "01")
   const SCONCES = [-7.9, -3.5, 3.5, 7.9];                                                     // 4 arandelas simétricas   // fachada em metros (origem no veículo do pátio)
   const ease = x => { x = Math.max(0, Math.min(1, x)); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -202,8 +203,9 @@
     K.box(1.0, 0.5, 0.48, red, -0.45, 1.18, -0.04, cab); K.plane(0.94, 0.44, K.std(null, 0.38, 0.35, cT), -0.45, 1.18, 0.205, 0, cab);
     K.cyl(0.08, 0.08, 0.3, K.std('#d9dce2', 0.3, 0.8), 0.55, 1.08, 0, cab, 14); K.cyl(0.06, 0.06, 0.22, K.std('#f2c418', 0.4, 0.2), 0.8, 1.04, 0.1, cab, 12);
     tireStack(K, 5.25, Z0 + 0.62, 4); tireStack(K, 6.3, Z0 + 0.6, 5); tireStack(K, 5.75, Z0 + 1.55, 2);
-    // laterais: painéis de luz difusa (softbox) e carrinho de ferramentas / pneus
-    [[-RW / 2 + 0.03, Math.PI / 2], [RW / 2 - 0.03, -Math.PI / 2]].forEach(s => { [-1.6, 3.6, 8.8].forEach(z => { K.plane(3.6, 1.7, K.lit('#fff1dc'), s[0], 2.15, z, s[1]); K.plane(3.8, 1.9, dark, s[0] + Math.sign(s[0]) * 0.012, 2.15, z, s[1]).receiveShadow = false; K.glow(5.4, 3.4, '#ffe9c8', 0.4, s[0] - Math.sign(s[0]) * 0.05, 2.15, z, s[1]); }); });
+    // laterais: carrinho de ferramentas / pneus. Os painéis de luz (softbox) das paredes laterais pareciam janelas num
+    // lugar onde do lado de fora tem a loja grudada: desligados (GAR.SIDE_PANELS = true volta com eles)
+    if (GAR.SIDE_PANELS) [[-RW / 2 + 0.03, Math.PI / 2], [RW / 2 - 0.03, -Math.PI / 2]].forEach(s => { [-1.6, 3.6, 8.8].forEach(z => { K.plane(3.6, 1.7, K.lit('#fff1dc'), s[0], 2.15, z, s[1]); K.plane(3.8, 1.9, dark, s[0] + Math.sign(s[0]) * 0.012, 2.15, z, s[1]).receiveShadow = false; K.glow(5.4, 3.4, '#ffe9c8', 0.4, s[0] - Math.sign(s[0]) * 0.05, 2.15, z, s[1]); }); });
     const tr = K.grp(-6.5, 1.2); K.box(0.62, 0.95, 1.5, red, 0, 0.6, 0, tr); K.box(0.66, 0.04, 1.56, dark, 0, 1.09, 0, tr);
     const tp = K.plane(1.44, 0.89, K.std(null, 0.38, 0.35, cT), 0.315, 0.6, 0, Math.PI / 2, tr); tp.castShadow = false;
     tireStack(K, 6.55, 0.6, 3); tireStack(K, 6.5, 1.75, 4);
