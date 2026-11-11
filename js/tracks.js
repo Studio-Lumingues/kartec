@@ -485,6 +485,14 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       if (o.roadFx) roadFx(m);
       if (o.alphaTest) m.alphaTest = o.alphaTest;
       if (o.opacity != null) { m.transparent = true; m.opacity = o.opacity; m.depthWrite = false; }
+      // opacidade variada ao longo da pista: trechos de ~5 m com opacidade sorteada entre opVar[0] e opVar[1] (o máximo é
+      // m.opacity), com transição suave entre um trecho e o outro. O recorte do desgaste (alphaTest) continua igual.
+      if (o.opVar) { const lo = (o.opVar[0] / o.opVar[1]).toFixed(3), seg = (o.vLen / 5).toFixed(2), sd = (o.seed || 0).toFixed(2);
+        m.customProgramCacheKey = () => 'roadline-opvar-' + lo + '-' + seg + '-' + sd;
+        m.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <alphatest_fragment>', `#include <alphatest_fragment>
+          { float y = vUv.y * ${seg} + ${sd}, i = floor(y), f = smoothstep(0.75, 1.0, fract(y));
+            float a0 = fract(sin(i * 91.7 + 3.1) * 43758.55), a1 = fract(sin((i + 1.0) * 91.7 + 3.1) * 43758.55);
+            diffuseColor.a *= mix(${lo}, 1.0, mix(a0, a1, f)); }`); }; }
       if (o.po) { m.polygonOffset = true; m.polygonOffsetFactor = -1; m.polygonOffsetUnits = o.po; }
       const mesh = new THREE.Mesh(g, m); mesh.receiveShadow = true; return add(mesh);
     }
@@ -761,8 +769,8 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     const asphaltTint = [1, 1, 1.02];
     strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: LO ? null : { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: !LO, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
     // faixas pintadas mais grossas (bordas 0,9 m, tracejado 0,8 m), tinta com desgaste variado (TX 'roadLine' + alphaTest)
-    [-1, 1].forEach(s => strip(s * (W - 1.35), s * (W - 0.45), 0.06, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, flipU: s < 0 }));
-    strip(-0.4, 0.4, 0.09, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, skip: i => !((Math.floor(i / 3) % 2)) });
+    [-1, 1].forEach(s => strip(s * (W - 1.35), s * (W - 0.45), 0.06, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, opVar: [0.62, 0.85], seed: s < 0 ? 7.3 : 0, flipU: s < 0 }));
+    strip(-0.4, 0.4, 0.09, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, opacity: 0.85, opVar: [0.62, 0.85], seed: 13.7, skip: i => !((Math.floor(i / 3) % 2)) });
     // zebra com relevo: sobe da beira do asfalto (rampinha), fica alta nos blocos e desce na borda de fora
     const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.05 * (u - 0.03) / 0.09 : u < 0.9 ? 0.05 : 0.05 - 0.04 * (u - 0.9) / 0.1;
     strip(W, W + CB, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, prof: curbProf }); strip(-W - CB, -W, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true, prof: curbProf });
