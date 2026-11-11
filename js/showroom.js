@@ -238,6 +238,7 @@
       K.box(w.w + 0.3, 0.08, 0.2, alu, fx, fy - w.h / 2 - 0.12, FZ + 0.09, R, false);
     });
     const dg = new THREE.Mesh(door.geometry, glassMaterial(dTex)); dg.position.z = -0.01; dg.renderOrder = 3; door.add(dg); glass.push(dg);
+    buildStore(K, nightUp, glass);   // loja de conveniência ao lado (mesmo kit: apaga/acende com o dia e a noite)
     // letreiro: painel escuro (pintado na fachada) com a LOGO OFICIAL 3D e luz de fundo que acende à noite
     const signGlow = K.glow(6.4, 1.9, '#ffd8b0', 0.25, 0, DOOR_H + 0.75, FZ + 0.02); nightUp.push({ o: signGlow, day: 0.18, night: 0.75 });
     let signLogo = null;
@@ -264,6 +265,233 @@
     for (let y = 0; y < H; y++) { const t = 1 - y / H, half = W * (0.08 + 0.42 * (1 - t)), a = Math.pow(t, 1.6) * 0.9;
       const gr = g.createLinearGradient(W / 2 - half, 0, W / 2 + half, 0); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,' + a.toFixed(3) + ')'); gr.addColorStop(1, 'rgba(255,255,255,0)');
       g.fillStyle = gr; g.fillRect(0, H - 1 - y, W, 1); } });
+
+  // ---------------------------------------------------------------- LOJA DE CONVENIÊNCIA (à esquerda da garagem)
+  // Referência: konbini japonesa (platibanda branca de painéis, faixa azul com o nome em módulos, vitrine de vidro com
+  // cartazes, azulejo branco nos pilares), com os letreiros em português. Metros; (x, z) = centro da fachada.
+  // Layout da frente (x local): azulejo | vitrine (vagas na frente) | porta automática | vitrine | azulejo
+  const STORE = { x: -13.9, z: FZ, w: 10, d: 9, h: 4.9, top: 2.7, sb: 2.95, st: 3.75,
+    tileL: [-5, -4.2], glassL: [-4.2, 0.4], door: [0.4, 2.6], glassR: [2.6, 4.3], tileR: [4.3, 5], apron: 1.8, stalls: [-4.2, -1.9, 0.4] };
+  const RND = Math.random;
+  // textura desenhada em metros (origem no canto de cima à esquerda); ppm = pixels por metro
+  const mkM = (wm, hm, ppm, draw) => mkTex(Math.max(8, Math.min(2048, Math.round(wm * ppm))), Math.max(8, Math.min(2048, Math.round(hm * ppm))),
+    (g, W, H) => { g.setTransform(W / wm, 0, 0, H / hm, 0, 0); draw(g, wm, hm); });
+  const inPx = (g, fn) => { g.save(); g.setTransform(1, 0, 0, 1, 0, 0); fn(g.canvas.width, g.canvas.height); g.restore(); };
+  const rep = (t, x, y) => { const c = t.clone(); c.wrapS = c.wrapT = THREE.RepeatWrapping; c.repeat.set(x, y); c.needsUpdate = true; return c; };
+  // texto simples (fonte do sistema), tamanho em metros
+  const txt = (g, s, x, y, size, fill, o) => { o = o || {}; g.save(); g.translate(x, y); g.scale(size / 100, size / 100);
+    g.font = (o.w || '700') + ' 100px ' + (o.f || '"Arial Black", Arial, Helvetica, sans-serif'); g.textAlign = o.a || 'center'; g.textBaseline = 'middle';
+    if (o.stroke) { g.strokeStyle = o.stroke[0]; g.lineWidth = o.stroke[1]; g.lineJoin = 'round'; g.strokeText(s, 0, 0); }
+    g.fillStyle = fill; g.fillText(s, 0, 0); g.restore(); };
+  const rrect = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const pick = a => a[(RND() * a.length) | 0];
+  // azulejo branco 20 cm (1 m por ladrilho de textura, repete)
+  const tileTex = () => mkM(1, 1, 256, g => {
+    g.fillStyle = '#b9bdc3'; g.fillRect(0, 0, 1, 1);
+    for (let i = 0; i < 5; i++) for (let j = 0; j < 5; j++) { const v = 232 + ((RND() * 14) | 0), x = i * 0.2 + 0.006, y = j * 0.2 + 0.006;
+      g.fillStyle = `rgb(${v},${v},${v + 3})`; g.fillRect(x, y, 0.188, 0.188);
+      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(x, y, 0.188, 0.008); g.fillStyle = 'rgba(0,0,0,.05)'; g.fillRect(x, y + 0.178, 0.188, 0.01); }
+    inPx(g, (W, H) => speckle(g, W, H, 900, 0.05)); });
+  // calçada de bloquete de concreto (1 m por ladrilho)
+  const paverTex = () => mkM(1, 1, 256, g => {
+    g.fillStyle = '#7d7f82'; g.fillRect(0, 0, 1, 1);
+    for (let r = 0; r < 8; r++) for (let c = -1; c < 5; c++) { const x = c * 0.25 + (r % 2) * 0.125, y = r * 0.125, v = 150 + ((RND() * 30) | 0);
+      g.fillStyle = `rgb(${v},${v - 2},${v - 7})`; g.fillRect(x + 0.006, y + 0.006, 0.238, 0.113); }
+    inPx(g, (W, H) => speckle(g, W, H, 3000, 0.09)); });
+  // platibanda: painéis brancos horizontais com juntas e escorrido de chuva
+  const parapetTex = (w, h) => mkM(w, h, 170, g => {
+    g.fillStyle = lin(g, 0, 0, 0, h, '#f2f3f5', '#dcdfe3'); g.fillRect(0, 0, w, h);
+    const n = 4, ph = h / n;
+    for (let i = 1; i <= n; i++) { const y = i * ph;
+      if (i < n) { g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y - 0.006, w, 0.012); g.fillStyle = 'rgba(255,255,255,.8)'; g.fillRect(0, y + 0.006, w, 0.008); }
+      for (let k = 0; k < w * 4; k++) { const x = RND() * w, l = 0.04 + RND() * 0.2, yy = y - ph + 0.012; g.fillStyle = lin(g, 0, yy, 0, yy + l, 'rgba(95,90,82,.13)', 'rgba(95,90,82,0)'); g.fillRect(x, yy, 0.008 + RND() * 0.03, l); } }
+    for (let x = 1.25; x < w; x += 1.25) { g.fillStyle = 'rgba(0,0,0,.08)'; g.fillRect(x - 0.004, 0, 0.008, h); }
+    g.fillStyle = lin(g, 0, h - 0.15, 0, h, 'rgba(0,0,0,0)', 'rgba(0,0,0,.14)'); g.fillRect(0, h - 0.15, w, 0.15); });
+  // ícones dos módulos do letreiro (brancos, centrados em x, y; raio r)
+  const ICON = {
+    cafe(g, x, y, r) { g.fillStyle = '#fff'; g.fillRect(x - r * 0.55, y - r * 0.2, r * 0.9, r * 0.75); g.lineWidth = r * 0.14; g.strokeStyle = '#fff'; g.beginPath(); g.arc(x + r * 0.4, y + r * 0.15, r * 0.24, -1.4, 1.4); g.stroke();
+      g.lineWidth = r * 0.09; [-0.25, 0.05].forEach(o => { g.beginPath(); g.moveTo(x + o * r, y - r * 0.32); g.bezierCurveTo(x + (o - 0.15) * r, y - r * 0.55, x + (o + 0.15) * r, y - r * 0.7, x + o * r, y - r * 0.95); g.stroke(); }); },
+    lanche(g, x, y, r) { g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x - r * 0.8, y + r * 0.5); g.lineTo(x + r * 0.8, y + r * 0.5); g.lineTo(x, y - r * 0.7); g.closePath(); g.fill();
+      g.fillStyle = '#7fd36b'; g.fillRect(x - r * 0.55, y + r * 0.15, r * 1.1, r * 0.12); },
+    pao(g, x, y, r) { g.fillStyle = '#fff'; g.beginPath(); g.ellipse(x, y, r * 0.85, r * 0.5, 0, 0, 6.2832); g.fill(); g.strokeStyle = '#2b6fd0'; g.lineWidth = r * 0.1;
+      [-0.35, 0, 0.35].forEach(o => { g.beginPath(); g.moveTo(x + (o - 0.12) * r, y - r * 0.3); g.lineTo(x + (o + 0.12) * r, y + r * 0.3); g.stroke(); }); },
+    relogio(g, x, y, r) { g.strokeStyle = '#fff'; g.lineWidth = r * 0.16; g.beginPath(); g.arc(x, y, r * 0.75, 0, 6.2832); g.stroke(); g.lineWidth = r * 0.13; g.beginPath(); g.moveTo(x, y - r * 0.45); g.lineTo(x, y); g.lineTo(x + r * 0.35, y + r * 0.2); g.stroke(); }
+  };
+  // faixa azul do letreiro: módulos com ícone + texto à esquerda, o nome no módulo grande (acima da porta)
+  const storeSignTex = (w, h) => mkM(w, h, 200, g => {
+    const B = 0.13, hb = h - B, ox = w / 2;   // ox: x local 0 da loja no canvas
+    g.fillStyle = lin(g, 0, 0, 0, hb, '#2d73d6', '#1a4fa6'); g.fillRect(0, 0, w, hb);
+    g.fillStyle = '#f4f6f8'; g.fillRect(0, hb, w, B); g.fillStyle = GAR.ACCENT; g.fillRect(0, hb + 0.05, w, 0.032);
+    const mods = [[-4.95, -3.4, 'CAFÉ', 'cafe'], [-3.35, -1.8, 'LANCHES', 'lanche'], [-1.75, -0.2, 'PADARIA', 'pao']];
+    mods.forEach(([a, b, s, ic]) => { const x0 = ox + a, x1 = ox + b;
+      g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x0, 0.05, x1 - x0, hb - 0.1);
+      ICON[ic](g, x0 + 0.3, hb / 2 + 0.02, 0.2); txt(g, s, x0 + 0.58, hb / 2 + 0.02, 0.2, '#fff', { a: 'left' }); });
+    // módulo do nome
+    const m0 = ox - 0.15, m1 = ox + 4.95, mc = (m0 + m1) / 2;
+    g.fillStyle = 'rgba(255,255,255,.1)'; g.fillRect(m0, 0.04, m1 - m0, hb - 0.08);
+    { const fx = m0 + 0.42, fy = hb / 2, r = 0.25; g.fillStyle = '#fff'; g.beginPath(); g.arc(fx, fy, r, 0, 6.2832); g.fill();     // bandeira quadriculada no selo
+      g.save(); g.beginPath(); g.arc(fx, fy, r * 0.82, 0, 6.2832); g.clip(); const q = r * 0.41;
+      for (let i = -2; i < 2; i++) for (let j = -2; j < 2; j++) { g.fillStyle = (i + j) & 1 ? '#fff' : '#16191f'; g.fillRect(fx + i * q, fy + j * q, q, q); } g.restore();
+      g.strokeStyle = GAR.ACCENT; g.lineWidth = 0.035; g.beginPath(); g.arc(fx, fy, r * 0.86, 0, 6.2832); g.stroke(); }
+    label(g, 'PIT STOP', mc + 0.22, hb / 2 + 0.11, 0.42, '#fff', { strokes: [['rgba(10,30,80,.35)', 9]] });
+    txt(g, 'conveniência', mc + 0.22, hb / 2 + 0.25, 0.11, 'rgba(255,255,255,.9)', { w: '700', f: 'Arial, Helvetica, sans-serif' });
+    rrect(g, m1 - 0.82, 0.14, 0.66, hb - 0.28, 0.06); g.fillStyle = GAR.ACCENT; g.fill(); txt(g, '24h', m1 - 0.49, hb / 2, 0.22, '#fff');
+    [-3.375, -1.775, -0.175].forEach(x => { g.fillStyle = 'rgba(255,255,255,.75)'; g.fillRect(ox + x - 0.012, 0, 0.024, hb); });   // juntas dos módulos
+    g.fillStyle = lin(g, 0, 0, 0, 0.12, 'rgba(255,255,255,.22)', 'rgba(255,255,255,0)'); g.fillRect(0, 0, w, 0.12); });
+  // ----- interior (visto pelo vidro) -----
+  const BOTTLES = [['#e8212f', '#ffffff', '#c41a26'], ['#2a9d4b', '#f2c418', '#1f7a3a'], ['#1f6fd1', '#4fb3ff', '#ffffff'], ['#ff8a1c', '#ffd23f', '#e8212f'], ['#7b3fa0', '#ff6fa8', '#ffffff'], ['#d9e7ef', '#9fc6dc', '#ffffff']];
+  const PROD = [['#e8212f', '#ffffff'], ['#f2c418', '#e8212f'], ['#2a9d4b', '#ffffff'], ['#1f6fd1', '#ffd23f'], ['#ff8a1c', '#5a2d0c'], ['#ffffff', '#e8212f'], ['#7b3fa0', '#ffd23f'], ['#13a3a0', '#ffffff'], ['#8a5a2b', '#f2e2c0'], ['#ffd6e0', '#e8212f']];
+  const fridgeTex = (w, h) => mkM(w, h, 150, g => {
+    g.fillStyle = '#f2f3f1'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#1a4fa6'; g.fillRect(0, 0.1, w, 0.28); txt(g, 'BEBIDAS GELADAS', w / 2, 0.24, 0.17, '#fff');
+    const y0 = 0.5, y1 = h - 0.06, dw = 0.78;
+    for (let x = 0.12; x + dw < w - 0.05; x += dw) {
+      g.fillStyle = '#2c2f33'; g.fillRect(x, y0, dw, y1 - y0);
+      g.fillStyle = lin(g, 0, y0, 0, y1, '#f4f9ff', '#d3e3f1'); g.fillRect(x + 0.035, y0 + 0.035, dw - 0.07, y1 - y0 - 0.07);
+      const n = 5, sh = (y1 - y0 - 0.1) / n;
+      for (let s = 0; s < n; s++) { const base = y0 + 0.05 + (s + 1) * sh - 0.02, pal = pick(BOTTLES);
+        for (let bx = x + 0.06; bx < x + dw - 0.09; bx += 0.07) { const bh = sh * (0.55 + RND() * 0.22); g.fillStyle = pick(pal); g.fillRect(bx, base - bh, 0.052, bh);
+          g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(bx + 0.008, base - bh + 0.02, 0.01, bh - 0.04); g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(bx + 0.016, base - bh - 0.025, 0.02, 0.025); }
+        g.fillStyle = 'rgba(120,130,140,.7)'; g.fillRect(x + 0.035, base, dw - 0.07, 0.02); }
+      g.fillStyle = 'rgba(255,255,255,.2)'; g.fillRect(x + dw * 0.6, y0 + 0.035, 0.05, y1 - y0 - 0.07);   // reflexo
+      g.fillStyle = '#a9aeb5'; g.fillRect(x + dw - 0.08, y0 + 0.75, 0.022, 0.5); } });
+  const shelfTex = (w, h, n) => mkM(w, h, 170, g => {
+    g.fillStyle = '#d9dcdf'; g.fillRect(0, 0, w, h); const lh = (h - 0.1) / n;
+    for (let s = 0; s < n; s++) { const y = 0.05 + s * lh, base = y + lh - 0.035;
+      g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(0, y, w, lh - 0.035);
+      let x = 0.03; while (x < w - 0.06) { const pw = 0.06 + RND() * 0.12, ph = lh * (0.45 + RND() * 0.45), c = pick(PROD), k = 1 + ((RND() * 4) | 0);
+        for (let i = 0; i < k && x < w - 0.06; i++) { g.fillStyle = c[0]; g.fillRect(x, base - ph, pw - 0.008, ph); g.fillStyle = c[1]; g.fillRect(x, base - ph * 0.62, pw - 0.008, ph * 0.22);
+          g.fillStyle = 'rgba(255,255,255,.25)'; g.fillRect(x, base - ph, pw * 0.2, ph); x += pw; }
+        x += 0.015; }
+      g.fillStyle = '#f5f6f7'; g.fillRect(0, base, w, 0.035); g.fillStyle = '#ffd400'; for (let px = 0.15; px < w; px += 0.42) g.fillRect(px, base + 0.005, 0.09, 0.025); } });
+  const promoTex = (title, price, c1, c2) => mkM(0.6, 1.5, 300, (g, w, h) => {
+    g.fillStyle = c1; g.fillRect(0, 0, w, h); g.fillStyle = '#fff'; g.fillRect(0.04, 0.04, w - 0.08, 0.34);
+    txt(g, title, w / 2, 0.15, 0.1, c1); txt(g, price, w / 2, 0.29, 0.09, '#222');
+    for (let r = 0; r < 6; r++) for (let c = 0; c < 3; c++) { const x = 0.05 + c * 0.175, y = 0.46 + r * 0.17; g.fillStyle = c2; g.fillRect(x, y, 0.155, 0.15); g.fillStyle = 'rgba(255,255,255,.75)'; g.fillRect(x + 0.02, y + 0.05, 0.115, 0.045); } });
+  const floorInTex = (w, d) => mkM(w, d, 60, g => {
+    g.fillStyle = '#c9c4ba'; g.fillRect(0, 0, w, d);
+    for (let x = 0; x < w; x += 0.6) for (let z = 0; z < d; z += 0.6) { const v = 226 + ((RND() * 12) | 0); g.fillStyle = `rgb(${v},${v - 3},${v - 9})`; g.fillRect(x + 0.01, z + 0.01, 0.58, 0.58); }
+    g.fillStyle = lin(g, 0, 0, 0, d, 'rgba(255,255,255,.25)', 'rgba(0,0,0,.05)'); g.fillRect(0, 0, w, d); });
+  const ceilTex = (w, d) => mkM(w, d, 50, g => {
+    g.fillStyle = '#d2d5d8'; g.fillRect(0, 0, w, d);
+    for (let x = 0.8; x < w - 0.8; x += 2.2) for (let z = 0.8; z < d - 0.5; z += 1.6) { g.fillStyle = 'rgba(255,255,255,.6)'; g.fillRect(x - 0.12, z - 0.08, 1.44, 0.46); g.fillStyle = '#fff'; g.fillRect(x, z, 1.2, 0.3); } });
+  // cartazes colados no vidro (por dentro)
+  const posterTex = k => mkM(0.6, 0.85, 320, (g, w, h) => {
+    if (k === 0) { g.fillStyle = '#f6efe2'; g.fillRect(0, 0, w, h); g.fillStyle = '#6b3d1e'; g.fillRect(0.17, 0.3, 0.26, 0.26); g.beginPath(); g.ellipse(0.3, 0.56, 0.13, 0.03, 0, 0, 6.2832); g.fill();
+      g.strokeStyle = '#6b3d1e'; g.lineWidth = 0.03; g.beginPath(); g.arc(0.45, 0.42, 0.06, -1.4, 1.4); g.stroke(); g.fillStyle = '#c99263'; g.fillRect(0.19, 0.3, 0.22, 0.03);
+      txt(g, 'CAFÉ', w / 2, 0.14, 0.12, '#6b3d1e'); txt(g, 'R$ 4,90', w / 2, 0.7, 0.1, GAR.ACCENT); }
+    else if (k === 1) { g.fillStyle = '#d8f0ff'; g.fillRect(0, 0, w, h); g.fillStyle = '#e8b06a'; g.beginPath(); g.moveTo(0.2, 0.42); g.lineTo(0.4, 0.42); g.lineTo(0.3, 0.66); g.closePath(); g.fill();
+      g.fillStyle = '#ff7fae'; g.beginPath(); g.arc(0.3, 0.38, 0.11, 0, 6.2832); g.fill(); g.fillStyle = '#fff6c9'; g.beginPath(); g.arc(0.3, 0.27, 0.08, 0, 6.2832); g.fill();
+      txt(g, 'SORVETE', w / 2, 0.12, 0.09, '#1a4fa6'); txt(g, '2 por R$ 10', w / 2, 0.75, 0.075, GAR.ACCENT); }
+    else { g.fillStyle = '#ffd23f'; g.fillRect(0, 0, w, h); g.fillStyle = '#e9a64a'; [[0.22, 0.4], [0.38, 0.42], [0.3, 0.52]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 0.085, 0, 6.2832); g.fill(); });
+      g.fillStyle = 'rgba(255,255,255,.35)'; [[0.2, 0.37], [0.36, 0.39], [0.28, 0.49]].forEach(([x, y]) => { g.beginPath(); g.arc(x, y, 0.03, 0, 6.2832); g.fill(); });
+      txt(g, 'PÃO DE', w / 2, 0.11, 0.085, '#7a3b0c'); txt(g, 'QUEIJO', w / 2, 0.21, 0.1, '#7a3b0c'); txt(g, 'quentinho!', w / 2, 0.72, 0.07, GAR.ACCENT); }
+    g.strokeStyle = 'rgba(0,0,0,.15)'; g.lineWidth = 0.01; g.strokeRect(0.005, 0.005, w - 0.01, h - 0.01); });
+  // máquina de refrigerante, lixeira de recicláveis, bandeira (nobori) e cavalete de giz
+  const vendTex = () => mkM(0.9, 1.75, 300, (g, w, h) => {
+    g.fillStyle = '#d42330'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff'; g.fillRect(0.05, 0.06, w - 0.1, 0.22); txt(g, 'REFRI GELADO', w / 2, 0.17, 0.085, '#d42330');
+    g.fillStyle = '#20232a'; g.fillRect(0.05, 0.34, 0.62, 0.86); g.fillStyle = lin(g, 0, 0.36, 0, 1.18, '#ffffff', '#e4edf5'); g.fillRect(0.07, 0.36, 0.58, 0.82);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 6; c++) { const x = 0.1 + c * 0.091, y = 0.42 + r * 0.26, p = BOTTLES[(r * 2 + c) % BOTTLES.length];
+      g.fillStyle = p[0]; g.fillRect(x, y + 0.04, 0.06, 0.16); g.fillStyle = p[1]; g.fillRect(x, y + 0.1, 0.06, 0.04); g.fillStyle = '#333'; g.fillRect(x + 0.02, y + 0.01, 0.02, 0.03);
+      g.fillStyle = '#1b1e24'; g.fillRect(x + 0.005, y + 0.215, 0.05, 0.02); }
+    g.fillStyle = '#20232a'; g.fillRect(0.71, 0.4, 0.14, 0.5); for (let i = 0; i < 5; i++) { g.fillStyle = '#9fe870'; g.fillRect(0.74, 0.45 + i * 0.08, 0.08, 0.04); }
+    g.fillStyle = '#c9ccd2'; g.fillRect(0.74, 0.96, 0.08, 0.12); g.fillStyle = '#111'; g.fillRect(0.11, 1.32, 0.5, 0.2); g.fillStyle = 'rgba(255,255,255,.18)'; g.fillRect(0.11, 1.32, 0.5, 0.03);
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, h - 0.08, w, 0.08); });
+  const binTex = () => mkM(0.7, 0.95, 300, (g, w, h) => {
+    g.fillStyle = '#d5d8dc'; g.fillRect(0, 0, w, h);
+    [[0.05, '#1f6fd1', 'LATAS'], [0.37, '#2a9d4b', 'GARRAFAS']].forEach(([x, c, s]) => { g.fillStyle = c; g.fillRect(x, 0.08, 0.28, 0.16); txt(g, s, x + 0.14, 0.16, s.length > 5 ? 0.043 : 0.06, '#fff');
+      g.fillStyle = '#23262b'; rrect(g, x + 0.04, 0.3, 0.2, 0.1, 0.05); g.fill(); g.fillStyle = 'rgba(0,0,0,.12)'; g.fillRect(x, 0.5, 0.28, 0.4); });
+    g.fillStyle = 'rgba(0,0,0,.2)'; g.fillRect(0.345, 0.05, 0.01, h - 0.1); });
+  const flagTex = (a, b, bg, fg) => mkM(0.55, 1.8, 260, (g, w, h) => {
+    g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; g.fillRect(0, 0, w, 0.06); g.fillRect(0, h - 0.06, w, 0.06); g.fillRect(0, 0, 0.04, h);
+    g.save(); g.translate(w / 2 + 0.03, h / 2); g.rotate(Math.PI / 2); txt(g, a, -0.12, -0.04, 0.27, fg); txt(g, b, 0.02, 0.17, 0.1, '#222'); g.restore(); });
+  const chalkTex = () => mkM(0.5, 0.72, 400, (g, w, h) => {
+    g.fillStyle = '#2a302c'; g.fillRect(0, 0, w, h); inPx(g, (W, H) => speckle(g, W, H, 3000, 0.08));
+    const f = '"Comic Sans MS", "Segoe Print", cursive';
+    txt(g, 'HOJE', w / 2, 0.1, 0.075, '#ffe07a', { f }); txt(g, 'café +', w / 2, 0.24, 0.06, '#f4f4f0', { f, w: '400' }); txt(g, 'pão de queijo', w / 2, 0.33, 0.05, '#f4f4f0', { f, w: '400' });
+    txt(g, 'R$ 7,90', w / 2, 0.47, 0.08, '#ff9aa8', { f }); g.strokeStyle = 'rgba(255,255,255,.6)'; g.lineWidth = 0.008; g.beginPath(); g.moveTo(0.1, 0.56); g.lineTo(0.4, 0.56); g.stroke();
+    txt(g, 'aberto 24h :)', w / 2, 0.64, 0.045, '#9fe0ff', { f, w: '400' }); });
+
+  function buildStore(K, nightUp, glass) {
+    const S = STORE, R = K.grp(S.x, S.z), hw = S.w / 2, b = (w, h, d, m, x, y, z, cast) => K.box(w, h, d, m, x, y, z, R, cast);
+    const tileT = tileTex(), tile = (w, h) => K.std(null, 0.35, 0.05, rep(tileT, w, h), 0.55);
+    const plaster = K.std('#e6e8eb', 0.85, 0), alu = K.std('#c3c7cd', 0.35, 0.75), frame = K.std('#8f949b', 0.4, 0.7), concrete = K.std('#a4a6a8', 0.9, 0);
+    const basic = map => K.tag(new THREE.MeshBasicMaterial({ map }));
+    // casca: laterais, telhado, platibanda, faixa do letreiro e marquise
+    K.plane(S.d, S.h, plaster, -hw, S.h / 2, -S.d / 2, -Math.PI / 2, R); K.plane(S.d, S.h, plaster, hw, S.h / 2, -S.d / 2, Math.PI / 2, R);
+    const roof = K.plane(S.w, S.d, K.std('#9a9da2', 0.9, 0), 0, S.h, -S.d / 2, 0, R); roof.rotation.x = -Math.PI / 2;
+    K.plane(S.w, S.h - S.st, K.std(null, 0.6, 0.05, parapetTex(S.w, S.h - S.st), 0.6), 0, (S.h + S.st) / 2, 0.02, 0, R);
+    b(S.w + 0.12, 0.09, 0.36, alu, 0, S.h + 0.045, -0.1, false);
+    const SBH = S.st - S.sb, SBD = 0.38;
+    b(S.w + 0.1, SBH, SBD, K.std('#eef0f2', 0.5, 0.1), 0, S.sb + SBH / 2, SBD / 2, false);
+    const sign = K.plane(S.w + 0.1, SBH, basic(storeSignTex(S.w + 0.1, SBH)), 0, S.sb + SBH / 2, SBD + 0.006, 0, R); sign.receiveShadow = false;
+    nightUp.push({ o: K.glow(S.w + 1.6, SBH + 1.1, '#cfe2ff', 0.1, 0, S.sb + SBH / 2, SBD + 0.03, 0, R), day: 0.05, night: 0.42 });
+    b(S.w, S.sb - S.top, 0.16, frame, 0, (S.top + S.sb) / 2, 0.06, false);                                       // viga sobre a vitrine
+    // luminárias embaixo da faixa (acendem à noite)
+    for (let x = -4.3; x <= 4.4; x += 1.45) { const l = K.cyl(0.09, 0.09, 0.02, K.lit('#fff6e6'), x, S.sb - 0.01, SBD - 0.12, R, 14); l.castShadow = false;
+      nightUp.push({ o: K.glow(1.1, 1.1, '#fff0d2', 0.1, x, S.sb - 0.1, SBD - 0.05, 0, R), day: 0.06, night: 0.7 }); }
+    // pilares de azulejo e rodapé
+    [S.tileL, S.tileR].forEach(([a, c]) => { const w = c - a; b(w, S.sb, 0.24, tile(w, S.sb), (a + c) / 2, S.sb / 2, 0.02); });
+    [S.glassL, S.glassR].forEach(([a, c]) => { const w = c - a; b(w, 0.35, 0.2, tile(w, 0.35), (a + c) / 2, 0.175, 0.03); });
+    // vitrines: vidro 3D (reflete o céu e deixa ver a loja), caixilhos de alumínio
+    const pane = (a, c, y0) => { const w = c - a, h = S.top - y0, gm = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glassMaterial(null));
+      gm.position.set((a + c) / 2, y0 + h / 2, 0.04); gm.renderOrder = 3; R.add(gm); glass.push(gm);
+      b(w, 0.06, 0.1, alu, (a + c) / 2, y0 + 0.03, 0.06, false); b(w, 0.06, 0.1, alu, (a + c) / 2, S.top - 0.03, 0.06, false); };
+    pane(S.glassL[0], S.glassL[1], 0.35); pane(S.glassR[0], S.glassR[1], 0.35);
+    [-4.2, -2.67, -1.13, 0.4, 2.6, 4.3].forEach(x => b(0.07, S.top - 0.35, 0.11, alu, x, (S.top + 0.35) / 2, 0.06, false));
+    // porta automática de correr (duas folhas), sensor em cima e adesivo
+    { const [a, c] = S.door, w = c - a, y0 = 0.14, h = S.top - y0, cx = (a + c) / 2;
+      const gm = new THREE.Mesh(new THREE.PlaneGeometry(w, h), glassMaterial(null)); gm.position.set(cx, y0 + h / 2, 0.035); gm.renderOrder = 3; R.add(gm); glass.push(gm);
+      [-1, 1].forEach(sd => { const fx = cx + sd * w / 4;
+        b(w / 2 - 0.02, 0.05, 0.06, alu, fx, y0 + 0.08, 0.05, false); b(w / 2 - 0.02, 0.05, 0.06, alu, fx, S.top - 0.1, 0.05, false);
+        b(0.05, h - 0.12, 0.06, alu, cx + sd * (w / 2 - 0.03), y0 + h / 2 - 0.02, 0.05, false); b(0.04, h - 0.12, 0.07, alu, cx + sd * 0.03, y0 + h / 2 - 0.02, 0.06, false); });
+      b(0.42, 0.1, 0.12, K.std('#2a2d33', 0.5, 0.3), cx, S.top + 0.06, 0.16, false);
+      const st = mkM(0.9, 0.12, 300, (g, w2, h2) => { g.fillStyle = '#2a9d4b'; g.fillRect(0, 0, w2, h2); txt(g, 'ENTRADA ▸', w2 / 2, h2 / 2, 0.075, '#fff'); });
+      K.plane(0.9, 0.12, basic(st), cx + w / 4, 1.25, 0.075, 0, R).receiveShadow = false; }
+    // cartazes no vidro (por dentro)
+    [[-3.45, 0], [-1.9, 2], [3.45, 1]].forEach(([x, k]) => K.plane(0.6, 0.85, basic(posterTex(k)), x, 1.62, 0.0, 0, R).receiveShadow = false);
+    // ----- interior iluminado (sempre aceso: material sem sombreamento) -----
+    const ID = 6.2, IW = S.w - 0.3, IH = S.top + 0.15, wallI = basic(mkM(2, 1, 64, (g, w, h) => { g.fillStyle = lin(g, 0, 0, 0, h, '#f1f2f0', '#dcdedb'); g.fillRect(0, 0, w, h); }));
+    { const fl = K.plane(IW, ID, basic(floorInTex(IW, ID)), 0, 0.14, -ID / 2, 0, R); fl.rotation.x = -Math.PI / 2;
+      const ce = K.plane(IW, ID, basic(ceilTex(IW, ID)), 0, IH, -ID / 2, 0, R); ce.rotation.x = Math.PI / 2;
+      K.plane(IW, IH - 0.14, basic(fridgeTex(IW, IH - 0.14)), 0, 0.14 + (IH - 0.14) / 2, -ID, 0, R);
+      K.plane(ID, IH, wallI, -IW / 2, IH / 2, -ID / 2, Math.PI / 2, R); K.plane(ID, IH, wallI, IW / 2, IH / 2, -ID / 2, -Math.PI / 2, R);
+      // gôndolas (corredores no sentido da profundidade) com cabeceira de promoção virada para a vitrine
+      const gw = 0.56, gh = 1.5, gl = 3.3, gm = basic(mkM(1, 1, 16, g => { g.fillStyle = '#c8ccd1'; g.fillRect(0, 0, 1, 1); }));
+      [[-3.0, '#e8212f', '#f2c418', 'OFERTA', 'R$ 3,99'], [-0.8, '#1f6fd1', '#ffffff', 'NOVO', 'R$ 5,49'], [1.6, '#2a9d4b', '#ffd23f', 'COMBO', 'R$ 9,90']].forEach(([x, c1, c2, t1, t2]) => {
+        const zc = -1.8 - gl / 2, sT = shelfTex(gl, gh, 5);
+        b(gw, gh, gl, gm, x, 0.14 + gh / 2, zc, false);
+        K.plane(gl, gh, basic(sT), x - gw / 2 - 0.005, 0.14 + gh / 2, zc, -Math.PI / 2, R); K.plane(gl, gh, basic(sT), x + gw / 2 + 0.005, 0.14 + gh / 2, zc, Math.PI / 2, R);
+        K.plane(gw, gh, basic(promoTex(t1, t2, c1, c2)), x, 0.14 + gh / 2, -1.8 + 0.005, 0, R); });
+      // prateleira baixa de revistas/salgadinhos junto à vitrine da esquerda, balcão do caixa à direita
+      K.plane(4.2, 1.0, basic(shelfTex(4.2, 1.0, 3)), -1.9, 0.14 + 0.5, -0.45, 0, R);
+      b(4.2, 0.04, 0.4, gm, -1.9, 1.16, -0.65, false);
+      b(1.5, 1.0, 0.6, K.lit('#f4f5f6'), 3.45, 0.64, -1.55, false); b(1.6, 0.05, 0.66, K.lit('#3b3f46'), 3.45, 1.16, -1.55, false);
+      b(0.32, 0.26, 0.05, K.lit('#22252b'), 3.1, 1.36, -1.6, false); b(0.28, 0.2, 0.01, K.lit('#7fd3ff'), 3.1, 1.36, -1.57, false);
+      b(0.8, 0.55, 0.5, K.lit('#ffb347'), 3.85, 1.46, -1.55, false);                                                    // estufa de salgados
+      b(0.82, 0.04, 0.52, K.lit('#d0d3d8'), 3.85, 1.75, -1.55, false); }
+    // ----- calçada, vagas e objetos da frente -----
+    { const pv = rep(paverTex(), S.w + 1, S.apron), ap = b(S.w + 1.0, 0.12, S.apron, K.std(null, 0.9, 0, pv, 0.35), 0, 0.06, S.apron / 2, false); ap.castShadow = false;
+      b(S.w + 1.0, 0.14, 0.14, concrete, 0, 0.07, S.apron + 0.07, false);
+      const mat = K.plane(1.8, 0.9, K.std('#3a3d42', 0.95, 0), (S.door[0] + S.door[1]) / 2, 0.125, 0.55, 0, R); mat.rotation.x = -Math.PI / 2;
+      [-3.05, -0.75].forEach(x => b(1.5, 0.11, 0.16, concrete, x, 0.055, S.apron + 0.75));   // batentes de concreto das vagas
+      // máquina de refrigerante (luz própria no painel) e lixeira de recicláveis
+      { const g = K.grp(-4.55, 0.55, R); K.box(0.9, 1.78, 0.72, K.std('#c81f2c', 0.35, 0.25), 0, 0.12 + 0.89, 0, g);
+        K.plane(0.9, 1.75, K.std(null, 0.35, 0.1, vendTex(), 1.6), 0, 0.12 + 0.89, 0.362, 0, g); }
+      { const g = K.grp(4.62, 0.45, R); K.box(0.7, 0.95, 0.45, K.std('#c9ccd1', 0.5, 0.3), 0, 0.12 + 0.475, 0, g); K.plane(0.7, 0.95, K.std(null, 0.5, 0.1, binTex(), 0.6), 0, 0.12 + 0.475, 0.227, 0, g);
+        K.box(0.74, 0.04, 0.49, K.std('#3b3f46', 0.5, 0.3), 0, 1.09, 0, g); }
+      // bandeiras verticais (nobori) com base de peso
+      [[-1.85, 1.45, 'CAFÉ', 'fresquinho', '#ffd23f', GAR.ACCENT, 0.5], [4.0, 1.45, 'SORVETE', 'geladinho', '#ffffff', '#1f6fd1', -0.35]].forEach(([x, z, a, c, bg, fg, ry]) => {
+        const g = K.grp(x, z, R); g.rotation.y = ry; const pole = K.std('#d6d9de', 0.35, 0.7);
+        K.cyl(0.18, 0.2, 0.12, K.std('#2a2d33', 0.8, 0), 0, 0.18, 0, g, 18); K.cyl(0.02, 0.02, 2.6, pole, 0, 1.4, 0, g, 8); K.cyl(0.012, 0.012, 0.6, pole, 0.3, 2.62, 0, g, 6).rotation.z = Math.PI / 2;
+        const fm = K.std(null, 0.85, 0, flagTex(a, c, bg, fg), 0.6); fm.side = THREE.DoubleSide; K.plane(0.55, 1.8, fm, 0.3, 1.72, 0, 0, g).castShadow = true; });
+      // cavalete de giz (A)
+      { const g = K.grp(3.05, 1.15, R); g.rotation.y = -0.45; const wood = K.std('#8a5a2b', 0.8, 0), ch = K.std(null, 0.9, 0, chalkTex(), 0.5);
+        [[-0.2, 0.11, 0], [0.2, -0.11, Math.PI]].forEach(([a, z, ry]) => { const p = new THREE.Group(); p.position.set(0, 0.12 + 0.42, z); p.rotation.set(a, ry, 0); g.add(p);
+          K.box(0.58, 0.84, 0.03, wood, 0, 0, 0, p); K.plane(0.5, 0.72, ch, 0, 0.01, 0.017, 0, p).receiveShadow = false; }); } }
+    return R;
+  }
 
   // ---------------------------------------------------------------- vidro 3D (reflexo de ambiente + Fresnel + transparência)
   // tEnv: cubemap da própria cena (CubeCamera, atualizado de tempos em tempos: acompanha o dia/noite).
@@ -292,6 +520,63 @@
   // ---------------------------------------------------------------- mundo do lobby com os assets da CORRIDA (unidades da cena)
   // grama (GfxFX.grassTone + textura 'grass'), asfalto (GfxFX.asphaltMaterial), zebras ('curb'), pinheiros (Pines),
   // moitas (Bush), poste de luz (LampPost), cones e pneus (Props)
+  // asfalto do pátio do lobby (mais realista que o estilizado da pista): uma textura grande sem repetição com desgaste,
+  // remendos, trincas seladas, manchas de óleo, marcas de pneu e faixas pintadas (vagas da loja, zebrado do portão) +
+  // um ladrilho de agregado (pedrinhas) multiplicado por cima no shader, em duas escalas. Unidades da cena (x, z).
+  function lobbyAsphalt(X0, X1, Z0, Z1) {
+    const AW = X1 - X0, AD = Z1 - Z0, ppu = Math.min(2048 / AW, 2048 / AD), S = STORE, sx = lx => (S.x + lx) * U, sz = lz => (S.z + lz) * U;
+    const macro = mkTex(Math.round(AW * ppu), Math.round(AD * ppu), (g, W, H) => {
+      g.setTransform(ppu, 0, 0, ppu, -X0 * ppu, -Z0 * ppu);
+      g.fillStyle = '#5a5c60'; g.fillRect(X0, Z0, AW, AD);
+      for (let i = 0; i < 170; i++) { const x = X0 + RND() * AW, z = Z0 + RND() * AD, r = 3 + RND() * 16, l = RND() < 0.45;
+        g.fillStyle = rad(g, x, z, r, [[0, l ? 'rgba(255,255,255,.05)' : 'rgba(0,0,0,.08)'], [1, 'rgba(0,0,0,0)']]); g.fillRect(x - r, z - r, 2 * r, 2 * r); }
+      // remendos (asfalto mais novo e escuro, com a junta selada em volta)
+      [[-38, 8, 9, 6, 0.05], [14, 18, 7, 10, -0.04], [-6, 24, 12, 5, 0.02], [25, 1, 6, 6, 0.1]].forEach(([x, z, w, d, a]) => { g.save(); g.translate(x, z); g.rotate(a);
+        g.fillStyle = 'rgba(28,29,32,.3)'; g.fillRect(-w / 2, -d / 2, w, d); g.strokeStyle = 'rgba(16,16,18,.55)'; g.lineWidth = 0.2; g.strokeRect(-w / 2, -d / 2, w, d); g.restore(); });
+      // trincas seladas com piche (linhas tortas que se ramificam)
+      const crack = (x, z, a, n, w) => { g.strokeStyle = 'rgba(24,24,26,.45)'; g.lineCap = g.lineJoin = 'round'; g.lineWidth = w; g.beginPath(); g.moveTo(x, z);
+        for (let i = 0; i < n; i++) { a += (RND() - 0.5) * 0.7; x += Math.cos(a) * 0.9; z += Math.sin(a) * 0.9; g.lineTo(x, z);
+          if (RND() < 0.07) { g.stroke(); crack(x, z, a + (RND() < 0.5 ? 1 : -1) * (0.6 + RND() * 0.6), 4 + ((RND() * 10) | 0), w * 0.7); g.lineWidth = w; g.strokeStyle = 'rgba(24,24,26,.45)'; g.beginPath(); g.moveTo(x, z); } }
+        g.stroke(); };
+      for (let i = 0; i < 9; i++) crack(X0 + RND() * AW, Z0 + RND() * AD, RND() * 6.28, 8 + ((RND() * 20) | 0), 0.08 + RND() * 0.06);
+      // trilhas escuras dos pneus saindo do portão da garagem (somem aos poucos)
+      for (let z = Z0; z < Z0 + 30; z += 1) { const k = 1 - (z - Z0) / 30; [-2.3, 2.3].forEach(x => { const gr = g.createLinearGradient(x - 1.3, 0, x + 1.3, 0);
+        gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, 'rgba(0,0,0,' + (0.14 * k).toFixed(3) + ')'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - 1.3, z, 2.6, 1.02); }); }
+      // marcas de borracha (cavalos de pau de kart) e manchas de óleo
+      const skid = (cx, cz, r, a0, a1) => [-0.8, 0.8].forEach(o => { g.strokeStyle = 'rgba(14,14,15,.38)'; g.lineWidth = 0.45; g.beginPath(); g.arc(cx, cz, r + o, a0, a1); g.stroke(); });
+      skid(17, 15, 5, 0.3, 3.9); skid(1, 22, 7, 3.6, 5.6); skid(23, 25, 4, 1.5, 5.2); skid(-20, 18, 6, 4.4, 6.0);
+      const oil = (x, z, r, a) => { g.fillStyle = rad(g, x, z, r, [[0, 'rgba(12,12,14,' + a + ')'], [0.7, 'rgba(12,12,14,' + (a * 0.55).toFixed(3) + ')'], [1, 'rgba(12,12,14,0)']]); g.fillRect(x - r, z - r, 2 * r, 2 * r); };
+      [-3.05, -0.75].forEach(lx => { for (let k = 0; k < 4; k++) oil(sx(lx) + (RND() - 0.5) * 2.2, sz(S.apron + 2.6) + (RND() - 0.5) * 3.5, 0.6 + RND() * 1.4, 0.3); });
+      for (let k = 0; k < 10; k++) oil(X0 + RND() * AW, Z0 + RND() * AD, 0.4 + RND() * 1.2, 0.22);
+      // tampa de bueiro e grelha de drenagem
+      { const x = 24, z = 18, r = 1.3; g.fillStyle = '#34353a'; g.beginPath(); g.arc(x, z, r, 0, 6.2832); g.fill(); g.strokeStyle = 'rgba(170,170,175,.35)'; g.lineWidth = 0.12; g.stroke();
+        g.strokeStyle = 'rgba(0,0,0,.5)'; g.lineWidth = 0.08; for (let k = -3; k <= 3; k++) { const yy = k * 0.32, hx = Math.sqrt(r * r - yy * yy) * 0.82; g.beginPath(); g.moveTo(x - hx, z + yy); g.lineTo(x + hx, z + yy); g.stroke(); } }
+      { const x = sx(-5.2), z = sz(S.apron) + 0.6; g.fillStyle = '#26272b'; g.fillRect(x - 1.6, z - 0.35, 3.2, 0.7); g.fillStyle = 'rgba(120,120,125,.5)'; for (let k = 0; k < 14; k++) g.fillRect(x - 1.5 + k * 0.22, z - 0.3, 0.07, 0.6); }
+      // faixas pintadas: vagas da loja, zebrado na frente da porta dela e do portão da garagem
+      const paint = (x0, z0, x1, z1, c, w) => { g.strokeStyle = c; g.lineWidth = w; g.lineCap = 'butt'; g.beginPath(); g.moveTo(x0, z0); g.lineTo(x1, z1); g.stroke(); };
+      S.stalls.forEach(lx => paint(sx(lx), sz(S.apron) + 0.3, sx(lx), sz(S.apron + 5.2), 'rgba(238,238,232,.85)', 0.26));
+      const hatch = (x0, z0, x1, z1, c) => { g.save(); g.beginPath(); g.rect(x0, z0, x1 - x0, z1 - z0); g.clip(); g.strokeStyle = c; g.lineWidth = 0.3;
+        for (let t = -(z1 - z0); t < x1 - x0; t += 1.1) { g.beginPath(); g.moveTo(x0 + t, z1); g.lineTo(x0 + t + (z1 - z0), z0); g.stroke(); } g.restore(); g.strokeStyle = c; g.lineWidth = 0.24; g.strokeRect(x0, z0, x1 - x0, z1 - z0); };
+      hatch(sx(S.door[0]), sz(S.apron) + 0.3, sx(S.door[1]), sz(S.apron + 2.6), 'rgba(238,238,232,.78)');
+      hatch(-DOOR_W * U / 2, FZ * U + 0.4, DOOR_W * U / 2, FZ * U + 6.5, 'rgba(226,182,52,.72)');
+      g.fillStyle = lin(g, 0, Z0, 0, Z0 + 2.2, 'rgba(0,0,0,.22)', 'rgba(0,0,0,0)'); g.fillRect(X0, Z0, AW, 2.2);   // sujeira junto às paredes
+      // grão fino por cima de tudo (também gasta a tinta das faixas)
+      inPx(g, (W2, H2) => { for (let i = 0; i < W2 * H2 * 0.05; i++) { const v = (RND() < 0.5 ? 60 : 115) + ((RND() * 30) | 0); g.fillStyle = `rgba(${v},${v},${v + 3},${(RND() * 0.55).toFixed(2)})`; g.fillRect(RND() * W2, RND() * H2, 1 + RND() * 1.6, 1 + RND() * 1.6); } });
+    });
+    // agregado: pedrinhas de vários tons sobre ligante escuro (repete a cada 3 unidades; média ~0,5 -> não muda o brilho)
+    const det = mkTex(512, 512, (g, W, H) => { g.fillStyle = 'rgb(110,110,112)'; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 24000; i++) { const v = 80 + ((RND() * 125) | 0), r = 0.7 + RND() * RND() * 3.6, x = RND() * W, y = RND() * H, e = 0.55 + RND() * 0.45, a = RND() * 3.14;
+        g.fillStyle = `rgb(${v},${v},${v + 2})`; [[0, 0], [W, 0], [-W, 0], [0, H], [0, -H]].forEach(([ox, oy]) => { if (ox && Math.abs(x + ox - W / 2) > W / 2 + 6) return; if (oy && Math.abs(y + oy - H / 2) > H / 2 + 6) return;
+          g.beginPath(); g.ellipse(x + ox, y + oy, r, r * e, a, 0, 6.2832); g.fill(); }); } });
+    det.encoding = THREE.LinearEncoding; det.wrapS = det.wrapT = THREE.RepeatWrapping; macro.anisotropy = det.anisotropy = ANISO;
+    const mat = new THREE.MeshStandardMaterial({ map: macro, roughness: 0.92, metalness: 0 }), u = { tDet: { value: det }, uRep: { value: new THREE.Vector2(AW / 3, AD / 3) } };
+    mat.onBeforeCompile = sh => { sh.uniforms.tDet = u.tDet; sh.uniforms.uRep = u.uRep;
+      sh.fragmentShader = 'uniform sampler2D tDet; uniform vec2 uRep;\n' + sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
+        { vec3 d1 = texture2D(tDet, vUv * uRep).rgb, d2 = texture2D(tDet, vUv * uRep * 0.41 + vec2(0.31, 0.67)).rgb;
+          diffuseColor.rgb *= mix(d1, d2, 0.35) * 1.9; }`); };
+    mat.customProgramCacheKey = () => 'lobby-asphalt-v1'; mat.__ink = true;
+    return mat;
+  }
   function buildWorld(Wg) {
     const out = { lights: [], halos: [], lampGlass: null }, V = (x, z) => [x * U, z * U];
     // grama: mesmo chão da corrida (ladrilho de 7 unidades, variação de cor por vértice, tom natural)
@@ -302,18 +587,19 @@
       g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
       const mat = window.GfxFX && GfxFX.grassTone ? GfxFX.grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', GS / 7, GS / 7), vertexColors: true })) : new THREE.MeshLambertMaterial({ color: 0x5d8f3a });
       const m = new THREE.Mesh(g, mat); m.rotation.x = -Math.PI / 2; m.position.set(0, -0.02, -40); m.receiveShadow = true; Wg.add(m); }
-    // pátio de asfalto (mesmo material da pista) com zebras nas bordas
-    const AX0 = -32, AX1 = 32, AZ0 = FZ * U, AZ1 = 30, AW = AX1 - AX0, AD = AZ1 - AZ0;
+    // pátio de asfalto (realista, só do lobby: lobbyAsphalt) com zebras nas bordas
+    const AX0 = -50, AX1 = 32, AZ0 = FZ * U, AZ1 = 30, AW = AX1 - AX0, AD = AZ1 - AZ0;   // vai até a frente da loja de conveniência
     { const g = new THREE.PlaneGeometry(AW, AD); g.rotateX(-Math.PI / 2);
-      const mat = window.GfxFX && GfxFX.asphaltMaterial ? GfxFX.asphaltMaterial(AW / 7, AD / 7) : new THREE.MeshPhongMaterial({ map: TX.get('asphalt', AW / 7, AD / 7) });
+      const mat = lobbyAsphalt(AX0, AX1, AZ0, AZ1);
       mat.polygonOffset = true; mat.polygonOffsetFactor = -1; mat.polygonOffsetUnits = -2;
       const m = new THREE.Mesh(g, mat); m.position.set((AX0 + AX1) / 2, 0.02, (AZ0 + AZ1) / 2); m.receiveShadow = true; Wg.add(m);
       const CB = 1.8, curb = (w, d, x, z, ry, len) => { const t = TX.get('curb', 1, len / 4); const cm = new THREE.MeshLambertMaterial({ map: t, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -3 });
         const pg = new THREE.PlaneGeometry(w, d); pg.rotateX(-Math.PI / 2); const cmm = new THREE.Mesh(pg, cm); cmm.rotation.y = ry; cmm.position.set(x, 0.04, z); cmm.receiveShadow = true; Wg.add(cmm); };
       curb(CB, AD, AX0 - CB / 2, (AZ0 + AZ1) / 2, 0, AD); curb(CB, AD, AX1 + CB / 2, (AZ0 + AZ1) / 2, Math.PI, AD); curb(CB, AW + 2 * CB, 0, AZ1 + CB / 2, Math.PI / 2, AW + 2 * CB); }
-    // pinheiros da corrida (4 modelos, instanciados por modelo) onde ficavam as árvores de bolinhas
+    // pinheiros da corrida (4 modelos, instanciados por modelo) onde ficavam as árvores de bolinhas (os do lado esquerdo
+    // da garagem deram lugar à loja de conveniência)
     if (window.Pines) {
-      const T = [[-11.5, -9, 1.5], [-14.5, -5.5, 1.2], [-18, -12, 1.8], [-12, -17, 1.4], [-23, -4, 1.3], [-27, -14, 2], [12, -9, 1.4], [15.5, -13, 1.9], [19, -6, 1.2], [24, -11, 1.6], [11.5, -18, 1.3], [-33, -8, 1.7], [31, -17, 2.1]];
+      const T = [[-12, -17, 1.4], [-28, -3, 1.3], [-27, -14, 2], [12, -9, 1.4], [15.5, -13, 1.9], [19, -6, 1.2], [24, -11, 1.6], [11.5, -18, 1.3], [-33, -8, 1.7], [31, -17, 2.1]];
       const mat = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), { amp: 0.02, h0: 3.0, freq: 0.9 }), d = new THREE.Object3D();
       [0, 1, 2, 3].forEach(v => { const L = T.filter(t => Pines.variantAt(t[0], t[1]) === v); if (!L.length) return;
         const im = new THREE.InstancedMesh(Pines.attach(Pines.single('hi', v), L.map(() => v)), mat, L.length);
@@ -339,7 +625,7 @@
     // cones e pilhas de pneus da corrida
     if (window.Props && Props.coneAssets) {
       const C = Props.coneAssets();
-      [[4.3, 2.9], [5.1, -1.4], [-4.5, 3.6]].forEach(([x, z], i) => { const g = new THREE.Group(); g.position.set(x * U, 0.02, z * U); g.rotation.y = i * 0.7; g.scale.setScalar(1.15);
+      [[4.3, 2.9], [5.1, -1.4]].forEach(([x, z], i) => { const g = new THREE.Group(); g.position.set(x * U, 0.02, z * U); g.rotation.y = i * 0.7; g.scale.setScalar(1.15);
         const b = new THREE.Mesh(C.geo, C.body), bs = new THREE.Mesh(C.base, C.baseM); b.castShadow = true; bs.receiveShadow = true; g.add(b, bs); Wg.add(g); });
       const T = Props.tireAssets(), TR = Props.TIRE, STEP = TR.H * 2 * 0.96;
       [[-25.2, 7.8, 3], [-23.2, 7.8, 4], [-21.2, 7.8, 3], [-22.2, 9.8, 2]].forEach(([x, z, n], k) => { for (let h = 0; h < n; h++) { const m = new THREE.Mesh(T.geo, T.mat);
