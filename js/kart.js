@@ -542,13 +542,13 @@
       }
       let turn = steer * P.TURN * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / P.MAX)) * (1 - 0.45 * (this.wheelT || 0));
       if (this.drifting) {
-        // drift = arco de raio definido (dentro ~38 m, neutro ~62 m, fora ~120 m)
+        // drift = arco de raio definido (dentro ~26 m, neutro ~42 m, fora ~84 m: CFG.PHYS.DRIFT_R_*)
         this.driftSteer += (steer - this.driftSteer) * Math.min(1, 7 * dt);
         const rel = this.driftSteer * this.driftDir;
         const Rd = rel >= 0 ? P.DRIFT_R_MID - rel * (P.DRIFT_R_MID - P.DRIFT_R_IN) : P.DRIFT_R_MID - rel * (P.DRIFT_R_OUT - P.DRIFT_R_MID);
         // entrada suave: nos primeiros 0,2 s o giro passa do giro normal para o arco do drift (sem "tranco" no volante)
         const din = Math.min(1, this.driftT / 0.2), dinS = din * din * (3 - 2 * din);
-        turn += (this.driftDir * Math.min(1.5, Math.abs(this.speed) / Rd) - turn) * dinS;
+        turn += (this.driftDir * Math.min(P.DRIFT_TURN_MAX || 1.5, Math.abs(this.speed) / Rd) - turn) * dinS;
         const corner = tr.cornerAt ? tr.cornerAt(this.idx) : 1;
         const rate = (rel > 0.3 ? 1.3 : 1) * (0.1 + 0.9 * corner) * (this.mtCool > 0 ? 0.3 : 1) * (this.boostT > 0 ? 0.5 : 1) * (grip < 1 ? 1.1 : 1);   // molhado: carrega um pouco mais rápido
         this.driftT += dt; this.driftCharge = (this.driftCharge || 0) + dt * rate;
@@ -559,7 +559,7 @@
       this.ang += turn * dt * Math.max(-1, Math.min(1, this.speed / 10));
       const dA = wrapA(this.ang - this.mvAng);
       // pouca aderência: o rumo do kart demora mais para seguir o bico (ele escorrega para fora da curva)
-      if (this.drifting || grip < 0.99 || Math.abs(dA) > 0.08) this.mvAng += dA * Math.min(1, (this.drifting ? 7 : 9) * grip * grip * dt); else this.mvAng = this.ang;
+      if (this.drifting || grip < 0.99 || Math.abs(dA) > 0.08) this.mvAng += dA * Math.min(1, (this.drifting ? (P.DRIFT_GRIP || 7) : 9) * grip * grip * dt); else this.mvAng = this.ang;
       // na água: gotas (caem, esticam e somem ao bater) + névoa de respingo, abrindo em leque para os lados e para trás
       if (wet) { this.speed -= this.speed * 1.8 * dt; const sp = Math.abs(this.speed);
         if (sp > 4) { this.splashAcc = (this.splashAcc || 0) + dt * Math.min(90, 20 + sp * 0.8);
@@ -639,7 +639,7 @@
       // ângulo da derrapada com MOLA: na entrada a traseira passa um pouco do ponto e "assenta"; fechando o arco ela abre mais,
       // abrindo o arco ela endireita; ao soltar volta macio, sem estalo
       const relD = this.drifting ? this.driftSteer * this.driftDir : 0;
-      const slipT = this.drifting ? this.driftDir * (0.32 + 0.13 * Math.max(0, relD) - 0.08 * Math.max(0, -relD)) : 0;
+      const slipT = this.drifting ? this.driftDir * (0.24 + 0.1 * Math.max(0, relD) - 0.06 * Math.max(0, -relD)) : 0;   // traseira abre menos (era 0,32 + 0,13)
       this.slipV = (this.slipV || 0) + ((slipT - this.slip) * 120 - (this.slipV || 0) * 13) * sd; this.slip += this.slipV * sd;
       this.m.pivot.rotation.y = this.slip + spinY;               // gira carroceria E rodas juntas (+ giro de 360 da manobra)
       // contra-esterço: no drift as rodas da frente apontam para onde o kart está INDO (contra o giro da carroceria),

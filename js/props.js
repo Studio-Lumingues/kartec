@@ -109,7 +109,7 @@
         // parede de pneus no ápice + 3 cones antes da curva
         // pilhas de pneus em duplas encostadas (ao longo da pista), a cada ~8,6 m em volta do ápice
         for (let k = -2; k <= 2; k++) { const j = (i + k * 2 + N) % N; [-0.5, 0.5].forEach(e => { const p = tr.side(j, out * off, 0); p.x += T[j].x * e * 2 * TIRE.R; p.z += T[j].z * e * 2 * TIRE.R; p.y = ground(p, j); tires.push({ p, j, ang: Math.atan2(T[j].x, T[j].z) }); }); }
-        for (let k = 1; k <= 3; k++) { const j = (i - 6 - k * 3 + N) % N; if (busy[j]) continue; const p = tr.side(j, out * (W + (tr.CB || 1.8) + 1.1), 0); p.y = ground(p, j); p.j = j; cones.push(p); }
+        for (let k = 1; k <= 3; k++) { const j = (i - 6 - k * 3 + N) % N; if (busy[j]) continue; const p = tr.side(j, out * (W + (tr.CB || 3.6) + 1.1), 0); p.y = ground(p, j); p.j = j; cones.push(p); }
         cool = 26;
       }
       const posts = [];   // balizadores (postinhos brancos) removidos

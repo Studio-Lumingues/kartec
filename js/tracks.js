@@ -369,7 +369,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
   // ===================================================================================
   function build(def, scene) {
     const L = layout(def), S = L.S, T = L.T, W = def.W; N = def.N || 500;
-    const CB = 1.8;   // largura da zebra
+    const CB = 3.6;   // largura da zebra (era 1,8: dobrou)
     // chão e mar cobrem a pista + o alcance da névoa em qualquer direção (antes: placa fixa de 3 km, a borda aparecia nas pistas maiores)
     const EXT = Math.max(Math.abs(L.bbox.x0), Math.abs(L.bbox.x1), Math.abs(L.bbox.z0), Math.abs(L.bbox.z1));
     const GS = Math.ceil((EXT + (def.fogFar || 820) + 400) * 2 / 100) * 100, RAD = Math.max(L.bbox.x1 - L.bbox.x0, L.bbox.z1 - L.bbox.z0) / 2;
