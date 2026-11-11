@@ -1131,9 +1131,12 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         if (tr.shortcuts.length) { const sg = tr.shortcutGround(p.x, p.z); if (sg !== null && (hs !== null || sg > h)) h = sg; }
         // inclinação do chão fora do asfalto (atalhos, barrancos, grama): mede a altura 0,9 m à frente/atrás e 0,7 m de cada lado
         // -> o kart empina/abaixa o bico e inclina de lado acompanhando o relevo, como no asfalto (antes andava sempre reto)
-        if (heading !== undefined) { const onDirt = hs !== null, hf = (x, z) => { const q = tr.nearest({ x, z }, n.i);
+        if (heading !== undefined) { const onDirt = hs !== null; let hf = (x, z) => { const q = tr.nearest({ x, z }, n.i);
             if (q.dist <= W + CB) return tr.roadBase + hAt(q.i + q.f); const t = terrain(x, z, q.dist, q.i + q.f), sg = tr.shortcuts.length ? tr.shortcutGround(x, z) : null;
             return sg === null ? t : onDirt ? sg : Math.max(t, sg); };
+          // ponto de amostra caindo em cima de pista elevada/barranco bem acima do kart: é parede, não chão (senão o kart
+          // embaixo da lateral da ponte inclinava todo, como se estivesse meio em cima dela, e parecia afundar)
+          const hf0 = hf; hf = (x, z) => { const v = hf0(x, z); return v > h + 0.9 ? h : v; };
           const fx = Math.sin(heading), fz = Math.cos(heading), F = 0.9, R = 0.7;
           slope = Math.max(-0.6, Math.min(0.6, (hf(p.x + fx * F, p.z + fz * F) - hf(p.x - fx * F, p.z - fz * F)) / (2 * F)));
           roll = Math.max(-0.45, Math.min(0.45, Math.atan((hf(p.x + fz * R, p.z - fx * R) - hf(p.x - fz * R, p.z + fx * R)) / (2 * R)))); } }   // na terra: exatamente o chão desenhado   // em cima do barranco/terra do atalho: mesma altura do desenho   // fora da pista ao lado da ponte: descida suave
