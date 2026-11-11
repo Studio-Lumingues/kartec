@@ -618,6 +618,17 @@
     pose(dt, steer, boosting, off, wet, gr) {
       const g = this.m.group, b = this.m.body;
       this.m.flames.forEach(f => { f.visible = boosting; f.scale.set(1, 0.8 + Math.random() * 0.7, 1); });
+      // escapamento esquenta rápido no turbo e esfria devagar (a cor de metal queimado fica um tempo)
+      this.exHeat = Math.max(0, Math.min(1, (this.exHeat || 0) + (boosting ? 1.1 : -0.16) * dt)); if (this.m.setHeat) this.m.setHeat(this.exHeat, (this.fxT || 0));
+      // MARCHAS (visual + som): 5 marchas pela velocidade. Troca para cima acelerando = "quicadinha": o torque corta
+      // (bico desce um tiquinho) e volta na marcha nova (traseira agacha, bico sobe) e a carroceria assenta.
+      { const GB = [0, 0.16, 0.33, 0.52, 0.74], sp = Math.abs(this.speed) / P.MAX, a = (Math.abs(this.speed) - (this._spPrev || 0)) / Math.max(dt, 1e-3); this._spPrev = Math.abs(this.speed);
+        this.accelV = (this.accelV || 0) + (a - (this.accelV || 0)) * Math.min(1, 8 * dt);
+        let gr = this.gear || 0;
+        if (gr < GB.length - 1 && sp > GB[gr + 1]) { gr++; if (!this.air && this.accelV > 2 && sp > 0.08) { this.pitchV += 1.0; this.shiftT = 0.09; this.events('shift', this, gr); } }
+        else if (gr > 0 && sp < GB[gr] * 0.86) gr--;
+        this.gear = gr; this.gearFrac = Math.max(0, Math.min(1.2, (sp - GB[gr]) / ((gr < GB.length - 1 ? GB[gr + 1] : 1.02) - GB[gr])));
+        if (this.shiftT > 0) { this.shiftT -= dt; if (this.shiftT <= 0) { this.pitchV -= 2.1; this.squash = Math.max(this.squash, 0.07); } } }
       g.rotation.order = 'YXZ'; g.rotation.y = this.ang;
       const tp = this.air ? Math.max(-0.35, Math.min(0.3, -this.vy * 0.03)) : (wet ? 0 : -Math.atan((gr && gr.slope) || 0));   // fora do asfalto também (relevo dos atalhos)
       g.rotation.x += (tp - g.rotation.x) * Math.min(1, 10 * dt);

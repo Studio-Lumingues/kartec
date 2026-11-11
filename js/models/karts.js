@@ -335,6 +335,33 @@
     const flames = tpl.flames.map(fl => {
       const f = new THREE.Mesh(new THREE.ConeGeometry(fl.r * 0.95, 1.8, 16), new THREE.MeshBasicMaterial({ color: 0xff9a2a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
       f.position.copy(fl.pos).addScaledVector(fl.dir, 0.9); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; body.add(f); return f; });
+    // ESCAPAMENTO SUPERAQUECIDO: uma "luva" por cima de cada ponteira (um pouco mais larga que o cano) que vai pegando
+    // a cor de metal muito quente com o nitro: na ponta brilha laranja/vermelho, para trás vem o "azulado" de titânio
+    // queimado (vermelho escuro -> roxo -> azul -> palha dourado). Esquenta rápido no turbo e esfria devagar (a cor fica
+    // um tempo). setHeat(0..1) é chamado pelo kart.js a cada quadro. A ponta ganha um brilho aditivo que pulsa.
+    const heatU = { uHeat: { value: 0 }, uT: { value: 0 } };
+    const heatM = new THREE.ShaderMaterial({ uniforms: heatU, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      vertexShader: 'varying float vA; varying vec3 vN; varying vec3 vV; void main(){ vA = uv.y; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: `uniform float uHeat; uniform float uT; varying float vA; varying vec3 vN; varying vec3 vV;
+        void main(){
+          float h = uHeat, a = vA;                                   // a: 0 = para dentro do cano, 1 = ponta (saída)
+          vec3 straw = vec3(0.86, 0.68, 0.32), blue = vec3(0.18, 0.36, 0.95), purple = vec3(0.52, 0.18, 0.78), dred = vec3(0.62, 0.08, 0.1), hot = vec3(1.0, 0.36, 0.08), white = vec3(1.0, 0.78, 0.42);
+          // as faixas de cor andam para dentro do cano conforme esquenta
+          float x = a + (1.0 - h) * 0.55;
+          vec3 c = straw; c = mix(c, blue, smoothstep(0.2, 0.36, x)); c = mix(c, purple, smoothstep(0.4, 0.55, x)); c = mix(c, dred, smoothstep(0.6, 0.72, x)); c = mix(c, hot, smoothstep(0.78, 0.9, x)); c = mix(c, white, smoothstep(0.93, 1.0, x) * h);
+          float glow = smoothstep(0.7, 1.0, x) * h * (0.85 + 0.15 * sin(uT * 23.0 + a * 9.0));
+          float fres = pow(1.0 - abs(dot(vN, vV)), 2.0);
+          vec3 col = c * (0.75 + 0.35 * fres) + vec3(1.0, 0.45, 0.15) * glow * 0.9;
+          float alpha = clamp(h * 1.6, 0.0, 1.0) * smoothstep(0.0, 0.22, a) * (0.78 + 0.22 * glow);
+          gl_FragColor = vec4(col, alpha);
+        }` });
+    heatM.userData.unique = true;
+    const heatGlowM = new THREE.MeshBasicMaterial({ color: 0xff5a1e, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }); heatGlowM.userData.unique = true;
+    const heatParts = tpl.flames.map(fl => { const L = fl.r * 7, g = new THREE.CylinderGeometry(fl.r * 1.12, fl.r * 1.12, L, 20, 8, true);
+      const sl = new THREE.Mesh(g, heatM); sl.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); sl.position.copy(fl.pos).addScaledVector(fl.dir, -L / 2 + fl.r * 0.15);
+      sl.userData.dynamic = true; sl.userData.noOutline = true; sl.userData.noShadow = true; sl.renderOrder = 2; body.add(sl);
+      const gl = new THREE.Mesh(new THREE.SphereGeometry(fl.r * 1.7, 14, 10), heatGlowM); gl.position.copy(fl.pos); gl.userData.dynamic = true; gl.userData.noOutline = true; gl.userData.noShadow = true; body.add(gl);
+      return sl; });
     // lente dos faróis (acende à noite) sobre o farol do modelo
     const lensPos = tpl.lights.map(l => { const lensM = new THREE.MeshBasicMaterial({ color: 0xd8d2b0 }); lensM.userData.unique = true;
       const lens = new THREE.Mesh(new THREE.CircleGeometry(l.r, 20), lensM); lens.position.copy(l.pos); lens.userData.dynamic = true;   // sem body.add: o farol do próprio modelo aparece; o objeto só guarda o tom (kart.js)
@@ -362,6 +389,8 @@
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
+      // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
+      setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.35) * 0.9 * (0.85 + 0.15 * Math.sin((t || 0) * 31)); heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; flatPaints.forEach(m => m.color.set(hex).convertSRGBToLinear()); },

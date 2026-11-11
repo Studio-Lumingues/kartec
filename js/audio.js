@@ -19,11 +19,11 @@
   //   src: gravação base | r0/r1: velocidade de reprodução em marcha lenta / giro máximo | gears: 0 = sem marchas
   //   hp/lp: corta graves/agudos | pf/pg: realce (Hz/dB) | sub: camada uma oitava abaixo (corpo) | drive: saturação
   const ENGINES = {
-    gt:      { name: 'Kartec GT (kart de corrida, giro alto)',  src: 'kart-engine', r0: 0.72, r1: 1.42, gears: 0, hp: 120, lp: 12000, pf: 2600, pg: 3,  sub: 0.12, drive: 1.0, vol: 1.0 },
-    classic: { name: 'Clássico (kart antigo, mais rouco)',      src: 'kart-engine', r0: 0.62, r1: 1.22, gears: 0, hp: 90,  lp: 6200,  pf: 1300, pg: 4,  sub: 0.22, drive: 1.9, vol: 1.0 },
+    gt:      { name: 'Kartec GT (kart de corrida, giro alto)',  src: 'kart-engine', r0: 0.78, r1: 1.3,  gears: 5, hp: 110, lp: 11000, pf: 2400, pg: 2.5, sub: 0.04, drive: 0.8, vol: 1.0 },
+    classic: { name: 'Clássico (kart antigo, mais rouco)',      src: 'kart-engine', r0: 0.66, r1: 1.14, gears: 5, hp: 90,  lp: 6200,  pf: 1300, pg: 3.5, sub: 0.08, drive: 1.4, vol: 1.0 },
     muscle:  { name: 'Muscle (kart envenenado, encorpado)',     src: 'kart-engine', r0: 0.55, r1: 1.12, gears: 3, hp: 55,  lp: 7500,  pf: 300,  pg: 5,  sub: 0.4,  drive: 1.6, vol: 1.05, layer: { src: 'engine-car', k: 1.7, g: 0.22 } },
-    cyber:   { name: 'Cyber (kart esportivo, agudo)',           src: 'kart-engine', r0: 0.85, r1: 1.62, gears: 0, hp: 200, lp: 14000, pf: 3600, pg: 4,  sub: 0.08, drive: 0.8, vol: 0.92 },
-    offroad: { name: 'Off-Road (kart 4x4, grave)',              src: 'kart-engine', r0: 0.52, r1: 1.05, gears: 0, hp: 50,  lp: 5600,  pf: 480,  pg: 6,  sub: 0.45, drive: 1.7, vol: 1.05 },
+    cyber:   { name: 'Cyber (kart esportivo, agudo)',           src: 'kart-engine', r0: 0.88, r1: 1.45, gears: 5, hp: 180, lp: 13000, pf: 3400, pg: 3,  sub: 0.03, drive: 0.7, vol: 0.92 },
+    offroad: { name: 'Off-Road (kart 4x4, grave)',              src: 'kart-engine', r0: 0.56, r1: 1.0,  gears: 5, hp: 50,  lp: 5600,  pf: 480,  pg: 5,  sub: 0.18, drive: 1.4, vol: 1.05 },
     moto:    { name: 'Motoca (moto de verdade, com marchas)',   src: 'engine-moto', r0: 0.8,  r1: 2.05, gears: 5, hp: 90,  lp: 10000, pf: 2500, pg: 3,  sub: 0.15, drive: 1.2, vol: 1.0 }
   };
   // contagem: início de cada trecho (s) no som da largada -> 3, 2, 1 e VAI tocam junto com as luzes
@@ -95,7 +95,7 @@
       const g = A.createGain(); g.gain.value = 0; const pan = A.createStereoPanner ? A.createStereoPanner() : null;
       mix.gain.value = 0.55; mix.connect(sh); sh.connect(hp); hp.connect(pk); pk.connect(lp); lp.connect(g);
       if (pan) { g.connect(pan); pan.connect(this.bus.engine); } else g.connect(this.bus.engine);
-      return { model, P, main, sub, lay, g, pan, rpm: 0,
+      return { model, P, main, sub, lay, g, pan, lp, rpm: 0, thr: 0, gear: 0,
         stop() { try { [main, sub, lay].forEach(x => x && x.stop()); } catch (e) { } setTimeout(() => { try { g.disconnect(); } catch (e) { } }, 300); } };
     },
     initVoices() {
@@ -106,16 +106,24 @@
     rpmOf(k, P) {
       const sp = clamp(Math.abs(k.speed) / CFG.PHYS.MAX, 0, 1.4);
       let r;
-      if (!P.gears) r = 0.08 + 0.92 * Math.pow(Math.min(1.15, sp), 0.8);
+      if (P.gears && k.gear != null) r = 0.24 + 0.66 * Math.min(1.1, k.gearFrac || 0) + k.gear * 0.025;   // sobe na marcha e cai na troca
+      else if (!P.gears) r = 0.08 + 0.92 * Math.pow(Math.min(1.15, sp), 0.8);
       else { const gp = Math.min(sp * P.gears * 0.98, P.gears - 0.02), gear = Math.floor(gp); r = 0.12 + 0.75 * (gp - gear) + gear * 0.04; }
       return clamp(r + (k.boostT > 0 ? 0.12 : 0) + (k.drifting ? 0.05 : 0) + (k.air ? 0.15 : 0) + (k.wheelT || 0) * 0.08, 0, 1.25);
     },
     driveVoice(v, k, vol, pan, dop) {
       const A = this.ctx, t = A.currentTime, P = v.P, target = this.rpmOf(k, P);
-      v.rpm += (target - v.rpm) * (target > v.rpm ? 0.25 : 0.12);                 // sobe mais rápido do que cai (inércia do motor)
+      v.rpm += (target - v.rpm) * (target > v.rpm ? 0.25 : (k.gear != null && k.gear !== v.gear ? 0.5 : 0.12));                // sobe mais rápido do que cai (inércia do motor)
       const rate = (P.r0 + (P.r1 - P.r0) * v.rpm) * (dop || 1);
       v.main.playbackRate.setTargetAtTime(rate, t, 0.04); v.sub.playbackRate.setTargetAtTime(rate * 0.5, t, 0.04); if (v.lay) v.lay.playbackRate.setTargetAtTime(rate * P.layer.k, t, 0.04);
-      v.g.gain.setTargetAtTime(vol * P.vol, t, 0.07); if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.08);
+      // acelerador: acelerando o som abre (mais agudo e alto); tirando o pé fica abafado e baixo (motor "segurando")
+      const on = (k.accelV || 0) > 1.5 || k.boostT > 0 || (Math.abs(k.speed) < 3 && (k.accelV || 0) > 0.2);
+      v.thr += ((on ? 1 : 0) - v.thr) * (on ? 0.3 : 0.08);
+      if (v.lp) v.lp.frequency.setTargetAtTime(P.lp * (0.38 + 0.62 * v.thr), t, 0.06);
+      let gv = vol * P.vol * (0.72 + 0.28 * v.thr);
+      // troca de marcha para cima: corte curtinho do motor (o "pá" da troca) e o giro despenca junto
+      if (k.gear != null && k.gear !== v.gear) { if (k.gear > v.gear && v.thr > 0.5) { v.g.gain.cancelScheduledValues(t); v.g.gain.setTargetAtTime(gv * 0.3, t, 0.012); v.g.gain.setTargetAtTime(gv, t + 0.07, 0.05); v.cutT = t + 0.08; } v.gear = k.gear; }
+      if (!(v.cutT > t)) v.g.gain.setTargetAtTime(gv, t, 0.07); if (v.pan) v.pan.pan.setTargetAtTime(pan, t, 0.08);
     },
     // ---------- um disparo ----------
     play(name, o) {
