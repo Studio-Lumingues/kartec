@@ -730,28 +730,30 @@
     finishBoard() {
       let el = this._fb;
       if (!el) { const st = document.createElement('style');
-        st.textContent = '#finishBoard{position:fixed;right:max(18px,env(safe-area-inset-right));top:50%;transform:translateY(-50%) translateX(30px);opacity:0;z-index:5;pointer-events:none;width:min(320px,42vw);font-family:"Titan One","Arial Black",sans-serif;transition:opacity .4s ease,transform .4s ease}' +
-          '#finishBoard.on{opacity:1;transform:translateY(-50%)}#finishBoard h3{margin:0 0 8px;font-size:20px;color:#fff;text-shadow:0 2px 0 #0c0c0e,0 0 10px rgba(0,0,0,.5);letter-spacing:1px}' +
-          '#finishBoard .r{display:flex;align-items:center;gap:8px;margin:5px 0;padding:6px 10px;border-radius:12px;background:rgba(18,18,28,.72);border:2px solid rgba(255,255,255,.12);color:#fff;font-size:15px;animation:fbIn .35s ease both}' +
-          '#finishBoard .r.me{background:rgba(255,77,94,.85);border-color:#fff}#finishBoard .r.run{opacity:.45}#finishBoard .p{width:28px;text-align:center;font-size:18px}#finishBoard .d{width:12px;height:12px;border-radius:50%;border:2px solid #fff;flex:none}' +
+        st.textContent = '#finishBoard{position:fixed;right:max(18px,env(safe-area-inset-right));top:50%;transform:translateY(-50%) translateX(30px);opacity:0;z-index:5;pointer-events:none;width:min(640px,46vw);font-size:clamp(14px,min(2.3vw,3.1vh),30px);font-family:"Titan One","Arial Black",sans-serif;transition:opacity .4s ease,transform .4s ease}' +
+          '#finishBoard.on{opacity:1;transform:translateY(-50%)}#finishBoard h3{margin:0 0 .5em;font-size:1.33em;color:#fff;text-shadow:0 2px 0 #0c0c0e,0 0 10px rgba(0,0,0,.5);letter-spacing:1px}' +
+          '#finishBoard .r{display:flex;align-items:center;gap:.55em;margin:.33em 0;padding:.4em .67em;border-radius:.8em;background:rgba(18,18,28,.72);border:3px solid rgba(255,255,255,.12);color:#fff;font-size:1em;animation:fbIn .35s ease both}' +
+          '#finishBoard .r.me{background:rgba(255,77,94,.85);border-color:#fff}#finishBoard .r.run{opacity:.45}#finishBoard .p{width:1.9em;text-align:center;font-size:1.2em}#finishBoard .d{width:.8em;height:.8em;border-radius:50%;border:3px solid #fff;flex:none}' +
           '#finishBoard .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#finishBoard .t{font-variant-numeric:tabular-nums}@keyframes fbIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}';
         st.textContent += 'body.raceDone #hud,body.raceDone #touch,body.raceDone #itemSlot,body.raceDone #rocketWarn,body.raceDone #speedo3d,body.raceDone #boost3d{display:none!important}';
         document.head.appendChild(st); el = this._fb = document.createElement('div'); el.id = 'finishBoard'; document.body.appendChild(el); }
       document.body.classList.add('raceDone');   // chegada: some o HUD da corrida, fica só o placar
-      if (!this._fbBanner) this.finishBanner();
+      if (!this._fbBanner) { this.finishBanner(); this._fbT0 = performance.now(); }
       const ks = this.karts.slice(), fin = ks.filter(k => k.finished).sort((a, b) => a.finishTime - b.finishTime), run = ks.filter(k => !k.finished).sort((a, b) => b.progress - a.progress);
       const key = fin.map(k => k.name).join('|') + '#' + run.length;
       if (key !== this._fbKey) { this._fbKey = key;
         const row = (k, i, done) => '<div class="r' + (k === this.player ? ' me' : '') + (done ? '' : ' run') + '"><span class="p">' + (i + 1) + 'º</span><span class="d" style="background:' + (k.mapColor || '#fff') + '"></span><span class="n">' + (k === this.player ? 'Você' : (k.name || 'Piloto')) + '</span><span class="t">' + (done ? fmt(k.finishTime) : '…') + '</span></div>';
         el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
-      if (!el.classList.contains('on')) requestAnimationFrame(() => el.classList.add('on'));
+      if (this.finishPhase() > 0 && !el.classList.contains('on')) el.classList.add('on');
     },
     // "CHEGADA!" grande no meio da tela quando o jogador cruza a linha: entra com um pulo, brilho correndo pelas
     // letras, estrelinhas e um halo pulsando; fica ~2,6 s e sai subindo e sumindo
+    // 0 enquanto o CHEGADA! está na tela; depois vai de 0 a 1 em 0,6 s (tabela entra e a câmera desliza pro lado)
+    finishPhase() { if (!this._fbT0) return 0; const k = ((performance.now() - this._fbT0) / 1000 - 3.2) / 0.6; return k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k); },
     finishBanner() {
       this._fbBanner = true;
       if (!document.getElementById('finishBannerCss')) { const st = document.createElement('style'); st.id = 'finishBannerCss';
-        st.textContent = '#finishBanner{position:fixed;left:0;right:min(380px,44vw);top:24%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif}' +
+        st.textContent = '#finishBanner{position:fixed;left:0;right:0;top:24%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif}' +
           '#finishBanner .w{display:inline-block;position:relative;animation:fbPop .7s cubic-bezier(.2,1.6,.4,1) both, fbOut .6s ease-in 2.6s forwards}' +
           '#finishBanner .halo{position:absolute;left:50%;top:50%;width:140%;height:220%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(255,220,120,.55),rgba(255,120,80,.18) 55%,rgba(255,120,80,0));animation:fbHalo 1.1s ease-in-out infinite alternate}' +
           '#finishBanner b{position:relative;display:block;font-size:clamp(44px,8.5vw,120px);font-style:italic;letter-spacing:2px;transform:skewX(-8deg);' +
@@ -767,7 +769,7 @@
       el.innerHTML = '<span class="w"><span class="halo"></span><b>CHEGADA!</b>' + [[-4, 10, 0], [96, 4, .3], [88, 78, .6], [6, 82, .45], [50, -14, .15]].map(([x, y, d]) => '<i style="left:' + x + '%;top:' + y + '%;animation-delay:' + d + 's"></i>').join('') + '</span>';
       document.body.appendChild(el); clearTimeout(this._fbBT); this._fbBT = setTimeout(() => { if (el.parentNode) el.remove(); }, 3400);
     },
-    hideFinishBoard() { this._fbBanner = false; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
+    hideFinishBoard() { this._fbBanner = false; this._fbT0 = 0; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
     endRace() {
       this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
@@ -857,7 +859,7 @@
           if (ON) { Net.send({ t: 'finish', raceId: ON.raceId, time: this.race.time }); setTimeout(() => { if (this.state === 'finish' && this.online) UI.toast('Aguardando os outros pilotos…', 4000); }, 2400); } } } });
       if (this.state === 'finish') this.finishBoard();
       if (this.state === 'finish' && !ON) { this.race.endT += dt; if (this.rivals.every(b => b.finished)) this.race.allT = (this.race.allT || 0) + dt;
-        if ((this.race.allT || 0) > 3.5 || this.race.endT > 25) this.endRace(); }   // espera todos chegarem (até 25 s) e mostra o placar mais um pouco
+        if (((this.race.allT || 0) > 3.5 && this.race.endT > 7.5) || this.race.endT > 25) this.endRace(); }   // espera todos chegarem (até 25 s) e mostra o placar mais um pouco
       if (!this.scene || this.state === 'round' || this.state === 'podium') return;   // a corrida acabou neste quadro
       tr.update(dt, performance.now() / 1000);
       Fx.step(dt);
@@ -1055,7 +1057,7 @@
         F.pos.y = gy + s.up; F.fov = s.fov; }
       camera.position.copy(F.pos); camera.lookAt(P.pos.x, P.pos.y + 1.0, P.pos.z);
       // enquadra o kart no terço da esquerda: desloca a "janela" da lente para a direita (o kart vai para a esquerda)
-      const w = innerWidth, h = innerHeight, off = Math.round(w * 0.2);
+      const w = innerWidth, h = innerHeight, off = Math.round(w * 0.24 * this.finishPhase());
       if (!camera.view || !camera.view.enabled || camera.view.offsetX !== off || camera.view.fullWidth !== w || camera.fov !== F.fov) { camera.fov = F.fov; camera.setViewOffset(w, h, off, 0, w, h); camera.updateProjectionMatrix(); }
     },
     updateCamera(dt) {
