@@ -789,12 +789,13 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       tr.grid.forEach(([di, lat]) => { const th = Math.atan2(T[(si + di + N) % N].x, T[(si + di + N) % N].z), p = side(si + di, lat, 0.075 + hAt((si + di + N) % N));
         const m = new THREE.Mesh(gg, gm); m.rotation.x = -Math.PI / 2; const g = new THREE.Group(); g.position.copy(p); g.rotation.y = th; m.position.z = 2.2; g.add(m); add(g); }); }
     // ---------- PÓRTICO DE LARGADA: dois postes de madeira + faixa de pano com a logo, com física de tecido ----------
-    // Toras de madeira de verdade (casca com sulcos, nós, topo serrado com anéis) firmadas num monte de pedras, e lá no
+    // Toras de madeira de verdade (casca com sulcos, nós, topo serrado com anéis) fincadas no chão, e lá no
     // alto uma corda esticada com a faixa amarrada por ilhoses. Tecido simulado (Verlet): a corda cede no meio e o pano
     // fica preso só nos ilhoses (entre eles ele "embarriga"), com vento em rajadas. Logo KARTEC em 2D (fonte Titan One).
     const arch = new THREE.Group(); arch.position.set(S[si].x, hAt(si), S[si].z); arch.rotation.y = sAng; add(arch);
     const AW = W + CB + 1.6;   // postes depois da zebra
-    { const PH = 16, PR = 0.5, rnd2 = (() => { let z = 99; return () => (z = (z * 16807) % 2147483647) / 2147483647; })();
+    { const PH = 20, PR = 0.55,   // postes de 20 m: a faixa fica bem lá no alto
+      rnd2 = (() => { let z = 99; return () => (z = (z * 16807) % 2147483647) / 2147483647; })();
       const canv = (w, h, f, lin) => { const c = document.createElement('canvas'); c.width = w; c.height = h; f(c.getContext('2d'), w, h); const t = new THREE.CanvasTexture(c); t.anisotropy = 8; if (!lin) t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; return t; };
       // casca: sulcos verticais escuros, placas claras, líquen e musgo perto do chão (cor + relevo)
       const barkDraw = bump => (g, w, h) => { g.fillStyle = bump ? '#808080' : '#8a6440'; g.fillRect(0, 0, w, h);
@@ -810,18 +811,6 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       const woodM = new PHONG_ORIG({ map: barkC, bumpMap: barkB, bumpScale: 0.12, shininess: 4, specular: 0x0a0806, color: 0xffffff, emissive: 0x24180e }); woodM.userData.noToon = true;
       const endM = new THREE.MeshLambertMaterial({ map: ringT });
       const ropeM = new THREE.MeshLambertMaterial({ color: 0xcdb487 });
-      // pedras: icosaedros deformados (cantos arredondados), tons variados, meio enterradas, + pedriscos e terra em volta
-      const rockT = canv(256, 256, (g, w) => { g.fillStyle = '#bdb7ad'; g.fillRect(0, 0, w, w);
-        for (let k = 0; k < 900; k++) { const v = 140 + rnd2() * 90; g.fillStyle = `rgba(${v},${v - 3},${v - 9},${0.25 + rnd2() * 0.4})`; g.beginPath(); g.arc(rnd2() * w, rnd2() * w, 1 + rnd2() * 7, 0, 7); g.fill(); }
-        for (let k = 0; k < 60; k++) { g.fillStyle = rnd2() < 0.6 ? 'rgba(120,140,80,.35)' : 'rgba(210,205,190,.4)'; g.beginPath(); g.arc(rnd2() * w, rnd2() * w, 2 + rnd2() * 8, 0, 7); g.fill(); } });
-      const stoneMs = [0xffffff, 0xe6e0d6, 0xd4cfc6, 0xf0e8dc].map(c => { const m = new PHONG_ORIG({ map: rockT, color: c, shininess: 6, specular: 0x111111, emissive: 0x2a2724 }); m.userData.noToon = true; return m; });
-      const stoneGeo = (seed) => { const g = new THREE.IcosahedronGeometry(1, 2), p = g.attributes.position, v = V3(0, 0, 0);
-        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); const n = vn3(v.x * 1.6 + seed, v.y * 1.6, v.z * 1.6 - seed) * 0.32 + vn3(v.x * 4 + seed, v.y * 4, v.z * 4) * 0.1;
-          v.multiplyScalar(0.8 + n); v.y *= v.y < 0 ? 0.55 : 0.75; p.setXYZ(i, v.x, v.y, v.z); } g.computeVertexNormals(); return g; };
-      const stoneGs = [0, 1, 2, 3, 4].map(k => stoneGeo(k * 7.3));
-      const dirtT = canv(256, 256, (g, w) => { const gr = g.createRadialGradient(w / 2, w / 2, w * 0.1, w / 2, w / 2, w / 2); gr.addColorStop(0, 'rgba(92,70,48,.95)'); gr.addColorStop(0.6, 'rgba(110,88,60,.6)'); gr.addColorStop(1, 'rgba(110,88,60,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, w);
-        for (let k = 0; k < 500; k++) { const a = rnd2() * 7, r = Math.sqrt(rnd2()) * w * 0.45; g.fillStyle = rnd2() < 0.5 ? 'rgba(160,150,135,.8)' : 'rgba(60,45,30,.6)'; g.fillRect(w / 2 + Math.cos(a) * r, w / 2 + Math.sin(a) * r, 2 + rnd2() * 3, 2 + rnd2() * 3); } });
-      const dirtM = new THREE.MeshLambertMaterial({ map: dirtT, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
       // ---- postes ----
       [-1, 1].forEach(sd => { const x = sd * AW, post = new THREE.Group(); post.position.set(x, 0, 0); post.rotation.z = -sd * 0.025; arch.add(post);
         const g = new THREE.CylinderGeometry(PR * 0.82, PR * 1.08, PH, 22, 40), pp = g.attributes.position;
@@ -835,12 +824,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         const cap = new THREE.Mesh(new THREE.ConeGeometry(PR * 0.86, 0.35, 22), endM); cap.position.y = PH - 0.4 + 0.17; cap.castShadow = true; post.add(cap);
         // amarrações de corda (várias voltas) onde a corda da faixa prende e uma no meio
         [[PH - 1.4, 4], [PH * 0.35, 3]].forEach(([y0, n]) => { for (let k = 0; k < n; k++) { const r = new THREE.Mesh(new THREE.TorusGeometry(PR * 0.92, 0.075, 8, 24), ropeM); r.rotation.x = Math.PI / 2 + (k - n / 2) * 0.06; r.position.y = y0 + k * 0.15; r.castShadow = true; post.add(r); } });
-        // monte de pedras firmando o poste + terra e pedriscos
-        const dirt = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), dirtM); dirt.rotation.x = -Math.PI / 2; dirt.position.set(x, 0.05, 0); arch.add(dirt);
-        for (let k = 0; k < 11; k++) { const a = k / 11 * Math.PI * 2 + sd + rnd2() * 0.4, big = k % 3 === 0, s = big ? 0.55 + rnd2() * 0.2 : 0.3 + rnd2() * 0.18, rr = PR + 0.25 + (big ? 0.25 : 0.55 * rnd2());
-          const st = new THREE.Mesh(stoneGs[k % stoneGs.length], stoneMs[k % stoneMs.length]); st.scale.set(s * (0.9 + rnd2() * 0.4), s * (0.7 + rnd2() * 0.4), s * (0.9 + rnd2() * 0.4));
-          st.position.set(x + Math.cos(a) * rr, s * 0.25, Math.sin(a) * rr); st.rotation.set(rnd2() * 0.5, rnd2() * 6.28, rnd2() * 0.5); st.castShadow = st.receiveShadow = true; arch.add(st); }
-        for (let k = 0; k < 14; k++) { const a = rnd2() * 6.28, rr = PR + 0.9 + rnd2() * 0.9, s = 0.08 + rnd2() * 0.1, st = new THREE.Mesh(stoneGs[k % 5], stoneMs[(k + 1) % 4]); st.scale.setScalar(s); st.position.set(x + Math.cos(a) * rr, s * 0.3, Math.sin(a) * rr); st.rotation.y = rnd2() * 6; arch.add(st); } });
+      });
       // ---- textura da faixa: lona escura com quadriculado em cima e embaixo, logo grande no meio ----
       const BW = 2 * AW - 3.2, BH = 6.4, CW = 4096, CH = Math.round(CW * BH / BW);
       const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; const bTex = new THREE.CanvasTexture(cv); bTex.anisotropy = 8; bTex.encoding = THREE.sRGBEncoding;
