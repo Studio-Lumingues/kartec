@@ -788,129 +788,116 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     { const gm = new THREE.MeshLambertMaterial({ color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -3 }), gg = new THREE.PlaneGeometry(3.6, 0.35);
       tr.grid.forEach(([di, lat]) => { const th = Math.atan2(T[(si + di + N) % N].x, T[(si + di + N) % N].z), p = side(si + di, lat, 0.075 + hAt((si + di + N) % N));
         const m = new THREE.Mesh(gg, gm); m.rotation.x = -Math.PI / 2; const g = new THREE.Group(); g.position.copy(p); g.rotation.y = th; m.position.z = 2.2; g.add(m); add(g); }); }
-    // Pórtico de largada 3D: duas torres treliçadas, viga treliçada no topo, painel pendurado com o nome do jogo
-    // em LETRAS 3D (traços extrudados, sem imagem e sem arquivo de fonte), faixa quadriculada de cubos,
-    // lâmpadas no contorno do painel (acendem à noite) e o semáforo de largada embaixo.
+    // ---------- PÓRTICO DE LARGADA: dois postes de madeira + faixa de pano com a logo, com física de tecido ----------
+    // Estilo "faixa de festa" (como as do Mario Kart): toras de madeira com amarração de corda, uma corda esticada entre
+    // elas e a faixa pendurada. O pano é uma malha simulada (Verlet): gravidade, vento com rajadas e restrições de
+    // distância (estrutura + diagonais). A borda de cima fica presa na corda, que também é simulada e cede no meio.
+    // A logo KARTEC é desenhada em 2D num canvas (fonte Titan One da interface) e redesenhada quando a fonte carrega.
     const arch = new THREE.Group(); arch.position.set(S[si].x, hAt(si), S[si].z); arch.rotation.y = sAng; add(arch);
-    const AW = W + CB + 1.4, archFlags = [];   // pilares do pórtico depois da zebra
-    { const UP = V3(0, 1, 0), tmpQ = new THREE.Quaternion();
-      const put = (o, x, y, z, cast) => { o.position.set(x, y, z); o.castShadow = cast !== false; arch.add(o); return o; };
-      const gadd = (g, m, x, y, z) => put(new THREE.Mesh(g, m), x, y, z);
-      // barra cilíndrica entre dois pontos (treliças)
-      const bar = (ax, ay, az, bx, by, bz, r, m, parent) => { const d = V3(bx - ax, by - ay, bz - az), L = d.length(), o = new THREE.Mesh(new THREE.CylinderGeometry(r, r, L, 8), m);
-        o.position.set((ax + bx) / 2, (ay + by) / 2, (az + bz) / 2); o.quaternion.copy(tmpQ.setFromUnitVectors(UP, d.normalize())); o.castShadow = true; (parent || arch).add(o); return o; };
-      const red = new THREE.MeshLambertMaterial({ color: 0xff3d5a }), white = new THREE.MeshLambertMaterial({ color: 0xf4f4fa }), yellow = new THREE.MeshLambertMaterial({ color: 0xffd23f });
-      const ink = new THREE.MeshLambertMaterial({ color: 0x2a1d4a }), concrete = new THREE.MeshLambertMaterial({ map: TX.get('rock', 2, 2), color: 0xd8d8e0 });
-      const TOP = 14.6, P = 0.8;                                         // altura das torres e meia-largura da treliça
-      // ---- torres ----
-      [-1, 1].forEach(sd => { const x = sd * AW;
-        gadd(GEO.rbox(3.4, 1.2, 3.4, 0.3), concrete, x, 0.6, 0);
-        gadd(GEO.rbox(2.6, 0.35, 2.6, 0.1), yellow, x, 1.3, 0);
-        [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([i, j]) => bar(x + i * P, 1.3, j * P, x + i * P, TOP, j * P, 0.16, red));
-        for (let y = 1.3, k = 0; y < TOP - 0.5; y += 1.9, k++) {
-          const y2 = Math.min(TOP, y + 1.9);
-          [[-1, -1, 1, -1], [1, -1, 1, 1], [1, 1, -1, 1], [-1, 1, -1, -1]].forEach(([i0, j0, i1, j1]) => {
-            bar(x + i0 * P, y2, j0 * P, x + i1 * P, y2, j1 * P, 0.08, white);                                   // travessa
-            const f = k % 2 ? 1 : -1; bar(x + i0 * P, f > 0 ? y : y2, j0 * P, x + i1 * P, f > 0 ? y2 : y, j1 * P, 0.07, white); });   // diagonal em zigue-zague
-        }
-        gadd(GEO.rbox(2.4, 0.5, 2.4, 0.18), yellow, x, TOP + 0.2, 0);
-        gadd(new THREE.SphereGeometry(0.55, 20, 14), new THREE.MeshLambertMaterial({ color: 0xff4a1c, emissive: 0x5a1000 }), x, TOP + 0.95, 0);
-        bar(x, TOP + 0.4, 0, x, TOP + 4.4, 0, 0.07, white);
-        const fg = new THREE.PlaneGeometry(3.2, 2.1, 16, 8); fg.translate(1.6, 0, 0);
-        const fl = new THREE.Mesh(fg, new THREE.MeshLambertMaterial({ map: TX.get('checker'), side: THREE.DoubleSide })); fl.userData.dynamic = true; fl.position.set(x, TOP + 3.2, 0); fl.rotation.y = sd > 0 ? Math.PI * 0.5 : -Math.PI * 0.5; arch.add(fl);
-        archFlags.push({ g: fg, base: fg.attributes.position.array.slice(), ph: sd }); });
-      // ---- viga treliçada (seção triangular) entre as torres ----
-      const BY = 13.0, BH = 1.5, BL = AW - P;
-      [[-0.7, BY], [0.7, BY], [0, BY + BH]].forEach(([z, y]) => bar(-BL, y, z, BL, y, z, 0.14, red));
-      for (let x = -BL, k = 0; x < BL - 0.1; x += 1.8, k++) { const x2 = Math.min(BL, x + 1.8), xa = k % 2 ? x : x2, xb = k % 2 ? x2 : x;
-        bar(xa, BY, -0.7, xb, BY + BH, 0, 0.06, white); bar(xa, BY, 0.7, xb, BY + BH, 0, 0.06, white); bar(x2, BY, -0.7, x2, BY, 0.7, 0.06, white); }
-      // ---- painel pendurado ----
-      const PW = 2 * AW - 5, PH = 5.8, PY = 9.9, PD = 0.9;   // painel mais alto: cabe o SUPER em cima e a logo KARTEC embaixo
-      [-0.42, 0.42].forEach(f => bar(f * PW, PY + PH / 2 - 0.2, 0, f * PW, BY, 0, 0.09, white));            // tirantes
-      gadd(GEO.rbox(PW + 0.6, PH + 0.6, PD, 0.35), ink, 0, PY, 0);                                            // moldura escura
-      gadd(GEO.rbox(PW, PH, PD + 0.16, 0.25), new THREE.MeshLambertMaterial({ color: 0x1b1e29 }), 0, PY, 0);   // face grafite (a logo vermelha/branca se destaca)
-      [PY + PH / 2 - 0.22, PY - PH / 2 + 0.22].forEach(y => gadd(GEO.rbox(PW - 0.3, 0.3, PD + 0.3, 0.1), red, 0, y, 0));   // filetes vermelhos em cima e embaixo                                                 // face vermelha (8 cm para fora da moldura)
-      // faixa quadriculada de cubos (3D) embaixo do painel, frente e verso
-      { const n = Math.floor(PW / 0.55), cube = new THREE.BoxGeometry(0.5, 0.5, 0.5);
-        const cw = new THREE.InstancedMesh(cube, white, n * 2), cb = new THREE.InstancedMesh(cube, ink, n * 2), d = new THREE.Object3D(); let iw = 0, ib = 0;
-        for (let i = 0; i < n; i++) for (let r = 0; r < 2; r++) { d.position.set(-PW / 2 + 0.275 + i * 0.55, PY - PH / 2 - 0.55 - r * 0.5, 0); d.updateMatrix();
-          if ((i + r) % 2) cw.setMatrixAt(iw++, d.matrix); else cb.setMatrixAt(ib++, d.matrix); }
-        cw.count = iw; cb.count = ib; cw.castShadow = cb.castShadow = true; cw.userData.dynamic = cb.userData.dynamic = true; arch.add(cw, cb); }
-      // lâmpadas no contorno do painel (instanciadas; acendem à noite via emissive)
-      { const bulbM = new THREE.MeshLambertMaterial({ color: 0xfff2c0, emissive: 0xffd27a, emissiveIntensity: 0.15 }); bulbM.userData.unique = true; tr.nightMats.push({ m: bulbM, max: 1, min: 0.15 });
-        const pts = []; for (let x = -PW / 2 + 0.4; x <= PW / 2 - 0.4; x += 0.9) [PY + PH / 2 + 0.05, PY - PH / 2 - 0.05].forEach(y => [-1, 1].forEach(sd => pts.push([x, y, sd * (PD / 2 + 0.1)])));
-        const bm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.15, 10, 8), bulbM, pts.length), d = new THREE.Object3D();
-        pts.forEach((p, i) => { d.position.set(p[0], p[1], p[2]); d.updateMatrix(); bm.setMatrixAt(i, d.matrix); }); bm.userData.dynamic = true; arch.add(bm); }
-      // ---- letreiro em letras 3D: cada letra é um conjunto de traços (retas e curvas) com espessura ----
-      // caixa da letra: largura 0,7 x altura 1 (y para cima). Curvas = Catmull-Rom; retas = cilindros com juntas esféricas.
-      const GLYPHS = {
-        S: { c: [[[0.64, 0.84], [0.47, 0.99], [0.2, 0.97], [0.06, 0.78], [0.18, 0.57], [0.48, 0.46], [0.64, 0.26], [0.53, 0.04], [0.25, 0.0], [0.05, 0.17]]] },
-        U: { c: [[[0.06, 1], [0.06, 0.34], [0.15, 0.07], [0.35, 0], [0.55, 0.07], [0.64, 0.34], [0.64, 1]]] },
-        P: { l: [[[0.08, 0], [0.08, 1]]], c: [[[0.08, 1], [0.42, 1], [0.63, 0.88], [0.63, 0.64], [0.42, 0.5], [0.08, 0.5]]] },
-        E: { l: [[[0.62, 1], [0.08, 1], [0.08, 0], [0.62, 0]], [[0.08, 0.5], [0.5, 0.5]]] },
-        R: { l: [[[0.08, 0], [0.08, 1]], [[0.34, 0.5], [0.64, 0]]], c: [[[0.08, 1], [0.42, 1], [0.63, 0.88], [0.63, 0.64], [0.42, 0.5], [0.08, 0.5]]] },
-        K: { l: [[[0.08, 0], [0.08, 1]], [[0.64, 1], [0.1, 0.42]], [[0.3, 0.62], [0.64, 0]]] },
-        A: { l: [[[0.02, 0], [0.35, 1], [0.68, 0]], [[0.15, 0.36], [0.55, 0.36]]] },
-        T: { l: [[[0.0, 1], [0.7, 1]], [[0.35, 1], [0.35, 0]]] },
-        C: { c: [[[0.66, 0.82], [0.46, 0.99], [0.2, 0.94], [0.05, 0.66], [0.05, 0.34], [0.2, 0.06], [0.46, 0.0], [0.66, 0.18]]] }
+    const AW = W + CB + 1.4;   // postes depois da zebra
+    { const put = (o, x, y, z, cast) => { o.position.set(x, y, z); o.castShadow = cast !== false; o.receiveShadow = true; arch.add(o); return o; };
+      const PH = 12.5, PR = 0.42;                                                          // altura e raio do poste
+      const woodM = new THREE.MeshLambertMaterial({ map: TX.get('bark', 2, 5), color: 0xc9a27a });
+      const endM = new THREE.MeshLambertMaterial({ map: TX.get('wood', 1, 1), color: 0xe6c79a });
+      const ropeM = new THREE.MeshLambertMaterial({ color: 0xd8c39a }), stoneM = new THREE.MeshLambertMaterial({ map: TX.get('rock', 1, 1), color: 0xb9b4ad, flatShading: true });
+      // ---- postes ----
+      [-1, 1].forEach(sd => { const x = sd * AW, tilt = sd * 0.035;
+        const post = new THREE.Group(); post.position.set(x, 0, 0); post.rotation.z = -tilt; arch.add(post);
+        const g = new THREE.CylinderGeometry(PR * 0.86, PR, PH, 14, 6), pp = g.attributes.position;
+        for (let i = 0; i < pp.count; i++) { const y = pp.getY(i), a = Math.atan2(pp.getZ(i), pp.getX(i)), k = 1 + 0.05 * Math.sin(a * 3 + y * 0.7) + 0.03 * Math.sin(y * 2.3 + sd);   // tora irregular
+          pp.setX(i, pp.getX(i) * k); pp.setZ(i, pp.getZ(i) * k); }
+        g.computeVertexNormals();
+        const m = new THREE.Mesh(g, [woodM, endM, endM]); m.position.y = PH / 2; m.castShadow = m.receiveShadow = true; post.add(m);
+        // amarrações de corda (anéis) e um toco de galho
+        [PH * 0.32, PH - 1.0, PH - 1.6].forEach(y => { const r = new THREE.Mesh(new THREE.TorusGeometry(PR * 0.95, 0.07, 6, 18), ropeM); r.rotation.x = Math.PI / 2; r.position.y = y; r.castShadow = true; post.add(r); });
+        const knot = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 0.7, 8), woodM); knot.rotation.z = sd * 1.0; knot.position.set(-sd * 0.45, PH * 0.55, 0.1); post.add(knot);
+        // pedras na base
+        for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2 + sd, s = 0.35 + (k % 3) * 0.12, st = new THREE.Mesh(new THREE.DodecahedronGeometry(s, 0), stoneM);
+          st.position.set(x + Math.cos(a) * (PR + 0.35), s * 0.45, Math.sin(a) * (PR + 0.35)); st.rotation.set(k, k * 2, 0); st.castShadow = true; arch.add(st); } });
+      // ---- textura da faixa (2D): pano creme com bordas vermelhas, quadriculado, ilhoses e a logo ----
+      const BW = 2 * AW - 2.4, BH = 5.6, CW = 2048, CH = Math.round(CW * BH / BW);
+      const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; const bTex = new THREE.CanvasTexture(cv); bTex.anisotropy = 8; bTex.encoding = THREE.sRGBEncoding;
+      const drawBanner = () => { const g = cv.getContext('2d'), W2 = CW, H2 = CH;
+        const cl = g.createLinearGradient(0, 0, 0, H2); cl.addColorStop(0, '#ff9a2e'); cl.addColorStop(1, '#ee7418'); g.fillStyle = cl; g.fillRect(0, 0, W2, H2);
+        for (let y = 0; y < H2; y += 3) { g.fillStyle = 'rgba(120,40,0,' + (0.03 + 0.03 * Math.random()) + ')'; g.fillRect(0, y, W2, 1); }          // trama do tecido
+        for (let x = 0; x < W2; x += 3) { g.fillStyle = 'rgba(255,220,160,' + (0.02 + 0.03 * Math.random()) + ')'; g.fillRect(x, 0, 1, H2); }
+        const bd = H2 * 0.11; g.fillStyle = '#7d1712'; g.fillRect(0, 0, W2, bd); g.fillRect(0, H2 - bd, W2, bd);                               // faixas vermelhas
+        g.fillStyle = '#ffd36a'; g.fillRect(0, bd, W2, 5); g.fillRect(0, H2 - bd - 5, W2, 5);   // filete dourado
+        // moldura interna fina (como bordado) e textos pequenos nas pontas
+        g.strokeStyle = 'rgba(125,23,18,.55)'; g.lineWidth = 4; g.strokeRect(W2 * 0.13, bd + 14, W2 * 0.74, H2 - 2 * bd - 28);
+        // costura e ilhoses de metal na borda de cima
+        g.setLineDash([14, 10]); g.strokeStyle = 'rgba(255,240,220,.7)'; g.lineWidth = 3; [bd * 0.25, H2 - bd * 0.25].forEach(y => { g.beginPath(); g.moveTo(0, y); g.lineTo(W2, y); g.stroke(); }); g.setLineDash([]);
+        for (let x = 40; x < W2; x += (W2 - 80) / 12) { g.fillStyle = '#c9c9cf'; g.beginPath(); g.arc(x, bd * 0.5, bd * 0.2, 0, 7); g.fill(); g.fillStyle = '#3a2a1a'; g.beginPath(); g.arc(x, bd * 0.5, bd * 0.11, 0, 7); g.fill(); }
+        // bandeirinhas quadriculadas nas pontas
+        const flag = (cx, cy, s, flip) => { g.save(); g.translate(cx, cy); g.scale(flip ? -1 : 1, 1); g.fillStyle = '#5a3a20'; g.fillRect(-s * 0.05, -s * 0.6, s * 0.08, s * 1.3);
+          for (let i = 0; i < 4; i++) for (let j = 0; j < 3; j++) { g.fillStyle = (i + j) % 2 ? '#1b1b22' : '#ffffff'; g.fillRect(s * 0.03 + i * s * 0.2, -s * 0.6 + j * s * 0.2 + Math.sin(i * 0.9) * s * 0.04, s * 0.2, s * 0.2); }
+          g.strokeStyle = '#1b1b22'; g.lineWidth = 4; g.strokeRect(s * 0.03, -s * 0.6, s * 0.8, s * 0.6); g.restore(); };
+        flag(W2 * 0.07, H2 * 0.55, H2 * 0.42, false); flag(W2 * 0.93, H2 * 0.55, H2 * 0.42, true);
+        // ---- logo KARTEC 2D: itálico, contorno escuro grosso + contorno branco + degradê vermelho + brilho + linhas de velocidade ----
+        const cx = W2 / 2, cy = H2 * 0.54, fs = H2 * 0.62; g.save(); g.translate(cx, cy); g.transform(1, 0, -0.2, 1, 0, 0);
+        g.font = fs + 'px "Titan One", "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+        const txt = 'Kartec', tw = W2 * 0.5, sx = Math.min(1.7, tw / g.measureText(txt).width); g.scale(sx, 1);
+        g.strokeStyle = '#ffffff'; g.lineCap = 'round'; g.lineWidth = fs * 0.07; [[-0.72, -0.22, 0.32], [-0.78, 0.02, 0.26], [-0.7, 0.24, 0.2]].forEach(([x, y, l]) => { g.beginPath(); g.moveTo(-tw / sx * 0.5 + x * fs * 0.2 - l * fs, y * fs); g.lineTo(-tw / sx * 0.5 + x * fs * 0.2, y * fs); g.stroke(); });   // linhas de velocidade
+        g.fillStyle = 'rgba(40,10,20,.35)'; g.fillText(txt, fs * 0.05, fs * 0.08);                                                          // sombra
+        g.strokeStyle = '#1a0c14'; g.lineWidth = fs * 0.24; g.strokeText(txt, 0, 0);
+        g.strokeStyle = '#ffffff'; g.lineWidth = fs * 0.14; g.strokeText(txt, 0, 0);
+        const gr = g.createLinearGradient(0, -fs * 0.42, 0, fs * 0.42); gr.addColorStop(0, '#ffa79a'); gr.addColorStop(0.38, '#ff4d5e'); gr.addColorStop(0.78, '#e8213a'); gr.addColorStop(1, '#b30d26');
+        g.fillStyle = gr; g.fillText(txt, 0, 0);
+        g.save(); g.beginPath(); g.rect(-W2, -fs, W2 * 2, fs * 0.42); g.clip(); g.fillStyle = 'rgba(255,255,255,.35)'; g.fillText(txt, 0, 0); g.restore();   // brilho em cima
+        g.restore();
+        // desgaste leve e sombra das dobras
+        for (let k = 0; k < 18; k++) { g.fillStyle = 'rgba(120,40,0,' + (0.02 + Math.random() * 0.03) + ')'; g.beginPath(); g.ellipse(Math.random() * W2, Math.random() * H2, 20 + Math.random() * 60, 8 + Math.random() * 30, Math.random() * 3, 0, 7); g.fill(); }
+        bTex.needsUpdate = true; };
+      drawBanner(); if (document.fonts && document.fonts.load) document.fonts.load('100px "Titan One"').then(drawBanner).catch(() => {});
+      // ---- simulação do pano (coordenadas locais do pórtico) ----
+      const NX = 30, NY = 7, TOPY = PH - 1.3, X0 = -BW / 2, DX = BW / NX, DY = BH / NY, nP = (NX + 1) * (NY + 1);
+      const P = new Float32Array(nP * 3), O = new Float32Array(nP * 3), pin = new Uint8Array(nP), idx = (i, j) => j * (NX + 1) + i;
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const k = idx(i, j), u = i / NX, sag = 0.9 * Math.sin(u * Math.PI);
+        P[k * 3] = X0 + i * DX; P[k * 3 + 1] = TOPY - sag - j * DY; P[k * 3 + 2] = 0; }
+      O.set(P); pin[idx(0, 0)] = pin[idx(NX, 0)] = 1;
+      const C = [], link = (a, b, s) => { const dx = P[a * 3] - P[b * 3], dy = P[a * 3 + 1] - P[b * 3 + 1], dz = P[a * 3 + 2] - P[b * 3 + 2]; C.push(a, b, Math.hypot(dx, dy, dz) * (s || 1)); };
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const k = idx(i, j);
+        if (i < NX) link(k, idx(i + 1, j)); if (j < NY) link(k, idx(i, j + 1)); if (i < NX && j < NY) { link(k, idx(i + 1, j + 1)); link(idx(i + 1, j), idx(i, j + 1)); } }
+      const CA = Float32Array.from(C), nC = C.length / 3;
+      const bg = new THREE.PlaneGeometry(BW, BH, NX, NY), pos = bg.attributes.position; pos.setUsage(THREE.DynamicDrawUsage);
+      const sync = () => { for (let k = 0; k < nP; k++) pos.setXYZ(k, P[k * 3], P[k * 3 + 1], P[k * 3 + 2]); pos.needsUpdate = true; bg.computeVertexNormals(); };
+      sync();
+      const front = new THREE.Mesh(bg, new THREE.MeshLambertMaterial({ map: bTex, side: THREE.FrontSide }));
+      const bg2 = new THREE.BufferGeometry(); bg2.setAttribute('position', pos); bg2.setAttribute('normal', bg.attributes.normal); bg2.setIndex(bg.index);
+      const uv2 = bg.attributes.uv.array.slice(); for (let k = 0; k < uv2.length; k += 2) uv2[k] = 1 - uv2[k]; bg2.setAttribute('uv', new THREE.BufferAttribute(uv2, 2));   // verso: logo lida do lado certo
+      const back = new THREE.Mesh(bg2, new THREE.MeshLambertMaterial({ map: bTex, side: THREE.BackSide }));
+      [front, back].forEach(m => { m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false; m.userData.dynamic = true; m.userData.noOutline = true; arch.add(m); });
+      // corda: segmentos (cilindros instanciados) ligando a borda de cima e indo até o topo dos postes
+      const ropeG = new THREE.CylinderGeometry(0.06, 0.06, 1, 6), ropeI = new THREE.InstancedMesh(ropeG, ropeM, NX + 2), _a = V3(0, 0, 0), _b = V3(0, 0, 0), _d = new THREE.Object3D(), UP = V3(0, 1, 0);
+      ropeI.castShadow = true; ropeI.userData.dynamic = true; ropeI.frustumCulled = false; arch.add(ropeI);
+      const seg = (n, ax, ay, az, bx, by, bz) => { _a.set(ax, ay, az); _b.set(bx, by, bz); const L = _a.distanceTo(_b) || 1e-3; _d.position.copy(_a).add(_b).multiplyScalar(0.5); _d.quaternion.setFromUnitVectors(UP, _b.sub(_a).normalize()); _d.scale.set(1, L, 1); _d.updateMatrix(); ropeI.setMatrixAt(n, _d.matrix); };
+      const ropes = () => { for (let i = 0; i < NX; i++) { const a = idx(i, 0), b = idx(i + 1, 0); seg(i, P[a * 3], P[a * 3 + 1] + 0.05, P[a * 3 + 2], P[b * 3], P[b * 3 + 1] + 0.05, P[b * 3 + 2]); }
+        [[0, -1], [NX, 1]].forEach(([i, sd], n) => { const a = idx(i, 0); seg(NX + n, P[a * 3], P[a * 3 + 1], P[a * 3 + 2], sd * (AW - sd * PH * 0.035 * (PH - 1.0) / PH), PH - 1.0, 0); }); ropeI.instanceMatrix.needsUpdate = true; };
+      ropes();
+      // passo da física: Verlet + 6 iterações de restrição; vento com rajadas ao longo do pano
+      let tPrev = null, acc = 0; const H = 1 / 60;
+      const stepCloth = (t) => {
+        for (let k = 0; k < nP; k++) { if (pin[k]) continue; const i3 = k * 3, x = P[i3], y = P[i3 + 1], z = P[i3 + 2], j = Math.floor(k / (NX + 1)), u = (k % (NX + 1)) / NX;
+          const gust = 0.55 + 0.45 * Math.sin(t * 0.6) * Math.sin(t * 0.23 + 1.1), wz = (3.6 * gust + 1.8 * Math.sin(t * 2.1 + u * 7.0 + j * 0.5) + 0.7 * Math.sin(t * 3.7 - u * 11.0)) * (0.35 + j / NY);
+          const vx = (x - O[i3]) * 0.985, vy = (y - O[i3 + 1]) * 0.985, vz = (z - O[i3 + 2]) * 0.985;
+          O[i3] = x; O[i3 + 1] = y; O[i3 + 2] = z; P[i3] = x + vx; P[i3 + 1] = y + vy - 9.8 * H * H; P[i3 + 2] = z + vz + wz * H * H; }
+        for (let it = 0; it < 6; it++) for (let c = 0; c < nC; c++) { const a = CA[c * 3] * 3, b = CA[c * 3 + 1] * 3, r = CA[c * 3 + 2];
+          const dx = P[b] - P[a], dy = P[b + 1] - P[a + 1], dz = P[b + 2] - P[a + 2], d = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1e-6, f = (d - r) / d * 0.5;
+          const wa = pin[a / 3] ? 0 : 1, wb = pin[b / 3] ? 0 : 1, s = wa + wb; if (!s) continue; const fa = f * 2 * wa / s, fb = f * 2 * wb / s;
+          P[a] += dx * fa; P[a + 1] += dy * fa; P[a + 2] += dz * fa; P[b] -= dx * fb; P[b + 1] -= dy * fb; P[b + 2] -= dz * fb; }
       };
-      const letterM = Toon.mat({ color: 0xffd23f, emissive: 0xff9a00, emissiveIntensity: 0 }, { gloss: 0.7, rim: 0.4, sat: 0, key: 'sign3d' });
-      letterM.userData.unique = true; tr.nightMats.push({ m: letterM, max: 0.55, min: 0 });
-      // texto em letras 3D (traços com espessura): usado para o "SUPER" e, se a logo 3D não carregar, para o "KARTEC"
-      const makeText = (text, LH, R, maxW) => { const GAP = 0.3 * LH, SP = 0.7 * LH, widthOf = ch => ch === ' ' ? SP : 0.7 * LH;
-        const total = [...text].reduce((w, ch, i) => w + widthOf(ch) + (i ? GAP : 0), 0), k3 = Math.min(1, maxW / total);
-        const g = new THREE.Group(); let x = -total / 2;
-        [...text].forEach((ch, i) => { if (i) x += GAP; const gl = GLYPHS[ch];
-          if (gl) { const P2 = p => V3(x + p[0] * LH, (p[1] - 0.5) * LH, 0), joint = p => { const s = new THREE.Mesh(new THREE.SphereGeometry(R, 12, 8), letterM); s.position.copy(P2(p)); g.add(s); };
-            (gl.l || []).forEach(pl => { pl.forEach(joint); for (let k = 1; k < pl.length; k++) { const a = P2(pl[k - 1]), b = P2(pl[k]); bar(a.x, a.y, a.z, b.x, b.y, b.z, R, letterM, g); } });
-            (gl.c || []).forEach(cv => { const curve = new THREE.CatmullRomCurve3(cv.map(P2), false, 'centripetal'); g.add(new THREE.Mesh(new THREE.TubeGeometry(curve, cv.length * 6, R, 10, false), letterM)); joint(cv[0]); joint(cv[cv.length - 1]); }); }
-          x += widthOf(ch); });
-        g.scale.setScalar(k3); g.userData.w = total * k3; g.traverse(o => { if (o.isMesh) o.castShadow = true; }); Toon.outline(g, 0.04); return g; };
-      const faceZ = PD / 2 + 0.08;
-      // só a logo KARTEC, bem grande e centralizada no painel (os dois lados)
-      const LOGO_H = PH - 0.7, LOGO_Y = PY;
-      const layout = items => items.forEach(g => { g.position.x = 0; });
-      // logo KARTEC 3D (o mesmo modelo do menu, assets/karttec_logo.glb, carregado pelo logo3d.js), dos dois lados do painel
-      const putLogo = () => {
-        const L3 = window.Logo3D, geo = L3.geo, bb = L3.bb, size = bb.getSize(V3(0, 0, 0)), mid = bb.getCenter(V3(0, 0, 0)), lay = L3.layers || [0.193, 0.165];
-        const U = { uZ: { value: new THREE.Vector2(lay[0], lay[1]) }, uY: { value: new THREE.Vector2(bb.max.y - 0.04, bb.min.y + 0.06) },
-          uG0: { value: new THREE.Color('#FFA79A') }, uG1: { value: new THREE.Color('#FF4D5E') }, uG2: { value: new THREE.Color('#E8213A') }, uG3: { value: new THREE.Color('#C4102B') },
-          uWhite: { value: new THREE.Color('#FFFFFF') }, uInk: { value: new THREE.Color('#2B2B2E') }, uSelf: { value: 0.12 } };
-        const lm = new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 80, specular: 0x666666 });
-        lm.userData.unique = true; lm.customProgramCacheKey = () => 'kartec-logo-arch';
-        lm.onBeforeCompile = sh => { Object.assign(sh.uniforms, U);
-          sh.vertexShader = 'varying vec3 vLP;\nvarying vec3 vLN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvLP = position; vLN = normal;');
-          sh.fragmentShader = 'varying vec3 vLP;\nvarying vec3 vLN;\nuniform vec2 uZ;\nuniform vec2 uY;\nuniform vec3 uG0;\nuniform vec3 uG1;\nuniform vec3 uG2;\nuniform vec3 uG3;\nuniform vec3 uWhite;\nuniform vec3 uInk;\nuniform float uSelf;\n' +
-            sh.fragmentShader.replace('#include <map_fragment>', `#include <map_fragment>
-              vec3 ln = normalize(vLN); float face = smoothstep(0.55, 0.8, abs(ln.z)); float az = abs(vLP.z);
-              float t = clamp((uY.x - vLP.y) / (uY.x - uY.y), 0.0, 1.0);
-              vec3 gold = t < 0.38 ? mix(uG0, uG1, t / 0.38) : t < 0.78 ? mix(uG1, uG2, (t - 0.38) / 0.4) : mix(uG2, uG3, (t - 0.78) / 0.22);
-              gold = mix(uG3 * 0.8, gold, face);
-              vec3 white = mix(uWhite * 0.8, uWhite * 0.97, face);
-              vec3 ink = uInk * mix(0.75, 1.25, clamp((vLP.y - uY.y) / (uY.x - uY.y), 0.0, 1.0)); ink = mix(ink * 0.7, ink, face);
-              float wW = smoothstep(uZ.y - 0.004, uZ.y + 0.004, az), wG = smoothstep(uZ.x - 0.004, uZ.x + 0.004, az);
-              diffuseColor.rgb = mix(mix(ink, white, wW), gold, wG);`)
-            .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance += diffuseColor.rgb * uSelf;'); };
-        const k = Math.min(LOGO_H / size.y, PW * 0.94 / size.x);
-        layout([-1, 1].map(sd => { const g = new THREE.Group(), m = new THREE.Mesh(geo, lm); m.position.copy(mid).negate(); m.castShadow = true; g.add(m);
-          g.scale.setScalar(k); g.position.set(0, LOGO_Y, sd * (faceZ + size.z * k / 2 + 0.02)); if (sd < 0) g.rotation.y = Math.PI;
-          g.userData.dynamic = true; g.userData.sd = sd; arch.add(g); return g; }), size.x * k);   // dynamic: não entra na junção de malhas (o shader usa a posição do próprio modelo)
-      };
-      let logoDone = false;
-      const glyphLogo = () => { if (logoDone) return; logoDone = true; const ts = [-1, 1].map(sd => { const t = makeText('KARTEC', LOGO_H * 0.85, 0.4, PW * 0.9); t.position.set(0, LOGO_Y, sd * (faceZ + 0.4)); if (sd < 0) t.rotation.y = Math.PI; t.userData.sd = sd; arch.add(t); return t; }); layout(ts, ts[0].userData.w); };
-      const tryLogo = () => { if (logoDone) return true; const L3 = window.Logo3D; if (L3 && L3.geo) { logoDone = true; try { putLogo(); } catch (e) { console.warn('[pórtico] logo 3D:', e); logoDone = false; glyphLogo(); } return true; }
-        if (!L3 || L3.status === 'erro') { glyphLogo(); return true; } return false; };
-      if (!tryLogo()) { const on = () => { removeEventListener('kartec-logo', on); tryLogo(); }; addEventListener('kartec-logo', on); setTimeout(() => { if (!tryLogo() && window.Logo3D && Logo3D.status !== 'ok') glyphLogo(); }, 15000); }
-      // ---- semáforo de largada (as esferas continuam em tr.archLamps para o UI acender) ----
-      const LY = PY - PH / 2 - 2.0;
-      gadd(GEO.rbox(4.6, 1.5, 1.2, 0.35), new THREE.MeshLambertMaterial({ color: 0x1d1f28 }), 0, LY, 0);
-      gadd(GEO.rbox(5.0, 0.25, 1.6, 0.1), yellow, 0, LY + 0.85, 0);
-      [-1.6, 1.6].forEach(x => bar(x, LY + 0.9, 0, x, PY - PH / 2 - 1.2, 0, 0.07, white));
-      tr.archLamps = [-1.4, 0, 1.4].map((x, k) => [-1, 1].map(sd => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.46, 18, 12), new THREE.MeshBasicMaterial({ color: [0x4a1212, 0x4a3c10, 0x12401a][k] })); m.material.userData.unique = true; m.position.set(x, LY, sd * 0.62); m.scale.z = 0.45; arch.add(m);
-        const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.35, 16, 1, true, 0, Math.PI), ink); visor.material.side = THREE.DoubleSide; visor.rotation.set(Math.PI / 2, sd > 0 ? 0 : Math.PI, 0); visor.position.set(x, LY + 0.05, sd * 0.75); arch.add(visor); return m; }));
-      tr.obstacles.push(...[-1, 1].map(sd => { const p = side(si, sd * AW, 0); return { x: p.x, z: p.z, r: 1.9 }; }));
+      tr.animated.push(t => { if (tPrev === null) tPrev = t; acc = Math.min(acc + (t - tPrev), 0.1); tPrev = t; let n = 0; while (acc >= H && n < 4) { stepCloth(t); acc -= H; n++; }
+        if (n) { sync(); ropes(); } });
+      // ---- semáforo de largada: preso num braço de madeira no poste da esquerda, virado para a pista (tr.archLamps para o UI) ----
+      const LY = 3.6, LX = -AW + 3.0, ink = new THREE.MeshLambertMaterial({ color: 0x2a1d4a });
+      put(new THREE.Mesh(new THREE.BoxGeometry(AW - Math.abs(LX) + 0.6, 0.32, 0.32), woodM), -AW + (AW - Math.abs(LX)) / 2, LY + 1.0, 0);
+      put(new THREE.Mesh(GEO.rbox(4.6, 1.5, 1.2, 0.35), new THREE.MeshLambertMaterial({ color: 0x1d1f28 })), LX + 1.4, LY, 0);
+      tr.archLamps = [-1.4, 0, 1.4].map((x, k) => [-1, 1].map(sd => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.46, 18, 12), new THREE.MeshBasicMaterial({ color: [0x4a1212, 0x4a3c10, 0x12401a][k] })); m.material.userData.unique = true;
+        m.position.set(LX + 1.4 + x, LY, sd * 0.55); arch.add(m);
+        const visor = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, 0.35, 16, 1, true, 0, Math.PI), ink); visor.material.side = THREE.DoubleSide; visor.rotation.set(Math.PI / 2, sd > 0 ? 0 : Math.PI, 0); visor.position.set(LX + 1.4 + x, LY + 0.05, sd * 0.75); arch.add(visor);
+        return m; }));
+      tr.obstacles.push(...[-1, 1].map(sd => { const p = side(si, sd * AW, 0); return { x: p.x, z: p.z, r: 1.0 }; }));
     }
-    tr.animated.push(t => archFlags.forEach(f => { const p = f.g.attributes.position; for (let i = 0; i < p.count; i++) { const x = f.base[i * 3], y = f.base[i * 3 + 1]; p.setZ(i, Math.sin(x * 1.9 - t * 6 + f.ph) * 0.28 * (x / 3.2) + Math.sin(y * 2 + t * 3) * 0.05 * (x / 3.2)); } p.needsUpdate = true; f.g.computeVertexNormals(); }));
 
     // ---------- plataformas de turbo ----------
     // Painel de LEDs "gamer": grade de quadradinhos (apagados) com setas em "^" acesas que andam para a frente
