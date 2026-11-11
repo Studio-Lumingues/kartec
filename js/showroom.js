@@ -57,6 +57,7 @@
   const ZI = -38;                                      // centro da plataforma interna (z, em unidades); a fachada fica em z = -13
   const RW = 15, Z0 = -5.5, Z1 = 12.5, RD = Z1 - Z0, RH = 4;   // sala interna em metros (origem na plataforma)
   const DOOR_W = 5, DOOR_H = 2.9, FZ = -6.5, FW = 17, FH = 4.4;
+  const FLAGS = [];   // bandeiras (nobori) da loja: cada uma mexe o próprio tecido em step()
   const WINS = [{ x: -5.5, y: 1.95, w: 3.7, h: 1.5 }, { x: 5.5, y: 1.95, w: 3.7, h: 1.5 }];   // janelas da frente (a da direita fica onde era o "01")
   const SCONCES = [-7.9, -3.5, 3.5, 7.9];                                                     // 4 arandelas simétricas   // fachada em metros (origem no veículo do pátio)
   const ease = x => { x = Math.max(0, Math.min(1, x)); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
@@ -343,7 +344,7 @@
         g.fillStyle = lin(g, 0, y, 0, y + sl, 'rgba(70,72,74,.13)', 'rgba(70,72,74,0)'); g.fillRect(sx, y + 0.004, sw, sl); } }
     inPx(g, (W, H) => speckle(g, W, H, 700, 0.025)); });
   // reboco texturizado (laterais), granito (rodapé e meio-fio), calçada de concreto com junta serrada a cada 1,5 m
-  const stuccoTex = () => mkM(2, 2, 256, g => { g.fillStyle = '#e2e0db'; g.fillRect(0, 0, 2, 2);
+  const stuccoTex = () => mkM(2, 2, 256, g => { g.fillStyle = '#c4c2bd'; g.fillRect(0, 0, 2, 2);
     inPx(g, (W, H) => { blotches(g, W, H, 70, 20, 110, [[255, 255, 252, 0.22], [150, 140, 125, 0.1]]); speckle(g, W, H, 22000, 0.07); }); });
   const graniteTex = (base, a) => mkM(1, 1, 256, g => { g.fillStyle = base; g.fillRect(0, 0, 1, 1);
     inPx(g, (W, H) => { blotches(g, W, H, 20, 10, 40, [[255, 255, 255, 0.06], [0, 0, 0, 0.08]]); for (let i = 0; i < 6000; i++) { const v = RND() < 0.5 ? 255 : 0, s = 0.6 + RND() * 1.8;
@@ -435,11 +436,11 @@
 
   function buildStore(K, nightUp, glass) {
     const S = STORE, R = K.grp(S.x, S.z), hw = S.w / 2, Y = WALK.h, b = (w, h, d, m, x, y, z, cast) => K.box(w, h, d, m, x, y, z, R, cast);
-    const pT = porcelainTex(), porc = (w, h) => K.std(null, 0.25, 0.05, rep(pT, w / 1.2, h / 1.2), 0.4);
+    const pT = porcelainTex(), porc = (w, h) => K.std(null, 0.25, 0.05, rep(pT, w / 1.2, h / 1.2), 0.16);
     const sT = stuccoTex(), aT = acmTex(), gT = graniteTex('#2b2c2f', 0.2);
     const alu = K.std('#c6cad0', 0.28, 0.85), frame = K.std('#43474e', 0.35, 0.7), basic = map => K.tag(new THREE.MeshBasicMaterial({ map }));
     // casca: laterais de reboco, telhado, fachada de painéis de alumínio composto acima da vitrine e rufo
-    [[-hw, -Math.PI / 2], [hw, Math.PI / 2]].forEach(([x, ry]) => K.plane(S.d, S.h, K.std(null, 0.92, 0, rep(sT, S.d / 2, S.h / 2), 0.35), x, S.h / 2, -S.d / 2, ry, R));
+    [[-hw, -Math.PI / 2], [hw, Math.PI / 2]].forEach(([x, ry]) => K.plane(S.d, S.h, K.std(null, 0.92, 0, rep(sT, S.d / 2, S.h / 2), 0.04), x, S.h / 2, -S.d / 2, ry, R));
     const roof = K.plane(S.w, S.d, K.std('#8f9296', 0.9, 0), 0, S.h, -S.d / 2, 0, R); roof.rotation.x = -Math.PI / 2;
     K.plane(S.w, S.h - S.top, K.std(null, 0.3, 0.3, rep(aT, S.w / 2.5, (S.h - S.top) / 1.25), 0.4), 0, (S.h + S.top) / 2, 0.02, 0, R);
     b(S.w + 0.14, 0.1, 0.4, alu, 0, S.h + 0.05, -0.12, false);
@@ -499,7 +500,14 @@
     [[-1.85, 1.7, 'CAFÉ', 'fresquinho', '#ffd23f', GAR.ACCENT, 0.5], [4.0, 1.7, 'SORVETE', 'geladinho', '#ffffff', '#1f6fd1', -0.35]].forEach(([x, z, a, c, bg, fg, ry]) => {
       const g = K.grp(x, z, R); g.rotation.y = ry; const pole = K.std('#d6d9de', 0.3, 0.75);
       K.cyl(0.18, 0.2, 0.12, K.std('#2a2d33', 0.8, 0), 0, Y + 0.06, 0, g, 18); K.cyl(0.02, 0.02, 2.6, pole, 0, Y + 1.3, 0, g, 8); K.cyl(0.012, 0.012, 0.6, pole, 0.3, Y + 2.52, 0, g, 6).rotation.z = Math.PI / 2;
-      const fm = K.std(null, 0.85, 0, flagTex(a, c, bg, fg), 0.6); fm.side = THREE.DoubleSide; K.plane(0.55, 1.8, fm, 0.3, Y + 1.6, 0, 0, g).castShadow = true; });
+      const fm = K.std(null, 0.85, 0, flagTex(a, c, bg, fg), 0.6); fm.side = THREE.DoubleSide;
+      // tecido malhado: preso no mastro (esquerda) e na haste de cima; a ponta de baixo, longe do mastro, é a que mais balança
+      const geo = new THREE.PlaneGeometry(0.55, 1.8, 14, 30), fl = K.put(geo, fm, 0.3, Y + 1.6, 0, g); fl.castShadow = true;
+      const P = geo.attributes.position, X0 = Float32Array.from({ length: P.count }, (_, i) => P.getX(i)), Y0 = Float32Array.from({ length: P.count }, (_, i) => P.getY(i)), ph = x * 1.7;
+      FLAGS.push(t => { for (let i = 0; i < P.count; i++) { const u = (X0[i] + 0.275) / 0.55, v = (0.9 - Y0[i]) / 1.8, free = Math.pow(u, 1.25) * (0.35 + 0.65 * v);
+          const w = Math.sin(t * 3.1 + ph - u * 4.2 - v * 2.3) + 0.45 * Math.sin(t * 5.3 + ph * 1.3 - u * 7 - v * 3.1) + 0.3 * Math.sin(t * 1.3 + ph);
+          P.setZ(i, free * 0.085 * w); P.setX(i, X0[i] - free * 0.012 * (1 + w * w * 0.5)); P.setY(i, Y0[i] + free * 0.012 * Math.sin(t * 2.2 + ph - u * 3)); }
+        P.needsUpdate = true; geo.computeVertexNormals(); }); });
     { const g = K.grp(2.75, 0.85, R); g.rotation.y = -0.45; const wood = K.std('#8a5a2b', 0.8, 0), ch = K.std(null, 0.9, 0, chalkTex(), 0.5);
       [[-0.2, 0.11, 0], [0.2, -0.11, Math.PI]].forEach(([a, z, ry]) => { const p = new THREE.Group(); p.position.set(0, Y + 0.42, z); p.rotation.set(a, ry, 0); g.add(p);
         K.box(0.58, 0.84, 0.03, wood, 0, 0, 0, p); K.plane(0.5, 0.72, ch, 0, 0.01, 0.017, 0, p).receiveShadow = false; }); }
@@ -1078,6 +1086,7 @@
       const W = this.worldK; if (W) { W.lights.forEach(l => { l.intensity = 2.6 * nf; }); W.halos.forEach((h, k) => { h.material.opacity = (k % 2 ? 0.32 : 0.95) * nf; });
         if (W.lampGlass) W.lampGlass.emissiveIntensity = 0.12 + 1.78 * nf; }
       this.updateEnv();
+      if (this.mode !== 'int' && !reduceMotion()) FLAGS.forEach(f => f(this.t));
       if (window.GfxFX) GfxFX.windU.value = this.t;   // vento nas árvores e moitas (mesmo shader da corrida)
     },
     // reflexo dos vidros: renderiza o cubemap de vez em quando (o céu muda devagar)
