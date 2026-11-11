@@ -161,6 +161,8 @@
     bump(strength) { this.play('impact', { vol: clamp(0.35 + (strength || 4) * 0.03, 0.3, 0.8), rate: 0.85 + Math.random() * 0.3 }); },
     land() { this.play('land', { vol: 0.6 }); this.play('impact', { vol: 0.25, rate: 0.6 }); },
     drift() { this.play('ui-pluck_002', { vol: 0.35, rate: 1.1 }); },
+    trick() { this.play('ui-glass_002', { vol: 0.4, rate: 1.55 }); this.play('ui-pluck_002', { vol: 0.3, rate: 1.7, delay: 0.05 }); },   // manobra no ar: brilho + "tchum" agudo
+    trickLand() { this.play('ui-maximize_006', { vol: 0.55, rate: 1.12 }); this.play('ui-glass_002', { vol: 0.28, rate: 1.25 }); },   // pouso com turbo da manobra
     spark(level) { this.play('ui-glass_002', { vol: 0.3, rate: level > 1 ? 1.3 : 1.0 }); },
     lap() { this.play('ui-confirmation_001', { vol: 0.55 }); },
     finalLap() { this.play('ui-confirmation_004', { vol: 0.6 }); this.play('cheer', { vol: 0.25 }); },

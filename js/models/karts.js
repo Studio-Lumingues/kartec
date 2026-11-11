@@ -362,7 +362,7 @@
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
-      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
+      rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; flatPaints.forEach(m => m.color.set(hex).convertSRGBToLinear()); },
       // troca de cores do piloto ou do personagem (menino/menina): o personagem novo é montado no mesmo lugar
@@ -373,6 +373,11 @@
       // anima volante, garfo da moto e piloto. st = { steer, speed(0..1), boost, drift, air }
       animate(dt, st) {
         const sr = this.steerRig, a = st.steer || 0; if (sr.spin) sr.spin.rotation.z = a * sr.k; if (sr.fork) sr.fork.rotation.y = a * sr.k;
+        // manobra no ar (st.trick 0..1): solta uma mão do volante e ergue o braço (a do lado de fora do giro), estilo "Yahoo!"
+        if (this.hands && this.hands.length > 1) { const tk = st.trick || 0, hs = this.hands, side = (st.trickDir || 1) > 0 ? 1 : -1;
+          hs.forEach(h => { if (!h.userData.base) h.userData.base = h.position.clone(); h.position.copy(h.userData.base); });
+          if (tk > 0.001) { const h = hs.reduce((b, x) => (x.userData.base.x * side > b.userData.base.x * side ? x : b)), e = tk * tk * (3 - 2 * tk), r = h.userData.base.length() || 0.4;
+            h.position.x += side * r * 0.9 * e; h.position.y += r * 3.0 * e; h.position.z += r * 0.9 * e; } }
         // LOD do piloto (m.lod, definido pelo main.js > kartCull): 0 = todo quadro, 1 = a cada 2, 2 = a cada 4, 3 = fora da tela (parado).
         // O IK de braços e pernas é o que mais pesa por kart; longe ninguém percebe a animação em passos.
         const pl = this.pilot;

@@ -549,6 +549,8 @@
       if (!isPlayer) return;
       const S = UI.Sfx;
       if (ev === 'boost' || ev === 'miniTurbo') S.boost();
+      else if (ev === 'trick') { if (S.trick) S.trick(); }
+      else if (ev === 'trickLand') { if (S.trickLand) S.trickLand(); else S.boost(); this.cam.shake = Math.min(0.5, (this.cam.shake || 0) + 0.22); }
       else if (ev === 'curtain') waterFlash();
       else if (ev === 'bump') S.bump(); else if (ev === 'land') S.land(); else if (ev === 'driftStart') S.drift(); else if (ev === 'coin') S.coin();
       else if (ev === 'lap' && this.state === 'race') {

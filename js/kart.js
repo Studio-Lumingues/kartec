@@ -171,6 +171,7 @@
   // ---------- texturas das partículas (geradas em canvas) ----------
   let glowTexCache = null, softTexCache = null, puffTexCache = null, starTexCache = null;
   const cv = n => { const c = document.createElement('canvas'); c.width = c.height = n; return c; };
+  const TRICK_COL = [0xfff2a0, 0x9ff0ff, 0xffb8f0, 0xffffff];   // brilhos da manobra no ar: dourado, ciano, rosa, branco
   const Fx = {
     glowTex() { if (!glowTexCache) glowTexCache = new THREE.CanvasTexture(TX.canvas('glow')); return glowTexCache; },
     softTex() { if (!softTexCache) softTexCache = new THREE.CanvasTexture(TX.canvas('soft')); return softTexCache; },
@@ -521,8 +522,11 @@
       // ao pousar ganha um turbo curto. Precisa ser um toque novo (segurar o botão desde o chão não conta).
       const dPress = racing && !!inp.drift && !this.prevDriftIn; this.prevDriftIn = !!inp.drift;
       if (this.air) this.airT = (this.airT || 0) + dt;
-      if (this.air && dPress && !this.trick && this.airT < 0.5 && !this.finished) { this.trick = true; this.trickT = 0; this.trickDir = steer < -0.3 ? -1 : 1; this.squash = -0.12; this.events('trick', this);
-        if (Fx.glint) for (let q = 0; q < 14; q++) { const an = q / 14 * 6.283, sp = 5 + Math.random() * 4; Fx.glint(this.pos.x, this.pos.y + 1, this.pos.z, Math.cos(an) * sp, 2 + Math.sin(an) * sp, Math.sin(an * 1.7) * sp, q % 2 ? 0xfff2a0 : 0x9ff0ff, 0.5 + Math.random() * 0.4, 0.45); } }
+      // Estilo MK World: com o volante para um lado o kart dá um rolamento lateral (parafuso); sem volante, um giro de 360 graus
+      // no próprio eixo com o bico empinado. Um "pop" pequeno para cima dá tempo de ver a manobra.
+      if (this.air && dPress && !this.trick && this.airT < 0.5 && !this.finished) { const sd = steer < -0.3 ? -1 : steer > 0.3 ? 1 : 0;
+        this.trick = true; this.trickT = 0; this.trickAnim = true; this.trickKind = sd ? 'roll' : 'spin'; this.trickDir = sd || (Math.random() < 0.5 ? -1 : 1);
+        this.squash = -0.2; this.vy = Math.max(this.vy, 0) + (P.TRICK_POP || 2.2); this.trickStartFx = true; this.events('trick', this); }
       if (this.mtCool > 0) this.mtCool -= dt;
       // DRIFT SÓ COM ESTERÇO ATIVO: precisa da tecla de drift (Espaço/Shift) E de A/D (ou setas) pressionados no
       // mesmo instante. Em reta, sem virar, a tecla de drift é ignorada por completo (sem pulinho, sem faísca, sem carga).
@@ -577,7 +581,7 @@
         this.vy -= P.GRAV * dt; this.pos.y += this.vy * dt;
         if (this.pos.y <= gr.h) { const impact = -this.vy; this.pos.y = gr.h; this.air = false; this.vy = 0; this.vyG = 0;   // zera a velocidade vertical do chão: sem isso o kart re-decolava sozinho logo depois de pousar (pulos em cadeia)
           if (impact > 5) { this.squash = Math.min(0.35, impact * 0.025); this.landFx = impact; this.events('land', this); }
-          if (this.trick) { this.trick = false; this.trickT = 1; this.boostT = Math.max(this.boostT, 1.1); this.speed += P.MAX * (P.TRICK_KICK || 0.1); this.mtFx = 2; this.boostTint = 2; this.events('miniTurbo', this); } }
+          if (this.trick) { this.trick = false; this.boostT = Math.max(this.boostT, 1.1); this.speed += P.MAX * (P.TRICK_KICK || 0.1); this.mtFx = 1; this.boostTint = 1; this.trickLandFx = true; this.squash = Math.max(this.squash, 0.26); this.events('trickLand', this); } }
       } else if (tr.vert && Math.abs(this.speed) > 8 && gr.h < this.pos.y + this.vyG * dt - ((off ? 0.9 : 0.4) + 0.08 * Math.abs(this.speed) * dt)) {   // margem cresce com o passo do quadro (FPS baixo não vira pulo)
         // pista com relevo: decola só quando o chão "some" de verdade (borda de rampa). Nas cristas o kart fica colado
         // no asfalto: com as velocidades atuais elas faziam o kart dar pulinhos sozinho em lombadas suaves.
@@ -617,8 +621,19 @@
       g.rotation.order = 'YXZ'; g.rotation.y = this.ang;
       const tp = this.air ? Math.max(-0.35, Math.min(0.3, -this.vy * 0.03)) : (wet ? 0 : -Math.atan((gr && gr.slope) || 0));   // fora do asfalto também (relevo dos atalhos)
       g.rotation.x += (tp - g.rotation.x) * Math.min(1, 10 * dt);
-      if (this.trick) { this.trickT = Math.min(1, (this.trickT || 0) + dt / 0.45); const e = this.trickT, k = e < 0.5 ? 4 * e * e * e : 1 - Math.pow(-2 * e + 2, 3) / 2; g.rotation.z = -this.trickDir * k * Math.PI * 2; }
+      // manobra no ar: preparação (contragiro curtinho + encolhe), giro rápido com sobra (easeOutBack) e assentada.
+      // Se pousar no meio, termina 3x mais rápido. A volta inteira (2 pi) é descontada no fim: não "desgira" depois.
+      let spinY = 0, trickPitch = 0;
+      if (this.trickAnim) { this.trickT = Math.min(1, (this.trickT || 0) + dt / 0.55 * (this.air ? 1 : 3)); const e = this.trickT, d = this.trickDir;
+        const wind = e < 0.16 ? Math.sin(e / 0.16 * Math.PI) * 0.09 : 0, m = Math.max(0, Math.min(1, (e - 0.1) / 0.9)), c1 = 1.9, c3 = c1 + 1;
+        const k = m >= 1 ? 1 : 1 + c3 * Math.pow(m - 1, 3) + c1 * Math.pow(m - 1, 2), arc = Math.sin(Math.min(1, m) * Math.PI), A = (k - wind) * Math.PI * 2 - (m >= 1 ? Math.PI * 2 : 0);
+        if (this.trickKind === 'spin') { spinY = d * A; g.rotation.z = d * 0.22 * arc; trickPitch = -0.32 * arc; }
+        else { g.rotation.z = -d * A; g.rotation.y += d * 0.3 * arc; trickPitch = -0.12 * arc; }
+        this.squash = Math.min(this.squash, -0.1 * arc);                                      // estica no meio do giro
+        if (e >= 1) this.trickAnim = false; }
       else { const tr0 = this.air || wet ? 0 : ((gr && gr.roll) || 0); g.rotation.z += (tr0 - g.rotation.z) * Math.min(1, 10 * dt); }   // inclina de lado no barranco
+      // pose do piloto (braço para cima) enquanto a manobra roda e até pousar
+      this.trickPose = (this.trickPose || 0) + (((this.trickAnim || this.trick) ? 1 : 0) - (this.trickPose || 0)) * Math.min(1, ((this.trickAnim || this.trick) ? 9 : 6) * dt);
       this.steerVis += (steer - this.steerVis) * Math.min(1, 10 * dt);
       const sd = Math.min(dt, 0.05); this.fxT = (this.fxT || 0) + dt;   // molas com passo limitado (estáveis mesmo num quadro lento)
       // ângulo da derrapada com MOLA: na entrada a traseira passa um pouco do ponto e "assenta"; fechando o arco ela abre mais,
@@ -626,7 +641,7 @@
       const relD = this.drifting ? this.driftSteer * this.driftDir : 0;
       const slipT = this.drifting ? this.driftDir * (0.32 + 0.13 * Math.max(0, relD) - 0.08 * Math.max(0, -relD)) : 0;
       this.slipV = (this.slipV || 0) + ((slipT - this.slip) * 120 - (this.slipV || 0) * 13) * sd; this.slip += this.slipV * sd;
-      this.m.pivot.rotation.y = this.slip;                       // gira carroceria E rodas juntas
+      this.m.pivot.rotation.y = this.slip + spinY;               // gira carroceria E rodas juntas (+ giro de 360 da manobra)
       // contra-esterço: no drift as rodas da frente apontam para onde o kart está INDO (contra o giro da carroceria),
       // com um pouco do volante por cima. Fora do drift, esterço normal. Mistura suave conforme a derrapada some.
       // esterço visual limitado a ±0,42 rad: mais que isso o pneu encostaria no capô/laterais
@@ -646,9 +661,9 @@
       if (this.m.moto) { this.m.pivot.rotation.z += (-roll - this.m.pivot.rotation.z) * Math.min(1, 6 * dt); this.m.pivot.rotation.z += this.hitRoll * 0.6; b.rotation.z = 0;
         // grau: gira em torno do ponto de apoio da roda traseira (a traseira continua no chão)
         const w = this.wheelT || 0, th = -(0.42 * w * w * (3 - 2 * w)) + (w > 0.9 ? Math.sin(performance.now() / 140) * 0.025 : 0), rz = this.m.rear.z;
-        this.m.pivot.rotation.x = th + this.pitch * 0.5; this.m.pivot.position.set(0, rz * Math.sin(th), rz - rz * Math.cos(th)); } else { b.rotation.z = roll + this.hitRoll; b.rotation.x = this.pitch; }
+        this.m.pivot.rotation.x = th + this.pitch * 0.5 + trickPitch; this.m.pivot.position.set(0, rz * Math.sin(th), rz - rz * Math.cos(th)); } else { b.rotation.z = roll + this.hitRoll; b.rotation.x = this.pitch + trickPitch; }
       // volante/guidão e piloto (inclina o corpo e olha para dentro da curva)
-      this.m.animate(dt, { steer: this.steerVis, speed: Math.min(1, Math.abs(this.speed) / P.MAX), boost: boosting, drift: this.drifting ? this.driftDir : 0, air: this.air });
+      this.m.animate(dt, { steer: this.steerVis, speed: Math.min(1, Math.abs(this.speed) / P.MAX), boost: boosting, drift: this.drifting ? this.driftDir : 0, air: this.air, trick: this.trickPose || 0, trickDir: this.trickDir || 1 });
       // pulinho do drift: estica ao saltar, sobe rápido e cai, e "amassa" ao tocar o chão (com o bico mergulhando)
       if (this.hopT > 0) { this.hopT -= dt; if (this.hopT <= 0) { this.squash = Math.max(this.squash, 0.17); this.pitchV += 1.4; } }
       this.squash *= Math.max(0, 1 - 8 * dt);
@@ -668,6 +683,23 @@
       const near = this.isPlayer || !Fx.cam || Fx.cam.position.distanceToSquared(this.pos) < 8100;
       const fx = Math.sin(this.mvAng), fz = Math.cos(this.mvAng), lx = Math.cos(this.ang), lz = -Math.sin(this.ang);   // frente do movimento e "esquerda" do kart
       const COL = [0xfff2b0, 0x4aa8ff, 0xff8a1a];
+      // MANOBRA: estouro de estrelas na largada do giro, rastro de brilhos enquanto gira e onda de choque no pouso
+      if (this.trickStartFx) { this.trickStartFx = false;
+        if (near) { const y = this.pos.y + 1.1; Fx.puff('glow', this.pos.x, y, this.pos.z, 0, 0.4, 0, 0xffffff, 1.2, 5.5, 0.2, 0.9);
+          for (let q = 0; q < 18; q++) { const an = q / 18 * 6.283, sp = 6 + Math.random() * 4; Fx.glint(this.pos.x, y, this.pos.z, Math.cos(an) * sp, 2.5 + Math.sin(an) * sp * 0.8, Math.sin(an * 1.7) * sp, TRICK_COL[q % 4], 0.55 + Math.random() * 0.45, 0.5); }
+          for (let q = 0; q < 10; q++) { const an = q / 10 * 6.283; Fx.ray(this, 0, 1.1, 0, Math.cos(an), Math.sin(an), 0.2 * Math.sin(an * 2), 3 + Math.random() * 2, 0.32, 0xfff6c0, 0.2); }
+          Fx.rayCore(this, 0, 1.1, 0, 4.5, 0xffffff, 0.2); } }
+      if (this.trickAnim && near) { this.trailAcc = (this.trailAcc || 0) + dt * 70; let q = 0;
+        while (this.trailAcc >= 1 && q++ < 6) { this.trailAcc -= 1; const a = Math.random() * 6.283, r = 0.6 + Math.random() * 1.2;
+          Fx.glint(this.pos.x + Math.cos(a) * r, this.pos.y + 0.7 + Math.random() * 1.0, this.pos.z + Math.sin(a) * r, -fx * 3 + (Math.random() - 0.5) * 2, 0.5 + Math.random(), -fz * 3 + (Math.random() - 0.5) * 2, TRICK_COL[(Math.random() * 4) | 0], 0.25 + Math.random() * 0.3, 0.38); } }
+      if (this.trickLandFx) { this.trickLandFx = false;
+        if (near) { const x = this.pos.x, y = this.pos.y + 0.15, z = this.pos.z;
+          Fx.puff('glow', x, y + 0.3, z, 0, 0.2, 0, 0x8fd2ff, 2.5, 7.5, 0.3, 0.85);                   // clarão azul no chão
+          for (let k = 0; k < 32; k++) { const a = k / 32 * 6.2832, v = 10 + Math.random() * 3;            // anel de faíscas rente ao chão (onda de choque)
+            Fx.spark(x + Math.cos(a) * 0.8, y, z + Math.sin(a) * 0.8, Math.cos(a) * v, 0.8 + Math.random() * 1.2, Math.sin(a) * v, k % 3 ? 0x6cc4ff : 0xffffff, 0.32, 0.42, this.pos.y + 0.04); }
+          const dark = 1 - 0.6 * (window.Env ? Env.nightF : 0), dust = new THREE.Color(0xe8e2d6).multiplyScalar(dark).getHex();
+          for (let k = 0; k < 10; k++) { const a = k / 10 * 6.2832 + Math.random() * 0.3; Fx.puff('smoke', x + Math.cos(a) * 1.2, y + 0.1, z + Math.sin(a) * 1.2, Math.cos(a) * 6, 0.6 + Math.random() * 0.6, Math.sin(a) * 6, dust, 0.8, 3.4, 0.7, 0.55, 0.4); }
+          for (let q = 0; q < 12; q++) Fx.glint(x, y + 0.8, z, (Math.random() - 0.5) * 8 - fx * 4, 3 + Math.random() * 4, (Math.random() - 0.5) * 8 - fz * 4, TRICK_COL[q % 4], 0.5, 0.45); } }
       // estouro do mini-turbo (vale para o jogador e para os bots)
       if (this.mtFx) { const lv = this.mtFx, col = COL[lv]; this.mtFx = 0; this.pitchV -= 2.6 + lv * 0.6;
         if (near) wheels.forEach(s => { for (let k = 0; k < 14; k++) { const a = k / 14 * 6.2832;
@@ -737,7 +769,7 @@
 
     respawn() {
       const tr = this.track, i = this.idx, p = tr.S[i];
-      this.pos.set(p.x, tr.roadBase + (tr.hAt ? tr.hAt(i) : tr.bump(i)), p.z); this.ang = this.mvAng = Math.atan2(tr.T[i].x, tr.T[i].z); this.speed = 0; this.air = false; this.trick = false; this.vy = 0; this.vyG = 0; this.stuckT = 0; this.drifting = false; this.railSide = null;
+      this.pos.set(p.x, tr.roadBase + (tr.hAt ? tr.hAt(i) : tr.bump(i)), p.z); this.ang = this.mvAng = Math.atan2(tr.T[i].x, tr.T[i].z); this.speed = 0; this.air = false; this.trick = false; this.trickAnim = false; this.trickPose = 0; this.vy = 0; this.vyG = 0; this.stuckT = 0; this.drifting = false; this.railSide = null;
     }
 
     // corredor invisível em volta da pista + limites do mapa
