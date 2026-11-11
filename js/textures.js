@@ -253,32 +253,28 @@
       return c; },
     // zebra de autódromo (largura inteira de 3,6 m em u: 0 = beira do asfalto, 1 = fora):
     //  0-3%   junta de borracha escura colada no asfalto
-    //  3-60%  blocos vermelho/branco (2 m cada) com nervuras transversais em relevo pintado (crista clara, vale escuro),
+    //  3-95%  blocos vermelho/branco (2 m cada) com nervuras transversais em relevo pintado (crista clara, vale escuro),
     //         como as zebras "serrilhadas" de verdade; borracha de pneu mais forte perto do asfalto
-    //  60-66% filete branco que separa a zebra da faixa verde
-    //  66-97% faixa verde pintada (área de escape), com grão e sujeira
-    //  97-100% borda escura
+    //  95-100% borda escura (sem faixa verde)
     // Repete a cada 2 blocos no sentido da pista. As alturas reais (rampinha, blocos altos, faixa baixa) vêm da geometria (curbProf).
     curb() { const SW = 256, SH = 512, n = fbm(SW, SH, 4, 3, 919), m = fbm(SW, SH, 16, 2, 929);
-      const RED = [[214, 38, 46], [242, 78, 82]], WHT = [[232, 228, 220], [255, 253, 248]], GRN = [[38, 132, 70], [58, 160, 88]];
+      const RED = [[214, 38, 46], [242, 78, 82]], WHT = [[232, 228, 220], [255, 253, 248]];
       const RIB = 16;   // nervuras por bloco
       const c = paint(SW, SH, (x, y, i) => {
         const u = x / (SW - 1), bh = SH / 2, yy = y % bh; let col;
         if (u < 0.03) col = mixc([44, 40, 44], [70, 66, 70], n[i]);
-        else if (u < 0.6) {
+        else if (u < 0.95) {
           const blk = y < bh ? RED : WHT, r = (yy % (bh / RIB)) / (bh / RIB);                       // posição dentro da nervura (0..1)
           const ridge = Math.sin(r * Math.PI);                                                          // crista no meio da nervura
           col = mixc(blk[0], blk[1], ridge * 0.8);
           if (r < 0.12) col = mixc(col, [255, 255, 255], (1 - r / 0.12) * 0.28);                        // luz na borda de cima da nervura
           if (r > 0.82) col = mixc(col, [40, 24, 30], ((r - 0.82) / 0.18) * 0.38);                      // sombra no vale
-          const lu = (u - 0.03) / 0.57;
+          const lu = (u - 0.03) / 0.92;
           if (lu < 0.05 || lu > 0.95) col = mixc(col, col.map(v => v * 0.8), 0.7);                     // quina dos blocos
           if (yy < 3 || yy > bh - 4) col = mixc(col, [50, 36, 44], 0.5);                               // junta entre blocos
           col = mixc(col, [38, 34, 38], Math.max(0, 0.45 - lu) * 0.7 * (0.5 + n[i]));                  // borracha perto do asfalto
         }
-        else if (u < 0.66) { col = mixc([238, 236, 230], [255, 255, 252], m[i]); if (u < 0.605 || u > 0.655) col = mixc(col, [90, 90, 90], 0.4); }
-        else if (u < 0.97) { col = mixc(GRN[0], GRN[1], n[i]); col = mixc(col, [88, 96, 70], Math.max(0, m[i] - 0.6) * 1.2); }
-        else col = [52, 70, 52];
+        else col = mixc([62, 56, 60], [84, 78, 80], n[i]);
         col = mixc(col, [92, 82, 76], Math.max(0, n[i] - 0.66) * 0.8);                                 // sujeira
         return jit(col, 7);
       }), g = c.getContext('2d');
@@ -286,12 +282,35 @@
       for (let k = 0; k < 14; k++) { const x = 10 + Math.pow(rnd(), 1.7) * 130, y = rnd() * SH, l = 70 + rnd() * 170, w = 3 + rnd() * 7;
         wrapXY(SW, SH, x, y, (px, py) => { const gr = g.createLinearGradient(0, py, 0, py + l); gr.addColorStop(0, 'rgba(28,24,28,0)'); gr.addColorStop(0.3, 'rgba(28,24,28,.3)'); gr.addColorStop(0.7, 'rgba(28,24,28,.22)'); gr.addColorStop(1, 'rgba(28,24,28,0)');
           g.fillStyle = gr; g.fillRect(px, py, w, l); }); }
-      // lascas na pintura (aparece o concreto) e cascalho sobre a faixa verde
-      for (let k = 0; k < 22; k++) { const x = rnd() * SW * 0.6, y = rnd() * SH, r = 1 + rnd() * 2.4;
+      // lascas na pintura (aparece o concreto)
+      for (let k = 0; k < 22; k++) { const x = rnd() * SW * 0.95, y = rnd() * SH, r = 1 + rnd() * 2.4;
         wrapXY(SW, SH, x, y, (px, py) => { g.fillStyle = 'rgba(150,140,140,.85)'; g.beginPath(); g.ellipse(px, py, r * 1.4, r, rnd() * 3, 0, 6.2832); g.fill(); }); }
-      for (let k = 0; k < 160; k++) { g.fillStyle = rnd() < 0.5 ? 'rgba(200,190,170,.55)' : 'rgba(60,60,55,.45)'; g.fillRect(SW * (0.67 + rnd() * 0.29), rnd() * SH, 1 + rnd() * 2, 1 + rnd() * 2); }
       return c; },
     paint() { return flat(16, 16, '#ffffff')[0]; },
+    // faixas da pista (bordas e tracejado do meio): tinta branca com desgaste VARIADO ao longo da pista. A cada trecho de
+    // 2 a 6 m sorteia um desgaste (tinta nova, gasta ou bem gasta). Onde gastou aparece o asfalto (alfa 0, com alphaTest):
+    // falhas pela borda, pontinhos, rachaduras atravessando e marca de pneu escurecendo. Textura = 0,9 m x 24 m (repete).
+    roadLine() { const SW = 64, SH = 1024, n = fbm(SW, SH, 6, 4, 1201), m = fbm(SW, SH, 24, 3, 1213), e = fbm(SW, SH, 3, 2, 1229);
+      const PXM = SH / 24, wear = new Float32Array(SH);
+      for (let y = 0; y < SH;) { const len = Math.round((2 + rnd() * 4) * PXM), r = rnd(), w = r < 0.35 ? 0.0 : r < 0.75 ? 0.16 : 0.32;   // nova / gasta / bem gasta
+        for (let k = 0; k < len && y < SH; k++, y++) wear[y] = w; }
+      for (let it = 0; it < 3; it++) for (let y = 0; y < SH; y++) wear[y] = (wear[(y + SH - 6) % SH] + wear[y] + wear[(y + 6) % SH]) / 3;   // transição suave entre trechos
+      const c = paint(SW, SH, (x, y, i) => {
+        const u = x / (SW - 1), w = wear[y], edge = Math.min(u, 1 - u);
+        const keep = n[i] * 0.55 + m[i] * 0.45 - w - Math.max(0, 0.1 - edge) * (2 + 6 * w) * e[i];    // gasta mais nas bordas
+        if (keep < 0.12) return [0, 0, 0, 0];
+        let col = mixc([226, 224, 214], [250, 249, 242], m[i]);
+        col = mixc(col, [150, 146, 140], Math.max(0, w - 0.05) * 1.6 * (0.6 + 0.4 * n[i]));                   // tinta velha fica acinzentada
+        col = mixc(col, [120, 116, 112], Math.max(0, e[i] - 0.65) * 0.9);                              // marca de pneu
+        return jit(col, 8).concat([255]);
+      }), g = c.getContext('2d');
+      // rachaduras do asfalto atravessando a tinta e pontinhos de tinta faltando
+      g.globalCompositeOperation = 'destination-out';
+      for (let k = 0; k < 26; k++) { let x = -4, y = rnd() * SH; g.lineWidth = 1 + rnd() * 1.5; g.beginPath(); g.moveTo(x, y);
+        while (x < SW + 4) { x += 6 + rnd() * 8; y += (rnd() - 0.5) * 10; g.lineTo(x, y); } g.stroke(); }
+      for (let k = 0; k < 900; k++) { const y = rnd() * SH, p = wear[y | 0] + 0.08; if (rnd() > p * 1.6) continue; g.beginPath(); g.arc(rnd() * SW, y, 0.6 + rnd() * 1.6, 0, 6.2832); g.fill(); }
+      g.globalCompositeOperation = 'source-over';
+      return c; },
     dirt() { const c = wavy(128, 128, [226, 150, 92], [95, 214, 65], 0.86), g = c.getContext('2d');
       for (let k = 0; k < 10; k++) { g.fillStyle = rnd() < 0.5 ? '#c97f4c' : '#f0b47a'; g.beginPath(); g.arc(rnd() * 80, rnd() * 128, 2 + rnd() * 3, 0, 6.2832); g.fill(); }
       return c; },

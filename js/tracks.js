@@ -727,10 +727,11 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     const notBridge = i => bump(i) > 0.02 || bump((i + 1) % N) > 0.02;
     const asphaltTint = [1, 1, 1.02];
     strip(-W, W, 0.05, { nx: 16, map: TX.get('asphalt'), phong: { shininess: 30, specular: 0x26262a }, antiTile: LO ? null : { scale: 0.41, blend: 0.45, macro: 0.07 }, roadFx: !LO, uSpan: 2 * W / 7, vLen: 7, col: (i, f) => { const v = 1 - 0.1 * Math.exp(-Math.pow((f - 0.5) / 0.2, 2)) + 0.04 * Math.sin(i * 0.21) * Math.sin(i * 0.057) + 0.04 * Math.pow(Math.abs(f - 0.5) * 2, 6); return asphaltTint.map(k => v * k); } });
-    [-1, 1].forEach(s => strip(s * (W - 0.85), s * (W - 0.4), 0.06, { map: TX.get('paint'), uSpan: 0.2, vLen: 3, po: -2 }));
-    strip(-0.22, 0.22, 0.09, { map: TX.get('paint'), uSpan: 0.1, vLen: 3, po: -2, skip: i => !((Math.floor(i / 3) % 2)) });
-    // zebra com relevo: sobe da beira do asfalto (rampinha), fica alta nos blocos e desce para a faixa verde de fora
-    const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.05 * (u - 0.03) / 0.09 : u < 0.6 ? 0.05 : u < 0.66 ? 0.05 - 0.04 * (u - 0.6) / 0.06 : 0.01;
+    // faixas pintadas mais grossas (bordas 0,9 m, tracejado 0,8 m), tinta com desgaste variado (TX 'roadLine' + alphaTest)
+    [-1, 1].forEach(s => strip(s * (W - 1.35), s * (W - 0.45), 0.06, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, flipU: s < 0 }));
+    strip(-0.4, 0.4, 0.09, { map: TX.get('roadLine'), uSpan: 1, vLen: 24, po: -2, alphaTest: 0.35, skip: i => !((Math.floor(i / 3) % 2)) });
+    // zebra com relevo: sobe da beira do asfalto (rampinha), fica alta nos blocos e desce na borda de fora
+    const curbProf = u => u < 0.03 ? 0 : u < 0.12 ? 0.05 * (u - 0.03) / 0.09 : u < 0.9 ? 0.05 : 0.05 - 0.04 * (u - 0.9) / 0.1;
     strip(W, W + CB, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, prof: curbProf }); strip(-W - CB, -W, 0.085, { nx: 14, map: TX.get('curb'), uSpan: 1, vLen: 4, flipU: true, prof: curbProf });
     strip(W + CB, W + CB + 3.4, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true });
     strip(-W - CB - 3.4, -W - CB, 0.035, { map: GfxFX.aniso(TX.get('trailSide'), 16), uSpan: 1, vLen: 5, alphaTest: 0.5, skip: i => notBridge(i), flat: true, flipU: true });
