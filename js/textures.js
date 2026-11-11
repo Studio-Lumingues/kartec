@@ -262,19 +262,17 @@
       const RIB = 16;   // nervuras por bloco
       const c = paint(SW, SH, (x, y, i) => {
         const u = x / (SW - 1), bh = SH / 2, yy = y % bh; let col;
-        if (u < 0.03) col = mixc([44, 40, 44], [70, 66, 70], n[i]);
-        else if (u < 0.95) {
+        {
           const blk = y < bh ? RED : WHT, r = (yy % (bh / RIB)) / (bh / RIB);                       // posição dentro da nervura (0..1)
           const ridge = Math.sin(r * Math.PI);                                                          // crista no meio da nervura
           col = mixc(blk[0], blk[1], ridge * 0.8);
           if (r < 0.12) col = mixc(col, [255, 255, 255], (1 - r / 0.12) * 0.28);                        // luz na borda de cima da nervura
           if (r > 0.82) col = mixc(col, [40, 24, 30], ((r - 0.82) / 0.18) * 0.38);                      // sombra no vale
-          const lu = (u - 0.03) / 0.92;
-          if (lu < 0.05 || lu > 0.95) col = mixc(col, col.map(v => v * 0.8), 0.7);                     // quina dos blocos
+          const lu = u;
+          if (lu < 0.03 || lu > 0.97) col = mixc(col, col.map(v => v * 0.9), 0.5);                     // quina dos blocos (bem leve)
           if (yy < 3 || yy > bh - 4) col = mixc(col, [50, 36, 44], 0.5);                               // junta entre blocos
-          col = mixc(col, [38, 34, 38], Math.max(0, 0.45 - lu) * 0.7 * (0.5 + n[i]));                  // borracha perto do asfalto
+          col = mixc(col, [70, 62, 66], Math.max(0, 0.3 - lu) * 0.5 * (0.5 + n[i]));                  // um pouco de borracha perto do asfalto (sem virar faixa escura)
         }
-        else col = mixc([62, 56, 60], [84, 78, 80], n[i]);
         col = mixc(col, [92, 82, 76], Math.max(0, n[i] - 0.66) * 0.8);                                 // sujeira
         return jit(col, 7);
       }), g = c.getContext('2d');
@@ -291,12 +289,10 @@
     // os blocos, quina arredondada nas laterais, junta de borracha baixa na beira do asfalto. Linear (não sRGB).
     curbBump() { const SW = 128, SH = 512, n = fbm(SW, SH, 8, 2, 977);
       return paint(SW, SH, (x, y, i) => { const u = x / (SW - 1), bh = SH / 2, yy = y % bh; let h;
-        if (u < 0.03) h = 0.15;
-        else if (u < 0.95) { const r = (yy % (bh / 16)) / (bh / 16), lu = (u - 0.03) / 0.92;
+        { const r = (yy % (bh / 16)) / (bh / 16), lu = u;
           h = 0.35 + 0.5 * Math.pow(Math.sin(r * Math.PI), 0.7);                                // nervura
           h *= Math.min(1, Math.min(lu, 1 - lu) / 0.06);                                          // quina arredondada
           if (yy < 3 || yy > bh - 4) h = 0.05; }                                                  // junta funda entre blocos
-        else h = 0.2;
         const v = Math.max(0, Math.min(255, (h + (n[i] - 0.5) * 0.08) * 255)); return [v, v, v]; }); },
     // faixas da pista (bordas e tracejado do meio): tinta branca com desgaste VARIADO ao longo da pista. A cada trecho de
     // 2 a 6 m sorteia um desgaste (tinta nova, gasta ou bem gasta). Onde gastou aparece o asfalto (alfa 0, com alphaTest):
