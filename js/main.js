@@ -738,6 +738,7 @@
         st.textContent += 'body.raceDone #hud,body.raceDone #touch,body.raceDone #itemSlot,body.raceDone #rocketWarn,body.raceDone #speedo3d,body.raceDone #boost3d{display:none!important}';
         document.head.appendChild(st); el = this._fb = document.createElement('div'); el.id = 'finishBoard'; document.body.appendChild(el); }
       document.body.classList.add('raceDone');   // chegada: some o HUD da corrida, fica só o placar
+      if (!this._fbBanner) this.finishBanner();
       const ks = this.karts.slice(), fin = ks.filter(k => k.finished).sort((a, b) => a.finishTime - b.finishTime), run = ks.filter(k => !k.finished).sort((a, b) => b.progress - a.progress);
       const key = fin.map(k => k.name).join('|') + '#' + run.length;
       if (key !== this._fbKey) { this._fbKey = key;
@@ -745,7 +746,28 @@
         el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
       if (!el.classList.contains('on')) requestAnimationFrame(() => el.classList.add('on'));
     },
-    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
+    // "CHEGADA!" grande no meio da tela quando o jogador cruza a linha: entra com um pulo, brilho correndo pelas
+    // letras, estrelinhas e um halo pulsando; fica ~2,6 s e sai subindo e sumindo
+    finishBanner() {
+      this._fbBanner = true;
+      if (!document.getElementById('finishBannerCss')) { const st = document.createElement('style'); st.id = 'finishBannerCss';
+        st.textContent = '#finishBanner{position:fixed;left:0;right:min(380px,44vw);top:24%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif}' +
+          '#finishBanner .w{display:inline-block;position:relative;animation:fbPop .7s cubic-bezier(.2,1.6,.4,1) both, fbOut .6s ease-in 2.6s forwards}' +
+          '#finishBanner .halo{position:absolute;left:50%;top:50%;width:140%;height:220%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(255,220,120,.55),rgba(255,120,80,.18) 55%,rgba(255,120,80,0));animation:fbHalo 1.1s ease-in-out infinite alternate}' +
+          '#finishBanner b{position:relative;display:block;font-size:clamp(44px,8.5vw,120px);font-style:italic;letter-spacing:2px;transform:skewX(-8deg);' +
+          'background:linear-gradient(100deg,#ffe066 0%,#ffb627 30%,#fff9d6 45%,#ffb627 55%,#ff7a2f 80%,#ffe066 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;' +
+          '-webkit-text-stroke:3px #0c0c0e;filter:drop-shadow(0 6px 0 #0c0c0e) drop-shadow(0 0 18px rgba(255,200,80,.85)) drop-shadow(0 0 40px rgba(255,140,60,.6));animation:fbShine 1.3s linear infinite}' +
+          '#finishBanner i{position:absolute;width:26px;height:26px;background:#fff;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);animation:fbStar 1s ease-in-out infinite;filter:drop-shadow(0 0 8px #fff7c0)}' +
+          '@keyframes fbPop{0%{transform:scale(.2) rotate(-6deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}@keyframes fbOut{to{transform:translateY(-40px) scale(1.08);opacity:0}}' +
+          '@keyframes fbShine{from{background-position:120% 0}to{background-position:-100% 0}}@keyframes fbHalo{from{opacity:.6;transform:translate(-50%,-50%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1.06)}}' +
+          '@keyframes fbStar{0%,100%{transform:scale(.3) rotate(0);opacity:.2}50%{transform:scale(1) rotate(45deg);opacity:1}}';
+        document.head.appendChild(st); }
+      let el = document.getElementById('finishBanner'); if (el) el.remove();
+      el = document.createElement('div'); el.id = 'finishBanner';
+      el.innerHTML = '<span class="w"><span class="halo"></span><b>CHEGADA!</b>' + [[-4, 10, 0], [96, 4, .3], [88, 78, .6], [6, 82, .45], [50, -14, .15]].map(([x, y, d]) => '<i style="left:' + x + '%;top:' + y + '%;animation-delay:' + d + 's"></i>').join('') + '</span>';
+      document.body.appendChild(el); clearTimeout(this._fbBT); this._fbBT = setTimeout(() => { if (el.parentNode) el.remove(); }, 3400);
+    },
+    hideFinishBoard() { this._fbBanner = false; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
     endRace() {
       this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
