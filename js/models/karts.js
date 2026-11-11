@@ -332,9 +332,39 @@
     const feet = tpl.cockpit.feet.map(p => { const o = new THREE.Object3D(); o.position.copy(p); body.add(o); return o; });
     const cockpit = Object.assign({}, tpl.cockpit, { hands, feet });
     // chama do turbo na ponta de cada escapamento
+    // FOGO DO TURBO (shader): pluma aditiva que tremula sozinha (ruído animado), com a base azulada bem quente saindo
+    // do cano, passando por amarelo e laranja até vermelho escuro na ponta, onde se desfaz em línguas (o ruído "come" a
+    // ponta). As bordas são suaves (mais forte no miolo que na casca). Um núcleo curto azul-claro por dentro.
+    // kart.js só liga/desliga (visible) e mexe na escala; o tempo (uT) vem de setHeat a cada quadro.
+    const fireU = { uT: { value: 0 } };
+    const FIRE_VS = `uniform float uT; uniform float uAmp; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main(){ vUv = uv; vec3 p = position; float t = uv.y;
+        p.x += (sin(uT * 31.0 + t * 9.0) * 0.6 + sin(uT * 53.0 + t * 17.0) * 0.4) * uAmp * t * t;
+        p.z += (cos(uT * 27.0 + t * 11.0) * 0.6 + sin(uT * 47.0 + t * 13.0) * 0.4) * uAmp * t * t;
+        vec4 mv = modelViewMatrix * vec4(p, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`;
+    const FIRE_FS = `uniform float uT; uniform float uCore; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      float h21(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h21(i), h21(i + vec2(1, 0)), f.x), mix(h21(i + vec2(0, 1)), h21(i + vec2(1, 1)), f.x), f.y); }
+      void main(){
+        float t = vUv.y, sp = uT * 9.0;
+        float n = vn(vec2(vUv.x * 7.0, t * 5.0 - sp)) * 0.6 + vn(vec2(vUv.x * 15.0, t * 11.0 - sp * 1.7)) * 0.4;
+        float core = pow(abs(dot(vN, vV)), 1.6);                          // miolo forte, casca suave
+        float body = (1.0 - t) * smoothstep(0.0, 0.06, t);
+        float tongue = smoothstep(0.0, 0.45, n + 0.35 - t * 0.85);        // a ponta se desfaz em línguas
+        vec3 cBlue = vec3(0.45, 0.62, 1.0), cWhite = vec3(1.0, 0.95, 0.8), cYel = vec3(1.0, 0.78, 0.32), cOr = vec3(1.0, 0.42, 0.1), cRed = vec3(0.55, 0.08, 0.02);
+        vec3 c = mix(cBlue, cWhite, smoothstep(0.02, 0.12, t)); c = mix(c, cYel, smoothstep(0.12, 0.3, t)); c = mix(c, cOr, smoothstep(0.3, 0.6, t)); c = mix(c, cRed, smoothstep(0.6, 0.95, t));
+        c = mix(c, cBlue * 1.3, uCore * (1.0 - smoothstep(0.0, 0.5, t)));
+        float k = body * tongue * core * (0.75 + 0.5 * n) * (uCore > 0.5 ? 1.6 : 1.15);
+        gl_FragColor = vec4(c * k, 1.0);
+      }`;
+    const fireMat = (core, amp) => { const m = new THREE.ShaderMaterial({ uniforms: { uT: fireU.uT, uCore: { value: core }, uAmp: { value: amp } }, vertexShader: FIRE_VS, fragmentShader: FIRE_FS,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }); m.userData.unique = true; return m; };
+    const plumeM = fireMat(0, 0.09), coreM = fireMat(1, 0.03);
     const flames = tpl.flames.map(fl => {
-      const f = new THREE.Mesh(new THREE.ConeGeometry(fl.r * 0.95, 1.8, 16), new THREE.MeshBasicMaterial({ color: 0xff9a2a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
-      f.position.copy(fl.pos).addScaledVector(fl.dir, 0.9); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; body.add(f); return f; });
+      const L = 1.8, f = new THREE.Mesh(new THREE.CylinderGeometry(fl.r * 0.12, fl.r * 1.05, L, 18, 14, true).translate(0, 0, 0), plumeM);
+      f.position.copy(fl.pos).addScaledVector(fl.dir, L / 2); f.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); f.visible = false; f.userData.dynamic = true; f.userData.noOutline = true; f.userData.noShadow = true;
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(fl.r * 0.05, fl.r * 0.62, L * 0.42, 14, 6, true), coreM); c.position.y = -L / 2 + L * 0.21; c.userData.noOutline = true; c.userData.noShadow = true; f.add(c);
+      f.renderOrder = 4; body.add(f); return f; });
     // ESCAPAMENTO SUPERAQUECIDO: uma "luva" por cima de cada ponteira (um pouco mais larga que o cano) que vai pegando
     // a cor de metal muito quente com o nitro: na ponta brilha laranja/vermelho, para trás vem o "azulado" de titânio
     // queimado (vermelho escuro -> roxo -> azul -> palha dourado). Esquenta rápido no turbo e esfria devagar (a cor fica
@@ -345,18 +375,18 @@
       fragmentShader: `uniform float uHeat; uniform float uT; varying float vA; varying vec3 vN; varying vec3 vV;
         void main(){
           float h = uHeat, a = vA;                                   // a: 0 = para dentro do cano, 1 = ponta (saída)
-          vec3 straw = vec3(0.86, 0.68, 0.32), blue = vec3(0.18, 0.36, 0.95), purple = vec3(0.52, 0.18, 0.78), dred = vec3(0.62, 0.08, 0.1), hot = vec3(1.0, 0.36, 0.08), white = vec3(1.0, 0.78, 0.42);
-          // as faixas de cor andam para dentro do cano conforme esquenta
-          float x = a + (1.0 - h) * 0.55;
-          vec3 c = straw; c = mix(c, blue, smoothstep(0.2, 0.36, x)); c = mix(c, purple, smoothstep(0.4, 0.55, x)); c = mix(c, dred, smoothstep(0.6, 0.72, x)); c = mix(c, hot, smoothstep(0.78, 0.9, x)); c = mix(c, white, smoothstep(0.93, 1.0, x) * h);
-          float glow = smoothstep(0.7, 1.0, x) * h * (0.85 + 0.15 * sin(uT * 23.0 + a * 9.0));
+          // cores de revenimento do aço/titânio, dessaturadas (é um tom POR CIMA do cromado, não tinta)
+          vec3 straw = vec3(0.80, 0.70, 0.50), bronze = vec3(0.66, 0.48, 0.36), plum = vec3(0.50, 0.38, 0.52), steel = vec3(0.38, 0.46, 0.62), ember = vec3(0.95, 0.38, 0.16);
+          float x = a + (1.0 - h) * 0.45;                            // as faixas avançam para dentro do cano conforme esquenta
+          vec3 c = straw; c = mix(c, bronze, smoothstep(0.25, 0.5, x)); c = mix(c, plum, smoothstep(0.45, 0.72, x)); c = mix(c, steel, smoothstep(0.65, 0.92, x));
+          float glow = smoothstep(0.86, 1.0, a) * smoothstep(0.55, 1.0, h) * (0.9 + 0.1 * sin(uT * 19.0));   // brasa só na pontinha, com calor alto
           float fres = pow(1.0 - abs(dot(vN, vV)), 2.0);
-          vec3 col = c * (0.75 + 0.35 * fres) + vec3(1.0, 0.45, 0.15) * glow * 0.9;
-          float alpha = clamp(h * 1.6, 0.0, 1.0) * smoothstep(0.0, 0.22, a) * (0.78 + 0.22 * glow);
+          vec3 col = mix(c * (0.85 + 0.25 * fres), ember, glow * 0.8);
+          float alpha = (0.62 * smoothstep(0.0, 0.5, h) + 0.35 * glow) * smoothstep(0.0, 0.3, a);
           gl_FragColor = vec4(col, alpha);
         }` });
     heatM.userData.unique = true;
-    const heatGlowM = new THREE.MeshBasicMaterial({ color: 0xff5a1e, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }); heatGlowM.userData.unique = true;
+    const heatGlowM = new THREE.MeshBasicMaterial({ color: 0xd8461c, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }); heatGlowM.userData.unique = true;
     const heatParts = tpl.flames.map(fl => { const L = fl.r * 7, g = new THREE.CylinderGeometry(fl.r * 1.12, fl.r * 1.12, L, 20, 8, true);
       const sl = new THREE.Mesh(g, heatM); sl.quaternion.setFromUnitVectors(V(0, 1, 0), fl.dir); sl.position.copy(fl.pos).addScaledVector(fl.dir, -L / 2 + fl.r * 0.15);
       sl.userData.dynamic = true; sl.userData.noOutline = true; sl.userData.noShadow = true; sl.renderOrder = 2; body.add(sl);
@@ -390,7 +420,7 @@
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
       fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
       // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
-      setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.35) * 0.9 * (0.85 + 0.15 * Math.sin((t || 0) * 31)); heatParts.forEach(p => { p.visible = h > 0.01; }); },
+      setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.55) * 0.55 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
       // ---- personalização em tempo real (sem reconstruir a malha) ----
       setColor(hex) { u.uPaint.value.set(hex); spec.color = hex; flatPaints.forEach(m => m.color.set(hex).convertSRGBToLinear()); },
