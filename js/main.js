@@ -527,6 +527,7 @@
       const done = new Set();
       this.scene.traverse(o => { if (o.geometry) o.geometry.dispose();
         eachMat(o, m => { matTextures(m, t => { if (!keep.has(t) && !done.has(t) && reuploadable(t)) { done.add(t); t.dispose(); } }); m.dispose(); }); });
+      if (this.hideFinishBoard) this.hideFinishBoard();
       this.scene = null; this.track = null; this.player = this.bot = null; this.karts = []; this.rivals = []; this.ais = [];
     },
     // n cores bem diferentes da cor do jogador (as mais contrastantes primeiro)
@@ -589,6 +590,7 @@
       });
     },
     startRace(trackIdx) {
+      this.hideFinishBoard();
       const td = CFG.TRACKS[trackIdx]; if (td && td.laps && !this.online) CFG.LAPS = td.laps;   // Vale da Cascata: 1 volta (~7 min)
       this.curTrack = trackIdx; this.load(trackIdx);
       UI.screen('race'); this.cd = { t: 0, step: 0, early: false };
@@ -724,7 +726,26 @@
       const avg = done / Math.max(1, this.race.time); return { t: this.race.time + left / Math.max(avg, 1), est: true };
     },
     botTime() { return this.estTime(this.bot); },
+    // PLACAR DA CHEGADA (lado direito): quem já cruzou a linha, em ordem, com o tempo; quem ainda corre aparece apagado
+    finishBoard() {
+      let el = this._fb;
+      if (!el) { const st = document.createElement('style');
+        st.textContent = '#finishBoard{position:fixed;right:max(18px,env(safe-area-inset-right));top:50%;transform:translateY(-50%) translateX(30px);opacity:0;z-index:5;pointer-events:none;width:min(320px,42vw);font-family:"Titan One","Arial Black",sans-serif;transition:opacity .4s ease,transform .4s ease}' +
+          '#finishBoard.on{opacity:1;transform:translateY(-50%)}#finishBoard h3{margin:0 0 8px;font-size:20px;color:#fff;text-shadow:0 2px 0 #0c0c0e,0 0 10px rgba(0,0,0,.5);letter-spacing:1px}' +
+          '#finishBoard .r{display:flex;align-items:center;gap:8px;margin:5px 0;padding:6px 10px;border-radius:12px;background:rgba(18,18,28,.72);border:2px solid rgba(255,255,255,.12);color:#fff;font-size:15px;animation:fbIn .35s ease both}' +
+          '#finishBoard .r.me{background:rgba(255,77,94,.85);border-color:#fff}#finishBoard .r.run{opacity:.45}#finishBoard .p{width:28px;text-align:center;font-size:18px}#finishBoard .d{width:12px;height:12px;border-radius:50%;border:2px solid #fff;flex:none}' +
+          '#finishBoard .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#finishBoard .t{font-variant-numeric:tabular-nums}@keyframes fbIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}';
+        document.head.appendChild(st); el = this._fb = document.createElement('div'); el.id = 'finishBoard'; document.body.appendChild(el); }
+      const ks = this.karts.slice(), fin = ks.filter(k => k.finished).sort((a, b) => a.finishTime - b.finishTime), run = ks.filter(k => !k.finished).sort((a, b) => b.progress - a.progress);
+      const key = fin.map(k => k.name).join('|') + '#' + run.length;
+      if (key !== this._fbKey) { this._fbKey = key;
+        const row = (k, i, done) => '<div class="r' + (k === this.player ? ' me' : '') + (done ? '' : ' run') + '"><span class="p">' + (i + 1) + 'º</span><span class="d" style="background:' + (k.mapColor || '#fff') + '"></span><span class="n">' + (k === this.player ? 'Você' : (k.name || 'Piloto')) + '</span><span class="t">' + (done ? fmt(k.finishTime) : '…') + '</span></div>';
+        el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
+      if (!el.classList.contains('on')) requestAnimationFrame(() => el.classList.add('on'));
+    },
+    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } this.pAuto = null; if (this.race) this.race.allT = 0; },
     endRace() {
+      this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
       this.karts.forEach(k => { if (k.m) k.m.group.visible = true; });   // nenhum rival fica escondido na vista orbital / pódio
       const rec = UI.Records.set(def.id, P.finishTime);
@@ -787,7 +808,9 @@
       else if (this.state === 'showcase' && this.sc) this.showcaseStep(dt);   // showcase: o resto do quadro roda igual à contagem (karts, pilotos, motores, som)
       if (racing) this.race.time = ON ? Math.max(0, Net.raceTime()) : this.race.time + dt;
       // menu aberto (pausa/configurações) no online: a corrida segue, mas o kart não recebe comandos
-      const inP = this.state === 'finish' || this.state === 'waiting' || this.state === 'showcase' || P.finished || UI.modal ? { up: false, down: false, steer: 0, drift: false } : Input.read();
+      let inP = this.state === 'finish' || this.state === 'waiting' || this.state === 'showcase' || P.finished || UI.modal ? { up: false, down: false, steer: 0, drift: false } : Input.read();
+      // terminou: o kart do jogador segue sozinho (piloto automático = o mesmo cérebro dos bots), sem drift
+      if (P.finished && (this.state === 'finish' || this.state === 'waiting')) { if (!this.pAuto) this.pAuto = new Bot(P, this.track); const a = this.pAuto.think(dt, this.karts.filter(o => o !== P), P.progress); inP = { up: true, down: false, steer: a.steer, drift: false }; }
       this.inP = inP;   // o velocímetro 3D usa a direção e o drift deste quadro
       const K = this.karts;
       if (ON) {
@@ -798,7 +821,7 @@
         this.netStep(dt, racing);
       } else {
         P.update(dt, inP, racing);
-        this.rivals.forEach((k, i) => { const inp = this.ais[i].think(dt, this.karts.filter(o => o !== k), P.progress); if (k.finished) { inp.up = false; inp.drift = false; } k.update(dt, inp, racing); });
+        this.rivals.forEach((k, i) => { const inp = this.ais[i].think(dt, this.karts.filter(o => o !== k), P.progress); if (k.finished) inp.drift = false; k.update(dt, inp, racing); });   // quem terminou segue andando
         for (let a = 0; a < K.length; a++) for (let b = a + 1; b < K.length; b++) Kart.collidePair(K[a], K[b]);
       }
       safe('turbo', () => this.boostStep(dt, inP, racing));
@@ -808,7 +831,9 @@
       (ON ? [P] : K).forEach(k => { if (racing && !k.finished && k.lap > CFG.LAPS) { k.finished = true; k.finishTime = this.race.time;
         if (k === P) { const first = this.racePos(P) === 1; void first; UI.Sfx.fanfare(); this.state = 'finish'; this.race.endT = 0;
           if (ON) { Net.send({ t: 'finish', raceId: ON.raceId, time: this.race.time }); setTimeout(() => { if (this.state === 'finish' && this.online) UI.toast('Aguardando os outros pilotos…', 4000); }, 2400); } } } });
-      if (this.state === 'finish' && !ON) { this.race.endT += dt; if ((this.rivals.every(b => b.finished) && this.race.endT > 2.5) || this.race.endT > 6) this.endRace(); }
+      if (this.state === 'finish') this.finishBoard();
+      if (this.state === 'finish' && !ON) { this.race.endT += dt; if (this.rivals.every(b => b.finished)) this.race.allT = (this.race.allT || 0) + dt;
+        if ((this.race.allT || 0) > 3.5 || this.race.endT > 25) this.endRace(); }   // espera todos chegarem (até 25 s) e mostra o placar mais um pouco
       if (!this.scene || this.state === 'round' || this.state === 'podium') return;   // a corrida acabou neste quadro
       tr.update(dt, performance.now() / 1000);
       Fx.step(dt);
@@ -990,7 +1015,7 @@
       // zoom do turbo é um "avanço" da câmera em direção ao kart (o FOV fica como sempre foi):
       // desfaz o avanço do quadro anterior antes de calcular a câmera normal
       if (c.zoomOff) { camera.position.sub(c.zoomOff); c.zoomOff = null; }
-      if (this.state === 'finish') { c.ang += dt * 0.6; this.orbitCam(); return; }
+      if (this.state === 'finish' && this.online && !(this.player && this.player.finished)) { c.ang += dt * 0.6; this.orbitCam(); return; }   // terminou: câmera normal seguindo o kart
       c.ang += wrapA(P.mvAng - c.ang) * Math.min(1, 5 * dt);
       // C segurado: câmera vira 180° na hora (à frente do kart, olhando para trás); soltou, volta na hora
       if (Input.keys.look && !UI.modal && (this.state === 'race' || this.state === 'countdown')) { this.lookBackCam(dt); return; }

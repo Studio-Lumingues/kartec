@@ -781,26 +781,19 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
     // ---------- linha de largada + pórtico ----------
     const si = def.startIdx, sAng = Math.atan2(T[si].x, T[si].z);
     // LINHA DE CHEGADA: faixa de tinta grossa com relevo (placa fina de 3,5 cm com quina), 3 fileiras de quadriculado
-    // preto/branco entre dois filetes brancos, tinta gasta (falhas mostrando o asfalto, lascas, rachaduras), marcas de
-    // pneu atravessando e sujeira. Cor + mapa de relevo (Phong fora do toon): cada quadrado pega luz na borda.
+    // preto/branco entre dois filetes brancos, tinta inteira (sem desgaste). Cor + mapa de relevo (Phong fora do toon):
+    // cada quadrado pega luz na borda.
     { const LW = W * 2, LD = 2.8, CW = 2048, CH = Math.max(64, Math.round(CW * LD / LW)), rows = 3, edge = 0.16, sq = (LD - 2 * edge) / rows, cols = Math.max(8, Math.round(LW / sq));
       const R = (() => { let z = 4242; return () => (z = (z * 16807) % 2147483647) / 2147483647; })();
       const mk = (f, lin) => { const c = document.createElement('canvas'); c.width = CW; c.height = CH; f(c.getContext('2d'), CW, CH); const t = new THREE.CanvasTexture(c); t.anisotropy = 8; if (!lin) t.encoding = THREE.sRGBEncoding; return t; };
-      const pxm = CW / LW, wear = [];   // falhas de tinta (mesmas na cor e no relevo)
-      for (let k = 0; k < 160; k++) wear.push([R() * CW, R() * CH, (0.05 + R() * R() * 0.4) * pxm, R() * 3, 0.4 + R() * 0.6]);
-      const cracks = []; for (let k = 0; k < 10; k++) { const pts = []; let x = R() * CW, y = -5; while (y < CH + 5) { pts.push([x, y]); x += (R() - 0.5) * 30; y += 12 + R() * 14; } cracks.push(pts); }
+      const pxm = CW / LW;
       const draw = bump => (g, w, h) => {
         g.fillStyle = bump ? '#202020' : '#5b5574'; g.fillRect(0, 0, w, h);                                                    // asfalto em volta (onde a tinta falta)
         const ep = edge * pxm, sp = sq * pxm, cp = w / cols;
         g.fillStyle = bump ? '#c8c8c8' : '#f3f1ea'; g.fillRect(0, 0, w, ep * 0.8); g.fillRect(0, h - ep * 0.8, w, ep * 0.8);       // filetes brancos
         for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) { const x = c * cp, y = ep + r * sp, white = (r + c) % 2 === 0;
           if (bump) { g.fillStyle = '#b4b4b4'; g.fillRect(x + 2, y + 2, cp - 4, sp - 4); g.fillStyle = '#d2d2d2'; g.fillRect(x + 6, y + 6, cp - 12, sp - 12); }   // quadrado com quina
-          else { const v = white ? 236 + R() * 14 : 18 + R() * 10; g.fillStyle = white ? `rgb(${v},${v - 2},${v - 8})` : `rgb(${v},${v},${v + 6})`; g.fillRect(x, y, cp + 1, sp + 1); } }
-        if (!bump) { for (let k = 0; k < 9000; k++) { const v = R() < 0.5 ? 255 : 0; g.fillStyle = `rgba(${v},${v},${v},${(R() * 0.07).toFixed(3)})`; g.fillRect(R() * w, R() * h, 2, 2); }   // grão
-          for (let k = 0; k < 7; k++) { const x = R() * w, wd = (0.18 + R() * 0.12) * pxm, gr = g.createLinearGradient(x, 0, x + wd, 0); gr.addColorStop(0, 'rgba(25,20,28,0)'); gr.addColorStop(0.5, `rgba(25,20,28,${0.18 + R() * 0.2})`); gr.addColorStop(1, 'rgba(25,20,28,0)'); g.fillStyle = gr; g.fillRect(x, 0, wd, h); } }   // marcas de pneu
-        // falhas de tinta: mostram o asfalto (e no relevo ficam baixas)
-        wear.forEach(([x, y, r, a, k]) => { g.fillStyle = bump ? '#202020' : `rgba(91,85,116,${k})`; g.beginPath(); g.ellipse(x, y, r, r * (0.4 + k * 0.5), a, 0, 7); g.fill(); });
-        cracks.forEach(pts => { g.strokeStyle = bump ? '#101010' : 'rgba(30,26,36,.75)'; g.lineWidth = 2.5; g.beginPath(); pts.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke(); });
+          else { g.fillStyle = white ? '#f4f3ee' : '#141418'; g.fillRect(x, y, cp + 1, sp + 1); } }
       };
       const col = mk(draw(false)), bmp = mk(draw(true), true);
       const m = new PHONG_ORIG({ map: col, bumpMap: bmp, bumpScale: 0.06, shininess: 18, specular: 0x222222, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -4 }); m.userData.noToon = true;

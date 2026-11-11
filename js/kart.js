@@ -466,8 +466,8 @@
 
     update(dt, inp, racing) {
       const tr = this.track, N = tr.N, W = tr.W;
-      const up = racing && inp.up && !this.finished, down = racing && inp.down && !this.finished;
-      const steer = racing && !this.finished ? inp.steer : (this.finished ? inp.steer * 0.5 : 0);
+      const up = racing && inp.up && (!this.finished || this.speed < P.MAX * 0.72), down = racing && inp.down && !this.finished;   // terminou: segue em volta de comemoração
+      const steer = racing ? inp.steer : 0;
       // posição na pista
       const near = tr.nearest(this.pos, this.idx);
       this.prevIdx = this.idx; this.idx = near.i; this.frac = near.f;
