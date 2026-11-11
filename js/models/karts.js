@@ -377,7 +377,7 @@
         if (this.hands && this.hands.length > 1) { const tk = st.trick || 0, hs = this.hands, side = (st.trickDir || 1) > 0 ? 1 : -1;
           hs.forEach(h => { if (!h.userData.base) h.userData.base = h.position.clone(); h.position.copy(h.userData.base); });
           if (tk > 0.001) { const h = hs.reduce((b, x) => (x.userData.base.x * side > b.userData.base.x * side ? x : b)), e = tk * tk * (3 - 2 * tk), r = h.userData.base.length() || 0.4;
-            h.position.x += side * r * 0.9 * e; h.position.y += r * 3.0 * e; h.position.z += r * 0.9 * e; } }
+            h.position.x += side * r * 3.6 * e; h.position.y += r * 4.4 * e; h.position.z -= r * 0.4 * e; } }   // alvo além do alcance: o braço estica para cima e para fora
         // LOD do piloto (m.lod, definido pelo main.js > kartCull): 0 = todo quadro, 1 = a cada 2, 2 = a cada 4, 3 = fora da tela (parado).
         // O IK de braços e pernas é o que mais pesa por kart; longe ninguém percebe a animação em passos.
         const pl = this.pilot;
