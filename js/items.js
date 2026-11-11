@@ -344,8 +344,8 @@
     // "?": branco grosso com contorno preto e brilho
     const q = canvasTex(256, (x, N) => {
       x.font = '900 200px "Titan One", "Arial Black", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.lineJoin = 'round'; x.shadowColor = 'rgba(255,250,220,1)'; x.shadowBlur = 34;
-      x.lineWidth = 16; x.strokeStyle = '#1b2a4a'; x.strokeText('?', N / 2, N / 2 + 10);   // contorno azul-marinho mais fino (o "?" fica mais claro)
+      x.lineJoin = 'round'; x.shadowColor = 'rgba(255,255,255,.9)'; x.shadowBlur = 22;
+      x.lineWidth = 22; x.strokeStyle = '#0c0c0e'; x.strokeText('?', N / 2, N / 2 + 10);
       x.shadowBlur = 0; const g = x.createLinearGradient(0, 40, 0, N - 40); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#dff3ff');
       x.fillStyle = g; x.fillText('?', N / 2, N / 2 + 10);
     });
@@ -363,20 +363,6 @@
   }
   // ---------- vidro da caixa: shader (fresnel + película iridescente + reflexo do ambiente + brilhos) ----------
   // back = true: faces de trás (desenhadas primeiro, mais fracas) -> dá profundidade de vidro de verdade
-  // FUNDO DESFOCADO DO VIDRO: na hora de desenhar a primeira face da frente de uma caixa no quadro, copia o que já está
-  // na tela (cena opaca) para uma textura; o vidro amostra essa textura com um desfoque em disco (16 amostras) pela
-  // posição na tela -> o que está atrás da caixa aparece borrado de verdade (vidro jateado). Se a cópia falhar, o vidro
-  // volta ao visual antigo (uHasBg = 0).
-  const BG = { uBg: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uHasBg: { value: 0 }, tick: 0, done: -1, tex: null, w: 0, h: 0, off: false, _v: new THREE.Vector2() };
-  const grabBg = (renderer) => {
-    if (BG.off || BG.done === BG.tick) return; BG.done = BG.tick;
-    try {
-      const rt = renderer.getRenderTarget(); let w, h; if (rt) { w = rt.width; h = rt.height; } else { renderer.getDrawingBufferSize(BG._v); w = BG._v.x | 0; h = BG._v.y | 0; }
-      if (!BG.tex || BG.w !== w || BG.h !== h) { if (BG.tex) BG.tex.dispose(); BG.tex = new THREE.DataTexture(new Uint8Array(w * h * 4), w, h, THREE.RGBAFormat);
-        BG.tex.minFilter = BG.tex.magFilter = THREE.LinearFilter; BG.tex.generateMipmaps = false; BG.tex.needsUpdate = true; BG.w = w; BG.h = h; BG.uBg.value = BG.tex; }
-      renderer.copyFramebufferToTexture(BG._v.set(0, 0), BG.tex); BG.uRes.value.set(w, h); BG.uHasBg.value = 1;
-    } catch (e) { console.warn('[caixas] fundo desfocado desligado', e); BG.off = true; BG.uHasBg.value = 0; }
-  };
   function glassMaterial(back, shared) {
     const U = shared || { uHue: { value: 0 }, uTime: { value: 0 } };
     const m = new THREE.ShaderMaterial({
@@ -392,7 +378,7 @@
         '  #include <fog_vertex>',
         '}'].join('\n'),
       fragmentShader: [
-        'uniform float uHue; uniform float uTime; uniform float uBack; uniform float uFade; uniform sampler2D uBg; uniform vec2 uRes; uniform float uHasBg;',
+        'uniform float uHue; uniform float uTime; uniform float uBack; uniform float uFade;',
         'varying vec3 vN; varying vec3 vV; varying vec3 vP; varying vec3 vON;',
         '#include <fog_pars_fragment>',
         'float gh(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
@@ -440,22 +426,12 @@
         '  if (uBack > 0.5) haze *= 0.5;',
         '  col = mix(col, vec3(0.9, 0.94, 0.97) * (0.7 + 0.3 * env), haze * (1.0 - fres) * 0.8);',
         '  float a = 0.07 + haze + fres * 0.55 + spec * 0.8 + rim * 0.5 + thick * 0.26 + scr * 0.5 + smudge * 0.16 + frost * 0.1 + band * 0.18;',
-        // fundo borrado de verdade (só nas faces da frente): disco de 16 amostras em espiral, raio ~1,6% da tela,
-        // deslocado um pouco pela normal (refração); vira a base do vidro e o resto vem por cima
-        '  if (uHasBg > 0.5 && uBack < 0.5) {',
-        '    vec2 suv = gl_FragCoord.xy / uRes + N.xy * 0.012; float rr = 0.016 * uRes.y / uRes.x; vec3 bg = vec3(0.0);',
-        '    for (int k = 0; k < 16; k++) { float fk = float(k) + 0.5, ang = fk * 2.39996, rad = sqrt(fk / 16.0); bg += texture2D(uBg, suv + vec2(cos(ang) * rr, sin(ang) * 0.016) * rad).rgb; }',
-        '    bg /= 16.0; bg = mix(bg, vec3(0.86, 0.92, 0.95), 0.22) * 1.04;',                // leitoso e um pouco mais claro
-        '    vec3 over = col; float oa = clamp(a - haze, 0.0, 1.0);',                         // detalhes do vidro por cima do fundo borrado
-        '    col = mix(bg, over, oa); a = 0.97;',
-        '  }',
         '  if (uBack > 0.5) { a *= 0.45; col *= 0.85; }',
         '  gl_FragColor = vec4(col, clamp(a, 0.0, 0.92) * uFade);',
         '  #include <fog_fragment>',
         '}'].join('\n')
     });
     m.uniforms.uHue = U.uHue; m.uniforms.uTime = U.uTime; m.uniforms.uBack = { value: back ? 1 : 0 }; m.uniforms.uFade = { value: 1 };
-    m.uniforms.uBg = BG.uBg; m.uniforms.uRes = BG.uRes; m.uniforms.uHasBg = BG.uHasBg;
     m.userData.U = U; return m;
   }
   // ---------- glow da caixa: plano virado para a câmera, COM teste de profundidade (chão/árvores tampam) e que some
@@ -746,11 +722,7 @@
           glow.onBeforeRender = (rr, sc, cam) => { cam.getWorldQuaternion(_camQ); glow.quaternion.copy(_camQ); glow.updateMatrixWorld(); };   // sempre de frente para a câmera
           glow.frustumCulled = false; glow.userData.noOutline = true;
           glow.scale.setScalar(S * 2.6); glow.renderOrder = 0; m.add(glow);
-          glassB.renderOrder = 1; glass.renderOrder = 3; frame.renderOrder = 4; q.renderOrder = 6;   // "?" por cima do vidro borrado (brilhando lá dentro)
-          glass.onBeforeRender = (rr) => grabBg(rr); frame.scale.setScalar(1.004); q.scale.setScalar(S * 0.8);   // trás -> "?" -> frente -> moldura
-          // brilho do "?": halo quente-branco somado, atrás do "?" e na frente do vidro
-          const qg = new THREE.Sprite(this.qGlowMat || (this.qGlowMat = new THREE.SpriteMaterial({ map: TX.glow, color: 0xfff4d6, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false })));
-          qg.scale.setScalar(S * 1.25); qg.renderOrder = 5; qg.userData.noOutline = true; m.add(qg);
+          glassB.renderOrder = 1; q.renderOrder = 2; glass.renderOrder = 3; frame.renderOrder = 4; frame.scale.setScalar(1.004); q.scale.setScalar(S * 0.8);   // trás -> "?" -> frente -> moldura
           const spin = new THREE.Group(); spin.add(glassB, glass, frame); m.add(spin, q); [glass, glassB, frame].forEach(o => { o.userData.noOutline = true; });
           if (window.PostFX) [glass, glassB, frame].forEach(o => o.layers.enable(PostFX.SHARP_LAYER));   // caixa nunca desfoca (profundidade de campo: postfx.js)
           const shd = new THREE.Mesh(this.shGeo, this.shMat); shd.position.set(p.x, h + 0.06, p.z); g.add(shd);
@@ -1138,7 +1110,7 @@
     // ---------- quadro ----------
     update(dt, karts, racing) {
       if (!this.on || !this.group) { this.hud(null, dt); return; }
-      this.t += dt; BG.tick++; this._karts = karts; const tr = this.tr, N = tr.N, P = karts.find(k => k.isPlayer);
+      this.t += dt; this._karts = karts; const tr = this.tr, N = tr.N, P = karts.find(k => k.isPlayer);
       // caixas: giram, flutuam, mudam de cor e voltam depois de coletadas
       if (this.boxTex) { this.boxTex.glass.offset.x = (this.t * 0.12) % 1; this.boxTex.glass.offset.y = (this.t * 0.05) % 1; }   // arco-íris passeando
       this.boxes.forEach(b => { const u = b.userData;
