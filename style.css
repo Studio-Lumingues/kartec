@@ -1111,7 +1111,10 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
   border-radius: 0 8px 8px 0 !important; box-shadow: none !important; transform: scaleX(0) !important; transform-origin: right center !important; transition: transform var(--b-t) var(--b-ease) !important;
 }
 .pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { width: 7px !important; border-left-width: 2.5px !important; border-radius: 0 7px 7px 0 !important; }
-.modeTile::before, .mt-play .mtText::after { display: none !important; }   /* sem faixas e brilho de plástico: papel liso como na Garagem */
+.modeTile::before, .mt-play .mtText::after { display: none !important; }
+/* aba vermelha só onde marca A ação da tela: botão principal (Correr, Pronto, Continuar...) e os modos do menu.
+   Nos botões pequenos/secundários (+/−, setas, fechar, voltar, ícones, copiar código, expulsar) ela só poluía. */
+.ghost::after, .danger::after, .skip::after, .utilBtn::after, .pill.btn::after, .close::after, .lobbyPlayers .kick::after, .lobbyCard .code::after { display: none !important; }   /* sem faixas e brilho de plástico: papel liso como na Garagem */
 /* sobe e mostra a aba (mouse, teclado e controle) */
 .cta:hover, .ghost:hover, .danger:hover, .skip:hover, .modeTile:hover, .utilBtn:hover, .cta:focus-visible, .ghost:focus-visible, .danger:focus-visible, .skip:focus-visible, .modeTile:focus-visible, .utilBtn:focus-visible { translate: 0 -3px !important; box-shadow: 0 9px 0 var(--b-ink) !important; background: var(--b-face) !important; }
 .pill.btn:hover, .close:hover, .lobbyPlayers .kick:hover, .lobbyCard .code:hover, .pill.btn:focus-visible, .close:focus-visible, .lobbyPlayers .kick:focus-visible, .lobbyCard .code:focus-visible { translate: 0 -2px !important; box-shadow: 0 6px 0 var(--b-ink) !important; background: var(--b-face) !important; }
