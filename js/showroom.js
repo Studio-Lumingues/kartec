@@ -56,7 +56,7 @@
   const ZI = -38;                                      // centro da plataforma interna (z, em unidades); a fachada fica em z = -13
   const RW = 15, Z0 = -5.5, Z1 = 12.5, RD = Z1 - Z0, RH = 4;   // sala interna em metros (origem na plataforma)
   const DOOR_W = 5, DOOR_H = 2.9, FZ = -6.5, FW = 17, FH = 4.4;
-  const WINS = [{ x: -5.5, y: 1.95, w: 3.7, h: 1.5 }, { x: 5.5, y: 1.95, w: 3.7, h: 1.5 }];   // janelas (a da direita fica onde era o "01")
+  const WINS = [];   // janelas laterais da fachada da garagem: tiradas (antes: x ±5,5 m, 3,7 x 1,5 m)
   const SCONCES = [-7.9, -3.5, 3.5, 7.9];                                                     // 4 arandelas simétricas   // fachada em metros (origem no veículo do pátio)
   const ease = x => { x = Math.max(0, Math.min(1, x)); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
@@ -302,18 +302,44 @@
     for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) { const px = x + ox * W, py = y + oy * H; if (px + r < 0 || px - r > W || py + r < 0 || py - r > H) continue;
       g.fillStyle = rad(g, px, py, r, [[0, 'rgba(' + s + ',' + c[3] + ')'], [1, 'rgba(' + s + ',0)']]); g.fillRect(px - r, py - r, 2 * r, 2 * r); } } };
   // porcelanato claro 60x120 cm (ladrilho de 1,2 m com 2 placas), veios bem leves
+  // porcelanato polido 60x120 (marmorizado): base branca quente, veios cinza suaves que atravessam as placas,
+  // junta de 3 mm com sombra embaixo e filete de luz em cima (dá relevo), leve variação de tom entre placas
   const porcelainTex = () => mkM(1.2, 1.2, 512 / 1.2, g => {
-    g.fillStyle = '#bfc1c3'; g.fillRect(0, 0, 1.2, 1.2);
-    [0, 0.6].forEach((x, i) => { const v = 232 + i * 5; g.fillStyle = `rgb(${v},${v},${v - 3})`; g.fillRect(x + 0.0025, 0.0025, 0.595, 1.195); });
-    inPx(g, (W, H) => { blotches(g, W, H, 40, 20, 90, [[255, 255, 255, 0.2], [150, 148, 140, 0.07]]); speckle(g, W, H, 2500, 0.035);
-      g.lineWidth = 1; for (let k = 0; k < 7; k++) { g.strokeStyle = 'rgba(140,140,138,' + (0.06 + RND() * 0.08).toFixed(3) + ')'; g.beginPath(); let x = RND() * W, y = -4; g.moveTo(x, y); while (y < H + 4) { x += (RND() - 0.5) * 12; y += 7; g.lineTo(x, y); } g.stroke(); } }); });
-  // painéis de alumínio composto (ACM) 125x62,5 cm com junta seca escura
+    g.fillStyle = '#a9aaa8'; g.fillRect(0, 0, 1.2, 1.2);
+    [0, 0.6].forEach((x, i) => { const v = 236 + i * 4 - ((RND() * 4) | 0);
+      g.fillStyle = lin(g, x, 0, x + 0.6, 1.2, `rgb(${v + 3},${v + 1},${v - 3})`, `rgb(${v - 6},${v - 7},${v - 9})`); g.fillRect(x + 0.003, 0.003, 0.594, 1.194); });
+    inPx(g, (W, H) => {
+      blotches(g, W, H, 50, 30, 120, [[255, 255, 252, 0.18], [190, 184, 172, 0.07]]);
+      // veios: curvas longas, primeiro largas e quase transparentes (halo) e depois finas e mais marcadas
+      for (let k = 0; k < 5; k++) { let x = RND() * W, y = -10; const pts = [[x, y]]; const dx = (RND() - 0.5) * W * 0.5;
+        while (y < H + 10) { y += 18 + RND() * 22; x += dx / 12 + (RND() - 0.5) * 26; pts.push([x, y]); }
+        [[7, 0.035], [3, 0.06], [1.1, 0.16]].forEach(([lw, a]) => { g.lineWidth = lw; g.strokeStyle = `rgba(118,114,108,${a})`; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+          for (let q = 1; q < pts.length; q++) { const [x0, y0] = pts[q - 1], [x1, y1] = pts[q]; g.quadraticCurveTo(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2); } g.stroke(); });
+        if (RND() < 0.6) { const [bx, by] = pts[(pts.length / 2) | 0]; g.lineWidth = 0.8; g.strokeStyle = 'rgba(118,114,108,.12)'; g.beginPath(); g.moveTo(bx, by);
+          g.quadraticCurveTo(bx + (RND() - 0.5) * 80, by + 40, bx + (RND() - 0.5) * 120, by + 90 + RND() * 60); g.stroke(); } }
+      speckle(g, W, H, 1800, 0.03);
+      // junta com relevo: sombra embaixo/à direita da junta, luz em cima/à esquerda da placa
+      const px = W / 1.2;
+      [0, 0.6].forEach(x => { const X = x * px;
+        g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(X + 2, 2, 1.5, H - 4); g.fillRect(X + 2, 2, 0.6 * px - 4, 1.5);
+        g.fillStyle = 'rgba(0,0,0,.16)'; g.fillRect(X + 0.6 * px - 3.5, 2, 1.5, H - 4); g.fillRect(X + 2, H - 3.5, 0.6 * px - 4, 1.5); });
+      // brilho do polido: faixa diagonal suave
+      g.fillStyle = lin(g, 0, 0, W, H, 'rgba(255,255,255,0)', 'rgba(255,255,255,0)'); const gr = g.createLinearGradient(0, 0, W, H);
+      gr.addColorStop(0.35, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, 'rgba(255,255,255,.09)'); gr.addColorStop(0.65, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, W, H); }); });
+  // painéis de alumínio composto (ACM) 125x62,5 cm: junta aberta de 12 mm (fundo escuro com sombra da borda de cima),
+  // dobra da borda com luz, tom levemente diferente por painel (a película nunca sai igual) e escorridos de chuva bem leves
   const acmTex = () => mkM(2.5, 1.25, 204.8, g => {
-    g.fillStyle = '#2a2c30'; g.fillRect(0, 0, 2.5, 1.25);
-    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const x = i * 1.25 + 0.008, y = j * 0.625 + 0.008, w = 1.234, h = 0.609, v = 228 + ((RND() * 9) | 0);
-      g.fillStyle = lin(g, x, y, x + w * 0.35, y + h, `rgb(${v + 12},${v + 4},${v + 10})`, `rgb(${v - 2},${v - 10},${v - 3})`); g.fillRect(x, y, w, h);
-      g.fillStyle = 'rgba(255,255,255,.55)'; g.fillRect(x, y, w, 0.004); g.fillStyle = 'rgba(0,0,0,.1)'; g.fillRect(x, y + h - 0.006, w, 0.006); }
-    inPx(g, (W, H) => speckle(g, W, H, 500, 0.025)); });
+    g.fillStyle = '#1d1f23'; g.fillRect(0, 0, 2.5, 1.25);
+    for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { const x = i * 1.25 + 0.006, y = j * 0.625 + 0.006, w = 1.238, h = 0.613, v = 226 + ((RND() * 10) | 0);
+      g.fillStyle = lin(g, x, y, x + w * 0.4, y + h, `rgb(${v + 10},${v + 9},${v + 12})`, `rgb(${v - 6},${v - 7},${v - 4})`); g.fillRect(x, y, w, h);
+      g.fillStyle = 'rgba(0,0,0,.28)'; g.fillRect(x - 0.006, y - 0.006, w + 0.012, 0.006);                                    // fundo da junta mais escuro logo acima
+      g.fillStyle = 'rgba(255,255,255,.7)'; g.fillRect(x, y, w, 0.005); g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(x, y, 0.004, h);   // dobra iluminada
+      g.fillStyle = lin(g, 0, y + h - 0.03, 0, y + h, 'rgba(0,0,0,0)', 'rgba(0,0,0,.14)'); g.fillRect(x, y + h - 0.03, w, 0.03);
+      g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(x + w - 0.004, y, 0.004, h);
+      // escorridos: saem da junta de cima e descem desbotando
+      for (let k = 0; k < 4; k++) { const sx = x + 0.05 + RND() * (w - 0.1), sl = 0.12 + RND() * 0.35, sw = 0.006 + RND() * 0.012;
+        g.fillStyle = lin(g, 0, y, 0, y + sl, 'rgba(70,72,74,.13)', 'rgba(70,72,74,0)'); g.fillRect(sx, y + 0.004, sw, sl); } }
+    inPx(g, (W, H) => speckle(g, W, H, 700, 0.025)); });
   // reboco texturizado (laterais), granito (rodapé e meio-fio), calçada de concreto com junta serrada a cada 1,5 m
   const stuccoTex = () => mkM(2, 2, 256, g => { g.fillStyle = '#e2e0db'; g.fillRect(0, 0, 2, 2);
     inPx(g, (W, H) => { blotches(g, W, H, 70, 20, 110, [[255, 255, 252, 0.22], [150, 140, 125, 0.1]]); speckle(g, W, H, 22000, 0.07); }); });
