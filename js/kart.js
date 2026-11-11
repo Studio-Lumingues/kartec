@@ -567,6 +567,7 @@
           while (this.splashAcc >= 1) { this.splashAcc -= 1; const sd = Math.random() < 0.5 ? -1 : 1, o = 2 + Math.random() * 4;
             Fx.debris(2, this.pos.x + lx * sd * 1.1 - fx, this.pos.y + 0.3, this.pos.z + lz * sd * 1.1 - fz, lx * sd * o - fx * sp * 0.15, 3 + Math.random() * 5, lz * sd * o - fz * sp * 0.15, 0.2, 0.8, 0xe4f6ff, this.pos.y + 0.05); }
           if (Math.random() < 0.35) Fx.puff('smoke', this.pos.x - fx * 1.5, this.pos.y + 0.4, this.pos.z - fz * 1.5, -fx * sp * 0.1, 1.5, -fz * sp * 0.1, 0xeaf6ff, 0.8, 3.2, 0.6, 0.4, 0.5); } }
+      const ox = this.pos.x, oz = this.pos.z;   // posição antes de andar (para o "paredão" de pista elevada logo abaixo)
       this.pos.x += Math.sin(this.mvAng) * this.speed * dt;
       this.pos.z += Math.cos(this.mvAng) * this.speed * dt;
       // batidas: empurrão (velocidade externa que perde força com o atrito) e giro, somados ao movimento do kart
@@ -576,7 +577,20 @@
       if (this.hitCool > 0) this.hitCool -= dt;
       this.collideWalls(dt);
       // altura: pista (pontes), rampas, terreno; saltos com gravidade
-      const gr = tr.groundAt(this.pos, this.idx, this.ang);        // a direção do kart define o sinal da inclinação
+      let gr = tr.groundAt(this.pos, this.idx, this.ang);        // a direção do kart define o sinal da inclinação
+      // PAREDÃO: no chão, o kart não "sobe" num degrau mais alto que STEP (lateral de pista elevada, cabeceira de ponte,
+      // borda de barranco). Antes ele era teleportado lá para cima e ficava encavalado na zebra. Agora a borda vira
+      // parede: tenta deslizar só em x ou só em z; se não der, volta para onde estava e perde velocidade (batida).
+      // (o limite cresce com o quanto andou no quadro: rampa íngreme com FPS baixo não pode virar parede)
+      const STEP = 0.9 + 0.8 * Math.hypot(this.pos.x - ox, this.pos.z - oz) + (this.air ? Math.abs(this.vy) * dt : 0);
+      if (gr.h > this.pos.y + STEP) {
+        const nx = this.pos.x, nz = this.pos.z, ok = (x, z) => { this.pos.x = x; this.pos.z = z; const g = tr.groundAt(this.pos, this.idx, this.ang); return g.h <= this.pos.y + STEP ? g : null; };
+        const g = ok(ox, nz) || ok(nx, oz) || ok(ox, oz);
+        if (g) gr = g; else { this.pos.x = ox; this.pos.z = oz; }
+        const sp = Math.abs(this.speed);
+        if (sp > 4 && this.hitCool <= 0) { this.hitCool = 0.4; this.yawV = (this.yawV || 0) + (Math.random() < 0.5 ? -1 : 1) * Math.min(2, sp * 0.06); this.events('bump', this); }
+        this.speed *= (this.pos.x === ox && this.pos.z === oz) ? -0.25 : 0.85; this.drifting = false;
+        if (!g) gr = tr.groundAt(this.pos, this.idx, this.ang); }
       if (this.air) {
         this.vy -= P.GRAV * dt; this.pos.y += this.vy * dt;
         if (this.pos.y <= gr.h) { const impact = -this.vy; this.pos.y = gr.h; this.air = false; this.vy = 0; this.vyG = 0;   // zera a velocidade vertical do chão: sem isso o kart re-decolava sozinho logo depois de pousar (pulos em cadeia)
