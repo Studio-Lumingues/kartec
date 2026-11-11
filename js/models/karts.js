@@ -312,19 +312,17 @@
       const spin = new THREE.Group(); spin.userData.dynamic = true; piv.add(spin);
       // volante de drift no lugar do volante recortado do modelo (+ coluna de direção até o painel)
       const r0 = tpl.steer.grips[0].pos.length(), dw = buildDriftWheel(r0, env); spin.add(dw.group); dw.mats.forEach((m, i) => { matCache['driftwheel' + i] = m; });
-      // coluna nova: tubo do cubo até a frente do chassi (onde ficava a antiga), mancal com abraçadeira no meio e flange no fim
-      const L = (tpl.steer.colLen || r0 * 2.8), z0 = -r0 * 0.47, mk = (geo, m, z) => { const o = new THREE.Mesh(geo, m); o.rotation.x = Math.PI / 2; o.position.z = z; o.castShadow = true; piv.add(o); return o; };
+      // coluna nova: tubo do cubo até dentro do bico (curta, para não furar a lataria)
+      const L = r0 * 2.0, z0 = -r0 * 0.47,   // curta: termina logo depois de entrar no bico (comprida, furava a lataria por cima)
+      mk = (geo, m, z) => { const o = new THREE.Mesh(geo, m); o.rotation.x = Math.PI / 2; o.position.z = z; o.castShadow = true; piv.add(o); return o; };
       mk(new THREE.CylinderGeometry(r0 * 0.065, r0 * 0.065, L, 14), matCache.driftwheel1, z0 - L / 2);
       mk(new THREE.CylinderGeometry(r0 * 0.12, r0 * 0.12, r0 * 0.16, 16), matCache.driftwheel2, z0 - r0 * 0.06);            // cubo de engate rápido
-      mk(new THREE.CylinderGeometry(r0 * 0.13, r0 * 0.13, r0 * 0.14, 16), matCache.driftwheel2, z0 - L * 0.55);             // mancal
-      { const cl = new THREE.Mesh(new THREE.BoxGeometry(r0 * 0.34, r0 * 0.1, r0 * 0.12), matCache.driftwheel2); cl.position.set(0, -r0 * 0.13, z0 - L * 0.55); cl.castShadow = true; piv.add(cl); }
-      mk(new THREE.CylinderGeometry(r0 * 0.15, r0 * 0.15, r0 * 0.05, 16), matCache.driftwheel1, z0 - L + r0 * 0.02);
       // capa sanfonada de borracha: do engate até entrar no bico (fecha o vão onde ficava o suporte antigo)
       { const boot = new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.75, metalness: 0 }); boot.envMap = env; boot.envMapIntensity = ENV_I * 0.6;
         boot.onBeforeCompile = sh => { sh.fragmentShader = sh.fragmentShader.replace('#include <encodings_fragment>', 'gl_FragColor = LinearTosRGB(gl_FragColor);'); }; matCache.driftboot = boot;
-        const n = 9, Lb = r0 * 1.9; for (let i = 0; i < n; i++) { const k = i / (n - 1), rr = r0 * (0.13 + 0.2 * k), tr = new THREE.Mesh(new THREE.TorusGeometry(rr, r0 * 0.045 + r0 * 0.02 * k, 8, 24), boot);
+        const n = 7, Lb = r0 * 1.2; for (let i = 0; i < n; i++) { const k = i / (n - 1), rr = r0 * (0.13 + 0.12 * k), tr = new THREE.Mesh(new THREE.TorusGeometry(rr, r0 * 0.04 + r0 * 0.015 * k, 8, 24), boot);
           tr.position.z = z0 - r0 * 0.2 - Lb * k; tr.castShadow = true; piv.add(tr); }
-        mk(new THREE.CylinderGeometry(r0 * 0.13, r0 * 0.33, Lb, 20, 1, true), boot, z0 - r0 * 0.2 - Lb / 2).material.side = THREE.DoubleSide; }
+        mk(new THREE.CylinderGeometry(r0 * 0.13, r0 * 0.25, Lb, 20, 1, true), boot, z0 - r0 * 0.2 - Lb / 2).material.side = THREE.DoubleSide; }
       hands = tpl.steer.grips.map(g => { const o = new THREE.Object3D(); o.position.copy(g.pos); o.userData.t = g.t.clone(); spin.add(o); return o; });
       steerRig = { spin, axis: 'z', k: tpl.steer.k };
     } else {
