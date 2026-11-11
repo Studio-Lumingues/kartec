@@ -542,7 +542,7 @@
       }
       let turn = steer * P.TURN * (1 - 0.3 * Math.min(1, Math.abs(this.speed) / P.MAX)) * (1 - 0.45 * (this.wheelT || 0));
       if (this.drifting) {
-        // drift = arco de raio definido (dentro ~26 m, neutro ~42 m, fora ~84 m: CFG.PHYS.DRIFT_R_*)
+        // drift = arco de raio definido (dentro ~40 m, neutro ~64 m, fora ~120 m: CFG.PHYS.DRIFT_R_*)
         this.driftSteer += (steer - this.driftSteer) * Math.min(1, 7 * dt);
         const rel = this.driftSteer * this.driftDir;
         const Rd = rel >= 0 ? P.DRIFT_R_MID - rel * (P.DRIFT_R_MID - P.DRIFT_R_IN) : P.DRIFT_R_MID - rel * (P.DRIFT_R_OUT - P.DRIFT_R_MID);
@@ -639,7 +639,7 @@
       // ângulo da derrapada com MOLA: na entrada a traseira passa um pouco do ponto e "assenta"; fechando o arco ela abre mais,
       // abrindo o arco ela endireita; ao soltar volta macio, sem estalo
       const relD = this.drifting ? this.driftSteer * this.driftDir : 0;
-      const slipT = this.drifting ? this.driftDir * (0.24 + 0.1 * Math.max(0, relD) - 0.06 * Math.max(0, -relD)) : 0;   // traseira abre menos (era 0,32 + 0,13)
+      const slipT = this.drifting ? this.driftDir * (0.17 + 0.06 * Math.max(0, relD) - 0.05 * Math.max(0, -relD)) : 0;   // traseira abre pouco (original: 0,32 + 0,13): o kart não parece girar para dentro
       this.slipV = (this.slipV || 0) + ((slipT - this.slip) * 120 - (this.slipV || 0) * 13) * sd; this.slip += this.slipV * sd;
       this.m.pivot.rotation.y = this.slip + spinY;               // gira carroceria E rodas juntas (+ giro de 360 da manobra)
       // contra-esterço: no drift as rodas da frente apontam para onde o kart está INDO (contra o giro da carroceria),

@@ -111,13 +111,13 @@ window.CFG = {
     TURN: 2.0,        // taxa de giro máxima (rad/s) em baixa velocidade
     GRAV: 30,         // gravidade dos saltos
     KMH: 2.6,         // fator m/s -> "km/h" exibido
-    // raios do drift: estavam largos demais para a velocidade atual (o SPEED_MULT não mexe neles) e o giro do drift
-    // ficava MENOR que o da curva normal; dava para sair da pista segurando para dentro. Agora fecham mais.
-    DRIFT_R_IN: 26,   // raio do drift segurando para dentro da curva (m)  (era 40)
-    DRIFT_R_MID: 42,  // raio do drift sem direcional                     (era 66)
-    DRIFT_R_OUT: 84,  // raio do drift segurando para fora                (era 126)
-    DRIFT_TURN_MAX: 2.4, // giro máximo no drift (rad/s); era 1,5 fixo e travava o drift em alta velocidade
-    DRIFT_GRIP: 11,   // quão rápido o rumo segue o bico no drift (era 7): maior = escorrega menos para fora
+    // drift mais contido: o kart não "fecha" demais para dentro. Raios largos, giro máximo moderado e o bico fica
+    // perto do rumo de verdade (DRIFT_GRIP alto = o bico não aponta tanto para dentro da curva).
+    DRIFT_R_IN: 40,   // raio do drift segurando para dentro da curva (m)
+    DRIFT_R_MID: 64,  // raio do drift sem direcional
+    DRIFT_R_OUT: 120, // raio do drift segurando para fora
+    DRIFT_TURN_MAX: 1.6, // giro máximo no drift (rad/s)
+    DRIFT_GRIP: 15,   // quão rápido o rumo segue o bico no drift (original: 7): maior = o kart aponta menos para dentro
     KART_RADIUS: 1.9, // raio de colisão entre karts
     // relevo (só nas pistas com elev): SLOPE_TOP = quanto a rampa muda a velocidade máxima (12% de subida -> -19%);
     // SLOPE_ACC = "gravidade" que freia na subida e empurra na descida (m/s² por 100% de inclinação)
