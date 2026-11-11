@@ -735,7 +735,9 @@
           '#finishBoard .r{display:flex;align-items:center;gap:8px;margin:5px 0;padding:6px 10px;border-radius:12px;background:rgba(18,18,28,.72);border:2px solid rgba(255,255,255,.12);color:#fff;font-size:15px;animation:fbIn .35s ease both}' +
           '#finishBoard .r.me{background:rgba(255,77,94,.85);border-color:#fff}#finishBoard .r.run{opacity:.45}#finishBoard .p{width:28px;text-align:center;font-size:18px}#finishBoard .d{width:12px;height:12px;border-radius:50%;border:2px solid #fff;flex:none}' +
           '#finishBoard .n{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}#finishBoard .t{font-variant-numeric:tabular-nums}@keyframes fbIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}';
+        st.textContent += 'body.raceDone #hud,body.raceDone #touch,body.raceDone #itemSlot,body.raceDone #rocketWarn,body.raceDone #speedo3d,body.raceDone #boost3d{display:none!important}';
         document.head.appendChild(st); el = this._fb = document.createElement('div'); el.id = 'finishBoard'; document.body.appendChild(el); }
+      document.body.classList.add('raceDone');   // chegada: some o HUD da corrida, fica só o placar
       const ks = this.karts.slice(), fin = ks.filter(k => k.finished).sort((a, b) => a.finishTime - b.finishTime), run = ks.filter(k => !k.finished).sort((a, b) => b.progress - a.progress);
       const key = fin.map(k => k.name).join('|') + '#' + run.length;
       if (key !== this._fbKey) { this._fbKey = key;
@@ -743,7 +745,7 @@
         el.innerHTML = '<h3>CHEGADA</h3>' + fin.map((k, i) => row(k, i, true)).join('') + run.map((k, i) => row(k, fin.length + i, false)).join(''); }
       if (!el.classList.contains('on')) requestAnimationFrame(() => el.classList.add('on'));
     },
-    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
+    hideFinishBoard() { if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
     endRace() {
       this.hideFinishBoard();
       const P = this.player, def = CFG.TRACKS[this.curTrack];
@@ -1016,11 +1018,11 @@
     finishCam(dt) {
       const P = this.player, tr = this.track, F = this.fcam || (this.fcam = { t: 99, i: -1, pos: new THREE.Vector3(), fov: 30 });
       const SH = [
-        { ahead: 60, side: 18, up: 8, fov: 24 },     // longe na frente, de lado, um pouco alto
-        { ahead: -30, side: 9, up: 13, fov: 30 },    // atrás e alto (o kart vai embora)
-        { ahead: 22, side: 3, up: 42, fov: 34 },     // lá do alto (aérea)
-        { ahead: 28, side: 36, up: 5, fov: 20 },     // longe do lado, lente tele
-        { ahead: 75, side: 5, up: 3, fov: 17 }       // bem longe de frente, quase no chão
+        { ahead: 60, side: 18, up: 8, fov: 15 },     // longe na frente, de lado, um pouco alto
+        { ahead: -30, side: 9, up: 13, fov: 19 },    // atrás e alto (o kart vai embora)
+        { ahead: 22, side: 3, up: 42, fov: 21 },     // lá do alto (aérea)
+        { ahead: 28, side: 36, up: 5, fov: 12 },     // longe do lado, lente tele
+        { ahead: 75, side: 5, up: 3, fov: 10 }       // bem longe de frente, quase no chão
       ];
       F.t += dt;
       const far = F.i >= 0 && F.pos.distanceTo(P.pos) > 130;
@@ -1030,7 +1032,9 @@
         let gy = P.pos.y; try { const g = tr && tr.groundAt ? tr.groundAt(F.pos, P.idx, P.ang) : null; if (g && isFinite(g.h)) gy = Math.max(gy, g.h); } catch (e) { }
         F.pos.y = gy + s.up; F.fov = s.fov; }
       camera.position.copy(F.pos); camera.lookAt(P.pos.x, P.pos.y + 1.0, P.pos.z);
-      if (camera.fov !== F.fov) { camera.fov = F.fov; camera.updateProjectionMatrix(); }
+      // enquadra o kart no terço da esquerda: desloca a "janela" da lente para a direita (o kart vai para a esquerda)
+      const w = innerWidth, h = innerHeight, off = Math.round(w * 0.2);
+      if (!camera.view || !camera.view.enabled || camera.view.offsetX !== off || camera.view.fullWidth !== w || camera.fov !== F.fov) { camera.fov = F.fov; camera.setViewOffset(w, h, off, 0, w, h); camera.updateProjectionMatrix(); }
     },
     updateCamera(dt) {
       const P = this.player, c = this.cam;
@@ -1266,6 +1270,7 @@
       const P = this.player, st = this.state;
       if (!speedo3d || !P || !(st === 'race' || st === 'countdown' || st === 'waiting' || st === 'finish')) return;
       if (Cine.on || Cine.k > 0.5) return;   // largada com barras de cinema: HUD escondido
+      if (st === 'finish' && P.finished) return;   // chegada: sem velocímetro (só o placar)
       const inp = this.inP || {}, old = Speedo3D.readOld && Speedo3D.readOld();
       const fill = Math.abs(P.speed) * kmhK() / BOOST.TOP_KMH;                 // o arco vai de 0 a 203 km/h (turbo completo)
       const kmh = old ? old.speed : Math.abs(P.speed) * kmhK();
