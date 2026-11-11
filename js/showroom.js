@@ -34,6 +34,7 @@
     CAM_HEIGHT: 2.5,         // Garagem: altura da câmera
     LOOK_Y: 0.2,             // Garagem: altura do ponto olhado (menor = veículo mais alto na tela; a doca de cores fica embaixo)
     PILOT_IN_GARAGE: false,  // true mostra o piloto também dentro da Garagem
+    KART_OUTSIDE: false,     // true mostra o kart no pátio da tela principal (a Garagem sempre mostra)
     PILOT_OUTSIDE: false,    // true mostra o piloto no kart da tela principal (pátio)
     WHEEL_STOPS: false,      // true volta os batentes amarelo e preto das vagas
     DOOR_TIME: 1.15,         // segundos para o portão abrir/fechar
@@ -1076,6 +1077,7 @@
         this.turn.rotation.y = GAR.CAM_AZIMUTH * Math.PI / 180 + this.userYaw - (1 - e) * 0.8;
       } else this.turn.rotation.y = GAR.EXT_YAW * Math.PI / 180;
       if (this.kart) {
+        const kv = int || !!GAR.KART_OUTSIDE; if (this.kart.group.visible !== kv) this.kart.group.visible = kv;   // pátio da tela principal sem kart
         this.hop = Math.max(0, (this.hop || 0) - dt);
         this.kart.body.position.y = Math.sin(this.hop / 0.35 * Math.PI) * (int ? 0.22 : 0.5);
         const st = int ? 0 : Math.sin(t * 0.9) * 0.5 + Math.sin(t * 2.3) * 0.15;
