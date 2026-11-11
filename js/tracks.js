@@ -826,7 +826,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         [[PH - 1.4, 4], [PH * 0.35, 3]].forEach(([y0, n]) => { for (let k = 0; k < n; k++) { const r = new THREE.Mesh(new THREE.TorusGeometry(PR * 0.92, 0.075, 8, 24), ropeM); r.rotation.x = Math.PI / 2 + (k - n / 2) * 0.06; r.position.y = y0 + k * 0.15; r.castShadow = true; post.add(r); } });
       });
       // ---- textura da faixa: lona escura com quadriculado em cima e embaixo, logo grande no meio ----
-      const BW = 2 * AW - 3.2, BH = 6.4, CW = 4096, CH = Math.round(CW * BH / BW);
+      const BW = 2 * AW - 2 * PR - 0.5, BH = 6.4, CW = 4096, CH = Math.round(CW * BH / BW);
       const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH; const bTex = new THREE.CanvasTexture(cv); bTex.anisotropy = 8; bTex.encoding = THREE.sRGBEncoding;
       const bumpC = document.createElement('canvas'); bumpC.width = 512; bumpC.height = 512; { const g = bumpC.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, 512, 512);
         for (let y = 0; y < 512; y += 4) for (let x = 0; x < 512; x += 4) { const v = ((x / 4 + y / 4) % 2 ? 150 : 100) + rnd2() * 20; g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, y, 4, 4); } }   // trama da lona
@@ -838,22 +838,43 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
         [hem, H2 - hem - 2 * cq].forEach(y0 => { for (let r = 0; r < 2; r++) for (let x = 0, k = 0; x < W2; x += cq, k++) { g.fillStyle = (k + r) % 2 ? '#111216' : '#f2f2f2'; g.fillRect(x, y0 + r * cq, cq + 1, cq + 1); } });
         g.fillStyle = '#c9182c'; g.fillRect(0, 0, W2, hem); g.fillRect(0, H2 - hem, W2, hem);                                                     // bainha vermelha
         g.setLineDash([22, 14]); g.strokeStyle = 'rgba(255,230,230,.8)'; g.lineWidth = 4; [hem * 0.5, H2 - hem * 0.5].forEach(y => { g.beginPath(); g.moveTo(0, y); g.lineTo(W2, y); g.stroke(); }); g.setLineDash([]);
-        // brilho suave atrás da logo
-        const halo = g.createRadialGradient(W2 / 2, H2 / 2, 0, W2 / 2, H2 / 2, H2 * 0.9); halo.addColorStop(0, 'rgba(255,200,120,.25)'); halo.addColorStop(1, 'rgba(255,200,120,0)'); g.fillStyle = halo; g.fillRect(0, 0, W2, H2);
-        // textos pequenos nas pontas
-        g.font = `${H2 * 0.1}px "Titan One", "Arial Black", sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#1b1c24';
-        [[W2 * 0.12, 'GRAND PRIX'], [W2 * 0.88, 'GRAND PRIX']].forEach(([x, t]) => { g.save(); g.translate(x, H2 / 2); g.transform(1, 0, -0.2, 1, 0, 0); g.fillText(t, 0, 0); g.restore(); });
-        // ---- logo KARTEC 2D ----
-        const cx = W2 / 2, cy = H2 * 0.53, fs = H2 * 0.6; g.save(); g.translate(cx, cy); g.transform(1, 0, -0.22, 1, 0, 0);
-        g.font = fs + 'px "Titan One", "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineCap = 'round';
-        const txt = 'Kartec', sx = Math.min(1.12, (W2 * 0.5) / g.measureText(txt).width)   /* sem esticar a letra */, tw = g.measureText(txt).width; g.scale(sx, 1);
-        g.strokeStyle = '#1b1c24'; g.lineWidth = fs * 0.075; [[-0.2, 0.42], [0.02, 0.32], [0.24, 0.24]].forEach(([y, l]) => { g.beginPath(); g.moveTo(-tw / 2 - fs * (0.12 + l), y * fs); g.lineTo(-tw / 2 - fs * 0.12, y * fs); g.stroke(); });   // linhas de velocidade
-        g.strokeStyle = '#0c0c0e'; g.lineWidth = fs * 0.26; g.strokeText(txt, 0, 0);
-        g.strokeStyle = '#ffffff'; g.lineWidth = fs * 0.15; g.strokeText(txt, 0, 0);
-        const gr = g.createLinearGradient(0, -fs * 0.42, 0, fs * 0.42); gr.addColorStop(0, '#ffb0a4'); gr.addColorStop(0.38, '#ff4d5e'); gr.addColorStop(0.78, '#e8213a'); gr.addColorStop(1, '#b30d26');
-        g.fillStyle = gr; g.fillText(txt, 0, 0);
-        g.save(); g.beginPath(); g.rect(-W2, -fs, W2 * 2, fs * 0.45); g.clip(); g.fillStyle = 'rgba(255,255,255,.4)'; g.fillText(txt, 0, 0); g.restore();
-        g.restore();
+        // ---- EMBLEMA KARTEC: placa em pílula azul-marinho com borda dourada, bandeiras quadriculadas cruzadas atrás,
+        // letras KARTEC em itálico com extrusão 3D (camadas vinho), contorno branco + contorno escuro, degradê
+        // vermelho-coral, brilho de vidro em cima, faixa de velocidade amarela/vermelha embaixo e estrelinhas.
+        { const cx = W2 / 2, cy = H2 * 0.5, eh = H2 * 0.66, ew = eh * 3.6, r = eh / 2;
+          const pill = (w, h) => { g.beginPath(); g.moveTo(-w / 2 + h / 2, -h / 2); g.lineTo(w / 2 - h / 2, -h / 2); g.arc(w / 2 - h / 2, 0, h / 2, -Math.PI / 2, Math.PI / 2); g.lineTo(-w / 2 + h / 2, h / 2); g.arc(-w / 2 + h / 2, 0, h / 2, Math.PI / 2, Math.PI * 1.5); g.closePath(); };
+          g.save(); g.translate(cx, cy);
+          // bandeiras quadriculadas cruzadas atrás da placa
+          [-1, 1].forEach(sd => { g.save(); g.translate(sd * ew * 0.47, -eh * 0.08); g.rotate(sd * 0.42);
+            g.fillStyle = '#5a3a20'; g.fillRect(-eh * 0.03, -eh * 0.62, eh * 0.06, eh * 1.25);                                   // haste
+            const fw = eh * 0.62, fh = eh * 0.44, n = 6, m = 4; g.save(); g.translate(sd * eh * 0.03, -eh * 0.6); g.scale(sd, 1);
+            for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) { const wv = Math.sin(i * 0.9) * eh * 0.03; g.fillStyle = (i + j) % 2 ? '#15161c' : '#ffffff'; g.fillRect(i * fw / n, j * fh / m + wv, fw / n + 1, fh / m + 1); }
+            g.strokeStyle = '#15161c'; g.lineWidth = eh * 0.02; g.strokeRect(0, 0, fw, fh + eh * 0.03); g.restore(); g.restore(); });
+          // placa: sombra, borda dourada, fundo azul com raios de luz
+          g.save(); g.translate(eh * 0.04, eh * 0.06); pill(ew, eh); g.fillStyle = 'rgba(30,10,10,.35)'; g.fill(); g.restore();
+          pill(ew + eh * 0.12, eh * 1.12); const gold = g.createLinearGradient(0, -eh / 2, 0, eh / 2); gold.addColorStop(0, '#fff1a8'); gold.addColorStop(0.45, '#ffc93a'); gold.addColorStop(1, '#c98a10'); g.fillStyle = gold; g.fill();
+          pill(ew, eh); const nav = g.createLinearGradient(0, -eh / 2, 0, eh / 2); nav.addColorStop(0, '#2c3a78'); nav.addColorStop(1, '#141a3c'); g.fillStyle = nav; g.fill();
+          g.save(); pill(ew, eh); g.clip();
+          for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; g.fillStyle = k % 2 ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,0)'; g.beginPath(); g.moveTo(0, 0); g.arc(0, 0, ew, a, a + Math.PI / 18); g.closePath(); g.fill(); }
+          const sh = g.createLinearGradient(0, -eh / 2, 0, 0); sh.addColorStop(0, 'rgba(255,255,255,.22)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = sh; g.fillRect(-ew / 2, -eh / 2, ew, eh / 2);
+          // faixa de velocidade (swoosh) embaixo
+          g.lineCap = 'round'; [['#ffd23f', eh * 0.11, 0.3], ['#e8213a', eh * 0.07, 0.36]].forEach(([c, lw, yy]) => { g.strokeStyle = c; g.lineWidth = lw; g.beginPath(); g.moveTo(-ew * 0.44, eh * yy); g.quadraticCurveTo(0, eh * (yy - 0.12), ew * 0.46, eh * (yy - 0.02)); g.stroke(); });
+          g.restore();
+          // letras KARTEC
+          const fs = eh * 0.62; g.save(); g.translate(0, -eh * 0.04); g.transform(1, 0, -0.18, 1, 0, 0);
+          g.font = fs + 'px "Titan One", "Arial Black", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+          const txt = 'KARTEC', k = Math.min(1, ew * 0.84 / g.measureText(txt).width); g.scale(k, k);
+          for (let d = 10; d >= 1; d--) { g.fillStyle = d > 7 ? '#3a0710' : '#7a0c1e'; g.fillText(txt, d * fs * 0.012, d * fs * 0.014); }                 // extrusão
+          g.strokeStyle = '#0c0c14'; g.lineWidth = fs * 0.2; g.strokeText(txt, 0, 0);
+          g.strokeStyle = '#ffffff'; g.lineWidth = fs * 0.11; g.strokeText(txt, 0, 0);
+          const red = g.createLinearGradient(0, -fs * 0.4, 0, fs * 0.4); red.addColorStop(0, '#ffc2a8'); red.addColorStop(0.32, '#ff5a5e'); red.addColorStop(0.7, '#e8213a'); red.addColorStop(1, '#a80c22');
+          g.fillStyle = red; g.fillText(txt, 0, 0);
+          g.save(); g.beginPath(); g.rect(-ew, -fs, ew * 2, fs * 0.42); g.clip(); g.fillStyle = 'rgba(255,255,255,.45)'; g.fillText(txt, 0, 0); g.restore();   // brilho de vidro
+          g.restore();
+          // estrelinhas de brilho
+          const star = (x, y, s) => { g.fillStyle = '#ffffff'; g.beginPath(); for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4, rr = i % 2 ? s * 0.22 : s; g.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr); } g.closePath(); g.fill(); };
+          star(-ew * 0.33, -eh * 0.3, eh * 0.09); star(ew * 0.36, -eh * 0.18, eh * 0.07); star(ew * 0.12, -eh * 0.38, eh * 0.05);
+          g.restore(); }
         // ilhoses metálicos na bainha de cima (onde a corda amarra)
         for (let i = 0; i <= GROM; i++) { const x = 30 + i * (W2 - 60) / GROM, y = hem * 0.55; g.fillStyle = '#d9dade'; g.beginPath(); g.arc(x, y, hem * 0.42, 0, 7); g.fill(); g.fillStyle = '#2a2a2e'; g.beginPath(); g.arc(x, y, hem * 0.24, 0, 7); g.fill(); }
         bTex.needsUpdate = true; };
@@ -863,9 +884,10 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       const nCl = (NX + 1) * (NY + 1), nR = NX + 1, nP = nCl + nR + 2;   // pano + corda + 2 pontos fixos nos postes
       const P = new Float32Array(nP * 3), O = new Float32Array(nP * 3), pin = new Uint8Array(nP), idx = (i, j) => j * (NX + 1) + i, rI = i => nCl + i, A0 = nCl + nR, A1 = A0 + 1;
       const setP = (k, x, y, z) => { P[k * 3] = x; P[k * 3 + 1] = y; P[k * 3 + 2] = z; };
-      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const u = i / NX; setP(idx(i, j), X0 + i * DX, TOPY - 1.0 * Math.sin(u * Math.PI) - j * DY, 0); }
-      for (let i = 0; i <= NX; i++) { const u = i / NX; setP(rI(i), X0 + i * DX, ROPE_Y - 1.0 * Math.sin(u * Math.PI), 0); }
-      setP(A0, -AW + PR * 0.9, PH - 1.2, 0); setP(A1, AW - PR * 0.9, PH - 1.2, 0); pin[A0] = pin[A1] = 1; O.set(P);
+      for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const u = i / NX; setP(idx(i, j), X0 + i * DX, TOPY - 0.3 * Math.sin(u * Math.PI) - j * DY, 0); }
+      for (let i = 0; i <= NX; i++) { const u = i / NX; setP(rI(i), X0 + i * DX, ROPE_Y - 0.3 * Math.sin(u * Math.PI), 0); }
+      setP(A0, -AW + PR * 0.9, PH - 1.2, 0); setP(A1, AW - PR * 0.9, PH - 1.2, 0); pin[A0] = pin[A1] = 1; for (let j = 0; j <= NY; j++) { pin[idx(0, j)] = pin[idx(NX, j)] = 1; }   // laterais amarradas nos postes: a faixa não torce
+      O.set(P);
       const C = [], link = (a, b, s) => { C.push(a, b, Math.hypot(P[a * 3] - P[b * 3], P[a * 3 + 1] - P[b * 3 + 1], P[a * 3 + 2] - P[b * 3 + 2]) * (s || 1)); };
       for (let j = 0; j <= NY; j++) for (let i = 0; i <= NX; i++) { const k = idx(i, j);
         if (i < NX) link(k, idx(i + 1, j)); if (j < NY) link(k, idx(i, j + 1)); if (i < NX && j < NY) { link(k, idx(i + 1, j + 1)); link(idx(i + 1, j), idx(i, j + 1)); }
@@ -894,7 +916,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       let tPrev = null, acc = 0; const H = 1 / 60;
       const stepCloth = (t) => {
         for (let k = 0; k < nP; k++) { if (pin[k]) continue; const i3 = k * 3, x = P[i3], y = P[i3 + 1], z = P[i3 + 2], cl = k < nCl, j = cl ? Math.floor(k / (NX + 1)) : 0, u = ((cl ? k : k - nCl) % (NX + 1)) / NX;
-          const gust = 0.55 + 0.45 * Math.sin(t * 0.6) * Math.sin(t * 0.23 + 1.1), wz = cl ? (1.1 * gust + 1.0 * Math.sin(t * 2.1 + u * 7.0 + j * 0.5) + 0.6 * Math.sin(t * 3.7 - u * 11.0)) * (0.3 + j / NY) : 0.3 * gust;
+          const gust = 0.55 + 0.45 * Math.sin(t * 0.6) * Math.sin(t * 0.23 + 1.1), wz = cl ? (0.8 * gust + 0.9 * Math.sin(t * 2.1 + u * 7.0 + j * 0.5) + 0.6 * Math.sin(t * 3.7 - u * 11.0)) * (0.3 + j / NY) : 0.3 * gust;
           const vx = (x - O[i3]) * 0.985, vy = (y - O[i3 + 1]) * 0.985, vz = (z - O[i3 + 2]) * 0.985;
           O[i3] = x; O[i3 + 1] = y; O[i3 + 2] = z; P[i3] = x + vx; P[i3 + 1] = y + vy - 9.8 * H * H; P[i3 + 2] = z + vz + wz * H * H; }
         for (let it = 0; it < 8; it++) for (let c = 0; c < nC; c++) { const a = CA[c * 3] * 3, b = CA[c * 3 + 1] * 3, r = CA[c * 3 + 2];
