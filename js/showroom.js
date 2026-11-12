@@ -142,7 +142,6 @@
     g.fillStyle = '#1c1d20'; g.fillRect(-3.0, DOOR_H, 6.0, FH - DOOR_H);                                          // painel do letreiro
     g.fillStyle = GAR.ACCENT; g.fillRect(-hw, DOOR_H + 0.02, FW, 0.07); g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(-hw, DOOR_H + 0.1, FW, 0.018);
     g.fillStyle = lin(g, 0, 0.45, 0, 0, '#a4a7ad', '#84878d'); g.fillRect(-hw, 0, FW, 0.45); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(-hw, 0.44, FW, 0.02);
-    [-2.5, 2.5].forEach(x => { const s = Math.sign(x); g.fillStyle = lin(g, x, 0, x + s * 1.3, 0, 'rgba(255,238,205,.45)', 'rgba(255,238,205,0)'); g.fillRect(Math.min(x, x + s * 1.3), 0, 1.3, DOOR_H); });   // luz da moldura do portão
     g.fillStyle = lin(g, 0, FH, 0, FH - 0.5, 'rgba(0,0,0,.45)', 'rgba(0,0,0,0)'); g.fillRect(-hw, FH - 0.5, FW, 0.5);
     g.fillStyle = lin(g, 0, 0, 0, 0.35, 'rgba(0,0,0,.4)', 'rgba(0,0,0,0)'); g.fillRect(-hw, 0, FW, 0.35);
     g.clearRect(-DOOR_W / 2, -0.1, DOOR_W, DOOR_H + 0.1);
@@ -234,7 +233,7 @@
     sideW(-hw, -Math.PI / 2); sideW(hw, Math.PI / 2);
     const roof = K.plane(FW, RD + 0.4, clad, 0, FH, FZ - (RD + 0.4) / 2, 0); roof.rotation.x = -Math.PI / 2;
     K.box(FW + 0.3, 0.14, 0.5, alu, 0, FH + 0.07, FZ - 0.12, R, false);
-    [-1, 1].forEach(s => { K.box(0.16, DOOR_H, 0.34, dark, s * (DOOR_W / 2 + 0.08), DOOR_H / 2, FZ - 0.13, R, false); K.box(0.05, DOOR_H - 0.1, 0.05, led, s * (DOOR_W / 2 + 0.05), DOOR_H / 2, FZ + 0.05); K.glow(1.0, DOOR_H + 1, '#ffe6bd', 0.5, s * (DOOR_W / 2 + 0.05), DOOR_H / 2, FZ + 0.08); });
+    [-1, 1].forEach(s => { K.box(0.16, DOOR_H, 0.34, dark, s * (DOOR_W / 2 + 0.08), DOOR_H / 2, FZ - 0.13, R, false); });   // batentes do portão (as fitas de LED das laterais foram tiradas)
     K.box(DOOR_W + 0.32, 0.16, 0.34, dark, 0, DOOR_H + 0.08, FZ - 0.13, R, false);
     K.box(DOOR_W + 1.3, 0.1, 1.15, dark, 0, DOOR_H + 0.22, FZ + 0.55, R, false); K.box(DOOR_W + 1.0, 0.03, 0.06, led, 0, DOOR_H + 0.16, FZ + 1.0); K.glow(DOOR_W + 2.4, 0.9, '#ffe6bd', 0.45, 0, DOOR_H + 0.12, FZ + 1.04);
     // portão seccionado (enrola para cima: ver setDoor); as janelinhas dele são vazadas e levam vidro de verdade
