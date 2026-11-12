@@ -35,6 +35,7 @@
     LOOK_Y: 0.2,             // Garagem: altura do ponto olhado (menor = veículo mais alto na tela; a doca de cores fica embaixo)
     PILOT_IN_GARAGE: false,  // true mostra o piloto também dentro da Garagem
     SIDE_PANELS: false,      // true volta os painéis de luz (pareciam janelas) nas paredes laterais da garagem
+    SCONCES: false,          // true volta as 4 arandelas da fachada da garagem
     KART_OUTSIDE: false,     // true mostra o kart no pátio da tela principal (a Garagem sempre mostra)
     PILOT_OUTSIDE: false,    // true mostra o piloto no kart da tela principal (pátio)
     WHEEL_STOPS: false,      // true volta os batentes amarelo e preto das vagas
@@ -57,9 +58,10 @@
   const ZI = -38;                                      // centro da plataforma interna (z, em unidades); a fachada fica em z = -13
   const RW = 15, Z0 = -5.5, Z1 = 12.5, RD = Z1 - Z0, RH = 4;   // sala interna em metros (origem na plataforma)
   const DOOR_W = 5, DOOR_H = 2.9, FZ = -6.5, FW = 17, FH = 4.4;
+  function GAR_SCONCES() { return GAR.SCONCES ? [-7.9, -3.5, 3.5, 7.9] : []; }
   const FLAGS = [];   // bandeiras (nobori) da loja: cada uma mexe o próprio tecido em step()
   const WINS = [{ x: -5.5, y: 1.95, w: 3.7, h: 1.5 }, { x: 5.5, y: 1.95, w: 3.7, h: 1.5 }];   // janelas da frente (a da direita fica onde era o "01")
-  const SCONCES = [-7.9, -3.5, 3.5, 7.9];                                                     // 4 arandelas simétricas   // fachada em metros (origem no veículo do pátio)
+  const SCONCES = GAR_SCONCES();   // arandelas da fachada: tiradas (antes [-7.9, -3.5, 3.5, 7.9]); a luz agora vem dos postes da calçada                                                     // 4 arandelas simétricas   // fachada em metros (origem no veículo do pátio)
   const ease = x => { x = Math.max(0, Math.min(1, x)); return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
   const reduceMotion = () => !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
 
@@ -757,7 +759,8 @@
     // postes de luz da corrida (lampião clássico) com SpotLight e brilho que acendem à noite
     if (window.LampPost) {
       const LM = LampPost.materials(), LG = LampPost.geometries(), B = LampPost.baker(), heads = [];
-      [[10.5, FZ + WALK.d - 0.45, Math.PI]].forEach(([x, z, a]) => { const M = new THREE.Matrix4().compose(new THREE.Vector3(x * U, WALK.h * U, z * U), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a), new THREE.Vector3(1, 1, 1));
+      // postes na beira da calçada (braço para a rua), longe do portão e da porta da loja
+      [-16.8, -7.4, 7.4, 15.2].map(x => [x, FZ + WALK.d - 0.4, -Math.PI / 2]).forEach(([x, z, a]) => { const M = new THREE.Matrix4().compose(new THREE.Vector3(x * U, WALK.h * U, z * U), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a), new THREE.Vector3(1, 1, 1));
         LampPost.place(LG, B.put, M); heads.push(new THREE.Vector3(LampPost.ARM, LampPost.LAMPY, 0).applyMatrix4(M)); });
       LampPost.merge(B.bake, LM).forEach(m => Wg.add(m)); Object.values(LG).forEach(g => g.dispose()); out.lampGlass = LM.glass;
       heads.forEach(H => { const L = new THREE.SpotLight(0xffc685, 0, 62, 1.0, 0.75, 1.4); L.position.copy(H); L.target.position.set(H.x, 0, H.z); Wg.add(L, L.target); out.lights.push(L);
