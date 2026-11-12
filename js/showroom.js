@@ -176,7 +176,16 @@
     const glow = (w, h, hex, op, x, y, z, ry, parent) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), tag(new THREE.MeshBasicMaterial({ map: gTex, color: col(hex), transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false })));
       m.position.set(x, y, z); m.rotation.y = ry || 0; m.renderOrder = 2; (parent || R).add(m); return m; };
     const grp = (x, z, parent) => { const g = new THREE.Group(); g.position.set(x || 0, 0, z || 0); (parent || R).add(g); return g; };
-    return { std, soft, lit, put, box, cyl, plane, glow, grp, tag, mats };
+    // caixa ARREDONDADA: todas as quinas boleadas (raio r). É o que dá cara de "brinquedo bem feito" estilo Mario Kart:
+    // a luz corre pela borda e desenha o volume, em vez de quina seca de 90°.
+    const rgeo = {}, rbg = (w, h, d, r) => { const k = [w, h, d, r].map(v => v.toFixed(3)).join('|'); if (rgeo[k]) return rgeo[k];
+      r = Math.max(0.004, Math.min(r, w / 2 - 0.002, h / 2 - 0.002, d / 2 - 0.002)); const b = r * 0.55, sw = w - 2 * b, sh = h - 2 * b, rc = Math.max(0.002, Math.min(r - b + 0.02, sw / 2 - 1e-3, sh / 2 - 1e-3));
+      const S = new THREE.Shape(), x = -sw / 2, y = -sh / 2; S.moveTo(x + rc, y); S.lineTo(x + sw - rc, y); S.quadraticCurveTo(x + sw, y, x + sw, y + rc); S.lineTo(x + sw, y + sh - rc);
+      S.quadraticCurveTo(x + sw, y + sh, x + sw - rc, y + sh); S.lineTo(x + rc, y + sh); S.quadraticCurveTo(x, y + sh, x, y + sh - rc); S.lineTo(x, y + rc); S.quadraticCurveTo(x, y, x + rc, y);
+      const g = new THREE.ExtrudeGeometry(S, { depth: Math.max(0.001, d - 2 * b), bevelEnabled: true, bevelThickness: b, bevelSize: b, bevelSegments: 4, curveSegments: 6 });
+      g.translate(0, 0, -Math.max(0.001, d - 2 * b) / 2); g.computeVertexNormals(); return (rgeo[k] = g); };
+    const rb = (w, h, d, r, mat, x, y, z, parent, cast) => put(rbg(w, h, d, r), mat, x, y, z, parent, cast);
+    return { std, soft, lit, put, box, cyl, plane, glow, grp, tag, mats, rb };
   }
   function tireStack(K, x, z, n, parent) {
     const g = K.grp(x, z, parent), rubber = K.std('#141415', 0.92, 0), rim = K.std('#b1b4ba', 0.35, 0.8);
@@ -234,31 +243,59 @@
     const sideW = (x, ry) => { const m = K.plane(RD + 0.4, FH, clad, x, FH / 2, FZ - (RD + 0.4) / 2, ry); m.castShadow = false; };
     sideW(-hw, -Math.PI / 2); sideW(hw, Math.PI / 2);
     const roof = K.plane(FW, RD + 0.4, clad, 0, FH, FZ - (RD + 0.4) / 2, 0); roof.rotation.x = -Math.PI / 2;
-    K.box(FW + 0.3, 0.14, 0.5, alu, 0, FH + 0.07, FZ - 0.12, R, false);
-    [-1, 1].forEach(s => { K.box(0.16, DOOR_H, 0.34, dark, s * (DOOR_W / 2 + 0.08), DOOR_H / 2, FZ - 0.13, R, false); });   // batentes do portão (as fitas de LED das laterais foram tiradas)
-    K.box(DOOR_W + 0.32, 0.16, 0.34, dark, 0, DOOR_H + 0.08, FZ - 0.13, R, false);
-    K.box(DOOR_W + 1.3, 0.1, 1.15, dark, 0, DOOR_H + 0.22, FZ + 0.55, R, false); K.box(DOOR_W + 1.0, 0.03, 0.06, led, 0, DOOR_H + 0.16, FZ + 1.0); K.glow(DOOR_W + 2.4, 0.9, '#ffe6bd', 0.45, 0, DOOR_H + 0.12, FZ + 1.04);
+    // ===== FACHADA (remodelada no espírito dos prédios de Mario Kart World: volumes grossos e boleados, camadas bem
+    // legíveis — rodapé, corpo, cornija —, moldura de portal no portão, toldos listrados e detalhes "de brinquedo").
+    // Mesmas cores: grafite, vermelho da marca, branco/alumínio.
+    const trim = K.std('#2d3035', 0.42, 0.35), red = K.std(GAR.ACCENT, 0.32, 0.12), conc = K.std('#a7aaaf', 0.82, 0.02), white = K.std('#eceae4', 0.5, 0.05), bolt = K.std('#c9ccd2', 0.3, 0.85);
+    // cornija: faixa grossa boleada no topo + friso vermelho logo abaixo
+    K.rb(FW + 0.5, 0.38, 0.72, 0.12, trim, 0, FH + 0.1, FZ + 0.05, R);
+    K.rb(FW + 0.3, 0.1, 0.14, 0.04, red, 0, FH - 0.16, FZ + 0.06, R);
+    // pilares de canto (cantoneiras grossas) e rodapé de concreto boleado (interrompido no portão)
+    [-1, 1].forEach(s => K.rb(0.5, FH + 0.05, 0.5, 0.1, trim, s * (hw - 0.05), (FH + 0.05) / 2, FZ + 0.05, R));
+    [-1, 1].forEach(s => { const a = DOOR_W / 2 + 0.55, b = hw - 0.3, w = b - a; K.rb(w, 0.46, 0.26, 0.07, conc, s * (a + w / 2), 0.23, FZ + 0.1, R); });
+    // PORTAL do portão: dois pilares grossos com friso vermelho por dentro, verga em cima, sapata e parafusos
+    [-1, 1].forEach(s => { const x = s * (DOOR_W / 2 + 0.3);
+      K.rb(0.56, DOOR_H + 0.42, 0.5, 0.1, trim, x, (DOOR_H + 0.42) / 2, FZ + 0.1, R);
+      K.rb(0.08, DOOR_H - 0.05, 0.08, 0.035, red, s * (DOOR_W / 2 + 0.06), (DOOR_H - 0.05) / 2, FZ + 0.33, R, false);
+      K.rb(0.64, 0.16, 0.56, 0.06, conc, x, 0.08, FZ + 0.12, R);
+      [0.55, DOOR_H - 0.25].forEach(y => { K.cyl(0.045, 0.045, 0.04, bolt, x, y, FZ + 0.37, R, 12).rotation.x = Math.PI / 2; }); });
+    K.rb(DOOR_W + 1.3, 0.34, 0.56, 0.1, trim, 0, DOOR_H + 0.2, FZ + 0.12, R);                              // verga
+    K.rb(DOOR_W + 0.1, 0.07, 0.08, 0.03, red, 0, DOOR_H + 0.02, FZ + 0.36, R, false);                       // friso vermelho da verga
+    // placa do letreiro: chapa escura boleada, saltada da parede, com contorno vermelho e 4 parafusos
+    K.rb(6.35, 1.12, 0.12, 0.16, red, 0, 3.78, FZ + 0.08, R);
+    K.rb(6.15, 0.94, 0.2, 0.13, K.std('#17181b', 0.45, 0.25), 0, 3.78, FZ + 0.13, R);
+    [[-2.9, 4.12], [2.9, 4.12], [-2.9, 3.44], [2.9, 3.44]].forEach(([x, y]) => { K.cyl(0.05, 0.05, 0.04, bolt, x, y, FZ + 0.24, R, 12).rotation.x = Math.PI / 2; });
     // portão seccionado (enrola para cima: ver setDoor); as janelinhas dele são vazadas e levam vidro de verdade
     const dTex = doorTex(), dMat = K.std(null, 0.4, 0.55, dTex, 0.7); dMat.alphaTest = 0.5;
     const door = K.plane(DOOR_W, DOOR_H, dMat, 0, DOOR_H / 2, FZ - 0.1, 0);
     const bar = K.box(DOOR_W, 0.08, 0.08, K.std('#17181a', 0.8, 0), 0, 0.04, FZ - 0.08, R, false);
-    // janelas: vidro 3D (reflexo + transparência: o interior REAL da garagem aparece), caixilho e peitoril
-    const glass = [];
+    // janelas: vidro 3D (o interior REAL da garagem aparece), caixilho GROSSO boleado, peitoril de concreto e TOLDO listrado
+    const glass = [], awM = K.std(null, 0.7, 0, awningTex(), 0.55); awM.side = THREE.DoubleSide;
+    const valM = K.std(null, 0.71, 0, valanceTex(), 0.55); valM.side = THREE.DoubleSide; valM.alphaTest = 0.5;
     WINS.forEach(w => {
       const gm = new THREE.Mesh(new THREE.PlaneGeometry(w.w, w.h), glassMaterial(null)); gm.position.set(w.x, w.y, FZ + 0.03); gm.renderOrder = 3; R.add(gm); glass.push(gm);
-      const t = 0.07, d = 0.12, fy = w.y, fx = w.x;
-      K.box(w.w + 2 * t, t, d, dark, fx, fy + w.h / 2 + t / 2, FZ + 0.04, R, false); K.box(w.w + 2 * t, t, d, dark, fx, fy - w.h / 2 - t / 2, FZ + 0.04, R, false);
-      [-1, 1].forEach(sd => K.box(t, w.h, d, dark, fx + sd * (w.w / 2 + t / 2), fy, FZ + 0.04, R, false));
-      [-1, 0, 1].forEach(k => K.box(0.04, w.h, 0.06, dark, fx + k * w.w / 4, fy, FZ + 0.05, R, false));
-      K.box(w.w + 0.3, 0.08, 0.2, alu, fx, fy - w.h / 2 - 0.12, FZ + 0.09, R, false);
+      const t = 0.13, d = 0.22, fy = w.y, fx = w.x, z = FZ + 0.08;
+      K.rb(w.w + 2 * t, t, d, 0.05, trim, fx, fy + w.h / 2 + t / 2, z, R); K.rb(w.w + 2 * t, t, d, 0.05, trim, fx, fy - w.h / 2 - t / 2, z, R);
+      [-1, 1].forEach(sd => K.rb(t, w.h + 2 * t, d, 0.05, trim, fx + sd * (w.w / 2 + t / 2), fy, z, R));
+      [-1, 0, 1].forEach(k => K.rb(0.06, w.h, 0.1, 0.025, trim, fx + k * w.w / 4, fy, FZ + 0.06, R, false));
+      K.rb(w.w + 0.55, 0.13, 0.36, 0.05, conc, fx, fy - w.h / 2 - t - 0.06, FZ + 0.16, R);
+      // toldo: lona listrada curvada (sai da parede e cai), barrado recortado em "ondinhas", tubo branco na ponta e 2 braços
+      const AW = w.w + 0.7, AD = 0.95, ay = fy + w.h / 2 + t + 0.32, A1 = 1.15, ag = new THREE.PlaneGeometry(AW, 1, 1, 12), ap = ag.attributes.position;
+      for (let k = 0; k < ap.count; k++) { const a = (0.5 - ap.getY(k)) * A1; ap.setY(k, ay - AD * (1 - Math.cos(a)) * 0.9); ap.setZ(k, FZ + 0.02 + AD * Math.sin(a) / Math.sin(A1)); }
+      ag.computeVertexNormals(); const aw = K.put(ag, awM, fx, 0, 0, R); aw.castShadow = true;
+      const ez = FZ + 0.02 + AD, ey = ay - AD * (1 - Math.cos(A1)) * 0.9;
+      K.plane(AW, 0.24, valM, fx, ey - 0.12, ez, 0, R).castShadow = true;
+      const tube = K.cyl(0.03, 0.03, AW + 0.04, white, fx, ey, ez, R, 10); tube.rotation.z = Math.PI / 2;
+      [-1, 1].forEach(sd => { const y0 = ay - 0.42, dy = ey - y0, dz = ez - FZ, L = Math.hypot(dy, dz), arm = K.cyl(0.018, 0.018, L, bolt, fx + sd * (AW / 2 - 0.15), y0 + dy / 2, FZ + dz / 2, R, 8);
+        arm.rotation.x = Math.atan2(dz, dy); });
     });
     const dg = new THREE.Mesh(door.geometry, glassMaterial(dTex)); dg.position.z = -0.01; dg.renderOrder = 3; door.add(dg); glass.push(dg);
     buildStore(K, nightUp, glass);   // loja de conveniência ao lado (mesmo kit: apaga/acende com o dia e a noite)
     buildFrontage(K);                // calçada, meio-fio, rebaixo do portão e batentes das vagas
     // letreiro: painel escuro (pintado na fachada) com a LOGO OFICIAL 3D e luz de fundo que acende à noite
-    const signGlow = K.glow(6.4, 1.9, '#ffd8b0', 0.25, 0, DOOR_H + 0.75, FZ + 0.02); nightUp.push({ o: signGlow, day: 0.18, night: 0.75 });
+    const signGlow = K.glow(6.6, 1.6, '#ffd8b0', 0.25, 0, 3.78, FZ + 0.25); nightUp.push({ o: signGlow, day: 0.18, night: 0.75 });
     let signLogo = null;
-    if (window.Logo3D) Logo3D.whenReady(() => { try { const L = signLogo = Logo3D.mesh(1.08, { maxW: 5.6, self: 0.2 }); L.position.set(0, DOOR_H + 0.76, FZ + 0.06 + L.userData.d / 2); R.add(L); } catch (e) { console.warn('[Vitrine] logo 3D (letreiro)', e); } });
+    if (window.Logo3D) Logo3D.whenReady(() => { try { const L = signLogo = Logo3D.mesh(0.9, { maxW: 5.2, self: 0.2 }); L.position.set(0, 3.78, FZ + 0.24 + L.userData.d / 2); R.add(L); } catch (e) { console.warn('[Vitrine] logo 3D (letreiro)', e); } });
     // ARANDELAS (4, simétricas): corpo de metal, lentes de luz em cima e embaixo e feixes pintados na parede (acendem à noite)
     const wash = washTex(), bodyM = K.std('#22252b', 0.35, 0.7), lens = K.lit('#fff2d6');
     SCONCES.forEach(x => { const g = K.grp(x, FZ);
@@ -276,6 +313,18 @@
     const mats = Object.values(K.mats).filter(m => m.isMeshStandardMaterial); mats.forEach(m => { m.emissiveIntensity *= GAR.REALISM ? 0.12 : GAR.EXT_GLOW_K; m.userData.envK = GAR.ENV; m.userData.e0 = m.emissiveIntensity; });
     return { R, door, bar, dTex, glass, nightUp, mats, sign: () => signLogo };
   }
+  // toldo: lona listrada vermelho/branco (largura de cada listra ~0,32 m), com trama leve e sombra nas dobras
+  const awningTex = () => { const t = mkTex(512, 256, (g, W, H) => { const n = 8, sw = W / n;
+      for (let k = 0; k < n; k++) { g.fillStyle = k % 2 ? '#f3f0e8' : GAR.ACCENT; g.fillRect(k * sw, 0, sw, H);
+        g.fillStyle = lin(g, k * sw, 0, k * sw + sw, 0, 'rgba(0,0,0,.10)', 'rgba(255,255,255,.06)'); g.fillRect(k * sw, 0, sw, H); }
+      g.fillStyle = lin(g, 0, 0, 0, H, 'rgba(0,0,0,.18)', 'rgba(0,0,0,0)'); g.fillRect(0, 0, W, H * 0.25);
+      for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${(Math.random() * 0.05).toFixed(3)})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 1); } });
+    t.wrapS = THREE.RepeatWrapping; t.repeat.set(1.9, 1); return t; };
+  const valanceTex = () => { const t = mkTex(512, 96, (g, W, H) => { const n = 8, sw = W / n;
+      for (let k = 0; k < n; k++) { g.fillStyle = k % 2 ? '#f3f0e8' : GAR.ACCENT; g.fillRect(k * sw, 0, sw, H); }
+      g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 0, W, 5);
+      g.globalCompositeOperation = 'destination-out'; for (let k = 0; k <= n; k++) { g.beginPath(); g.arc(k * sw, H + sw * 0.18, sw * 0.5, 0, 6.2832); g.fill(); } g.globalCompositeOperation = 'source-over'; });
+    t.wrapS = THREE.RepeatWrapping; t.repeat.set(1.9, 1); return t; };
   // feixe de luz da arandela na parede (cone suave, mais forte perto da lâmpada)
   const washTex = () => mkTex(128, 256, (g, W, H) => { g.clearRect(0, 0, W, H);
     for (let y = 0; y < H; y++) { const t = 1 - y / H, half = W * (0.08 + 0.42 * (1 - t)), a = Math.pow(t, 1.6) * 0.9;
@@ -733,7 +782,9 @@
     // floreiras na calçada: cocho de fibrocimento grafite com cantos arredondados e bisotê, tampo de madeira (ripas) em
     // volta da boca, terra com casca e pedriscos e um rodapé escuro. A moita é medida e encaixada DENTRO da boca do vaso.
     const PL = [-8.0, -3.55, 3.55, 8.0], PZ = FZ + 0.6;
-    { const pw = 1.4, pd = 0.74, ph = 0.6, r = 0.1, bev = 0.018, y0 = WALK.h + 0.03;
+    // (remodelada estilo Mario Kart World: vaso gordinho e boleado, mais largo em cima, tampo de madeira grosso saltado,
+    //  friso vermelho da marca em volta e 4 pezinhos — volumes simples e bem legíveis que pegam luz nas bordas)
+    { const pw = 1.5, pd = 0.84, ph = 0.62, r = 0.2, bev = 0.07, y0 = WALK.h + 0.1;
       const rs = (w, d, rr) => { const s = new THREE.Shape(), x = -w / 2, y = -d / 2; s.moveTo(x + rr, y); s.lineTo(x + w - rr, y); s.quadraticCurveTo(x + w, y, x + w, y + rr); s.lineTo(x + w, y + d - rr);
         s.quadraticCurveTo(x + w, y + d, x + w - rr, y + d); s.lineTo(x + rr, y + d); s.quadraticCurveTo(x, y + d, x, y + d - rr); s.lineTo(x, y + rr); s.quadraticCurveTo(x, y, x + rr, y); return s; };
       const ex = (w, d, h, rr, bv) => { const g = new THREE.ExtrudeGeometry(rs(w, d, rr), { depth: h, bevelEnabled: bv > 0, bevelThickness: bv, bevelSize: bv, bevelSegments: 3, curveSegments: 8 }); g.rotateX(-Math.PI / 2); return g; };
@@ -746,11 +797,20 @@
       const woodT = mkM(1, 1, 256, g => { g.fillStyle = '#8a5a36'; g.fillRect(0, 0, 1, 1); for (let k = 0; k < 9; k++) { const y = k / 9, v = 120 + ((RND() * 40) | 0); g.fillStyle = `rgb(${v + 30},${v - 10},${v - 45})`; g.fillRect(0, y + 0.004, 1, 1 / 9 - 0.008); }
         inPx(g, (W2, H2) => { g.strokeStyle = 'rgba(60,30,10,.25)'; g.lineWidth = 1; for (let k = 0; k < 120; k++) { const y = RND() * H2; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W2 * 0.3, y + (RND() - 0.5) * 6, W2 * 0.6, y + (RND() - 0.5) * 6, W2, y); g.stroke(); } }); });
       woodT.wrapS = woodT.wrapT = THREE.RepeatWrapping; const wood = new THREE.MeshStandardMaterial({ map: woodT, roughness: 0.55, metalness: 0 }); wood.__ink = true; wood.userData.envK = 0.4;
-      const G = { foot: ex(pw - 0.04, pd - 0.04, 0.03, r * 0.9, 0), body: ex(pw, pd, ph - 2 * bev, r, bev), rim: ring, soil: new THREE.ShapeGeometry(rs(pw - 0.1, pd - 0.1, r * 0.7)).rotateX(-Math.PI / 2) };
+      // corpo afunilado (base 88% do topo) e anel grosso de madeira com borda boleada saltando para fora
+      const bodyG = ex(pw - 2 * bev, pd - 2 * bev, ph - 2 * bev, r - bev, bev); { const P = bodyG.attributes.position; bodyG.computeBoundingBox(); const y0b = bodyG.boundingBox.min.y, yh = bodyG.boundingBox.max.y - y0b;
+        for (let k = 0; k < P.count; k++) { const f = 0.88 + 0.12 * (P.getY(k) - y0b) / yh; P.setX(k, P.getX(k) * f); P.setZ(k, P.getZ(k) * f); } bodyG.computeVertexNormals(); }
+      const ring2 = (() => { const o = rs(pw + 0.12, pd + 0.12, r + 0.06); o.holes.push(rs(pw - 0.2, pd - 0.2, r * 0.55)); const g = new THREE.ExtrudeGeometry(o, { depth: 0.04, bevelEnabled: true, bevelThickness: 0.025, bevelSize: 0.025, bevelSegments: 4, curveSegments: 10 }); g.rotateX(-Math.PI / 2); return g; })();
+      const band = (() => { const o = rs(pw * 0.975 + 0.03, pd * 0.975 + 0.03, r); o.holes.push(rs(pw * 0.94, pd * 0.94, r * 0.9)); const g = new THREE.ExtrudeGeometry(o, { depth: 0.05, bevelEnabled: true, bevelThickness: 0.012, bevelSize: 0.012, bevelSegments: 3, curveSegments: 10 }); g.rotateX(-Math.PI / 2); return g; })();
+      const redM = new THREE.MeshStandardMaterial({ color: GAR.ACCENT, roughness: 0.35, metalness: 0.1 }); redM.__ink = true; redM.userData.envK = 0.5;
+      const footG = new THREE.CylinderGeometry(0.07, 0.085, 0.1, 16);
+      const G = { foot: footG, body: bodyG, rim: ring2, soil: new THREE.SphereGeometry(1, 24, 8, 0, 6.2832, 0, Math.PI / 2) };
       const top = y0 + ph;
       PL.forEach(x => { const P = new THREE.Group(); P.position.set(x * U, 0, PZ * U); P.scale.setScalar(U); Wg.add(P);
         const add = (g, m, y, cast) => { const o = new THREE.Mesh(g, m); o.position.y = y; o.castShadow = cast; o.receiveShadow = true; P.add(o); };
-        add(G.foot, foot, WALK.h, false); add(G.body, body, y0 + bev, true); add(G.rim, wood, top - 0.01, true); add(G.soil, soil, top - 0.05, false); });
+        [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => { const f = new THREE.Mesh(G.foot, foot); f.position.set(a * (pw * 0.88 / 2 - 0.16), WALK.h + 0.05, b * (pd * 0.88 / 2 - 0.12)); f.castShadow = true; P.add(f); });
+        add(G.body, body, y0 + bev, true); add(band, redM, y0 + ph * 0.62, true); add(G.rim, wood, top - 0.02, true);
+        const sl = new THREE.Mesh(G.soil, soil); sl.scale.set((pw - 0.22) / 2, 0.07, (pd - 0.22) / 2); sl.position.y = top - 0.04; sl.receiveShadow = true; P.add(sl); });
       if (window.Bush) { const im = new THREE.InstancedMesh(Bush.geometry('hi'), Bush.material(), PL.length), d = new THREE.Object3D();
         // mede a moita e escala para caber na boca do vaso (largura e profundidade), com a base enterrada na terra
         const bg = Bush.geometry('hi'); if (!bg.boundingBox) bg.computeBoundingBox(); const bb = bg.boundingBox, bw = bb.max.x - bb.min.x, bd = bb.max.z - bb.min.z, bh = bb.max.y - bb.min.y;
