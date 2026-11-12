@@ -287,7 +287,7 @@
   const STORE = { x: -13.9, z: FZ, w: 10, d: 9, h: 4.9, top: 2.7, sb: 2.95, canopy: 1.5,
     tileL: [-5, -4.2], glassL: [-4.2, 0.4], door: [0.4, 2.6], glassR: [2.6, 4.3], tileR: [4.3, 5] };
   // calçada com meio-fio na frente da loja e da garagem (rebaixada no portão) e vagas pintadas no asfalto (metros)
-  const WALK = { d: 2.6, h: 0.15, x0: -19.4, x1: 16, cut: 3.1, ramp: 0.7 };
+  const WALK = { d: 3.5, h: 0.15, x0: -19.4, x1: 16, cut: 3.1, ramp: 0.7 };
   const STALLS = { depth: 5, store: [-5, -2.5, 0, 2.5, 5], pcd: 2, right: [9.4, 11.9, 14.4] };   // pcd: vaga PcD (entre as linhas 2 e 3, na frente da porta)
   const RND = Math.random;
   // textura desenhada em metros (origem no canto de cima à esquerda); ppm = pixels por metro
@@ -756,16 +756,27 @@
         PL.forEach((x, n) => { const a = n % 2 ? Math.PI : 0; d.rotation.set(0, a, 0); d.scale.set(kx, ky, kz);
           d.position.set(x * U - Math.cos(a) * cx * kx, (top - 0.05) * U - (bb.min.y + bh * 0.08) * ky, PZ * U - Math.cos(a) * cz * kz); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
         im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.customDepthMaterial = Bush.depthMaterial(); im.frustumCulled = false; Wg.add(im); } }
-    // postes de luz da corrida (lampião clássico) com SpotLight e brilho que acendem à noite
-    if (window.LampPost) {
-      const LM = LampPost.materials(), LG = LampPost.geometries(), B = LampPost.baker(), heads = [];
-      // postes na beira da calçada (braço para a rua), longe do portão e da porta da loja
-      [-16.8, -7.4, 7.4, 15.2].map(x => [x, FZ + WALK.d - 0.4, -Math.PI / 2]).forEach(([x, z, a]) => { const M = new THREE.Matrix4().compose(new THREE.Vector3(x * U, WALK.h * U, z * U), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), a), new THREE.Vector3(1, 1, 1));
-        LampPost.place(LG, B.put, M); heads.push(new THREE.Vector3(LampPost.ARM, LampPost.LAMPY, 0).applyMatrix4(M)); });
-      LampPost.merge(B.bake, LM).forEach(m => Wg.add(m)); Object.values(LG).forEach(g => g.dispose()); out.lampGlass = LM.glass;
-      heads.forEach(H => { const L = new THREE.SpotLight(0xffc685, 0, 62, 1.0, 0.75, 1.4); L.position.copy(H); L.target.position.set(H.x, 0, H.z); Wg.add(L, L.target); out.lights.push(L);
-        const mk = (c, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); sp.position.copy(H); sp.scale.setScalar(s); Wg.add(sp); return sp; };
-        out.halos.push(mk(0xfff0d0, 2), mk(0xffb766, 7)); });
+    // postes de luz modernos (LED) na beira da calçada: coluna cônica grafite, braço reto levemente inclinado para cima
+    // e luminária chata com painel de LED embaixo. À noite o painel acende (out.lampGlass) + SpotLight + brilho.
+    { const metal = new THREE.MeshStandardMaterial({ color: 0x3b3e44, roughness: 0.38, metalness: 0.65 }), base = new THREE.MeshStandardMaterial({ color: 0x55585e, roughness: 0.6, metalness: 0.4 });
+      const ledM = new THREE.MeshStandardMaterial({ color: 0xf4f1ea, roughness: 0.3, metalness: 0, emissive: 0xfff2dc, emissiveIntensity: 0.12 });
+      [metal, base, ledM].forEach(m => { m.__ink = true; m.userData.envK = 0.6; });
+      const H = 6.2, ARM = 1.75, TILT = 0.1, heads = [];
+      const G = { pole: new THREE.CylinderGeometry(0.055, 0.085, H, 20), sleeve: new THREE.CylinderGeometry(0.11, 0.12, 0.55, 20), plate: new THREE.BoxGeometry(0.36, 0.05, 0.36),
+        arm: new THREE.BoxGeometry(ARM, 0.07, 0.06), cap: new THREE.CylinderGeometry(0.07, 0.07, 0.12, 16), head: new THREE.BoxGeometry(0.85, 0.08, 0.32), lip: new THREE.BoxGeometry(0.87, 0.025, 0.34), led: new THREE.PlaneGeometry(0.72, 0.22) };
+      G.head.translate(0, 0, 0); G.led.rotateX(Math.PI / 2);
+      const put = (g, geo, m, x, y, z, rz) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); if (rz) o.rotation.z = rz; o.castShadow = m !== ledM; o.receiveShadow = true; g.add(o); return o; };
+      [-16.8, -7.4, 7.4, 15.2].forEach(x => { const z = FZ + WALK.d - 0.45, g = new THREE.Group(); g.position.set(x * U, WALK.h * U, z * U); g.rotation.y = -Math.PI / 2; g.scale.setScalar(U); Wg.add(g);
+        put(g, G.plate, base, 0, 0.025, 0); put(g, G.sleeve, base, 0, 0.3, 0); put(g, G.pole, metal, 0, H / 2, 0); put(g, G.cap, metal, 0, H + 0.02, 0);
+        const ex = Math.cos(TILT) * ARM, ey = Math.sin(TILT) * ARM;
+        put(g, G.arm, metal, ex / 2, H - 0.05 + ey / 2, 0, TILT);
+        const hd = new THREE.Group(); hd.position.set(ex + 0.3, H - 0.05 + ey + 0.01, 0); hd.rotation.z = TILT * 0.5; g.add(hd);
+        put(hd, G.head, metal, 0, 0, 0); put(hd, G.lip, metal, 0, -0.045, 0); put(hd, G.led, ledM, 0, -0.06, 0);
+        g.updateMatrixWorld(true); heads.push(new THREE.Vector3(0, -0.12, 0).applyMatrix4(hd.matrixWorld)); });
+      out.lampGlass = ledM;
+      heads.forEach(Hp => { const L = new THREE.SpotLight(0xfff0d8, 0, 62, 1.05, 0.7, 1.4); L.position.copy(Hp); L.target.position.set(Hp.x, 0, Hp.z); Wg.add(L, L.target); out.lights.push(L);
+        const mk = (c, s) => { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: c, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); sp.position.copy(Hp); sp.scale.setScalar(s); Wg.add(sp); return sp; };
+        out.halos.push(mk(0xffffff, 1.6), mk(0xffe2b8, 6)); });
     }
     // pilhas de pneus da corrida (os cones do pátio foram tirados)
     if (window.Props && Props.tireAssets) {
