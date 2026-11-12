@@ -244,7 +244,7 @@
     sideW(-hw, -Math.PI / 2); sideW(hw, Math.PI / 2);
     const roof = K.plane(FW, RD + 0.4, clad, 0, FH, FZ - (RD + 0.4) / 2, 0); roof.rotation.x = -Math.PI / 2;
     // ===== FACHADA (remodelada no espírito dos prédios de Mario Kart World: volumes grossos e boleados, camadas bem
-    // legíveis — rodapé, corpo, cornija —, moldura de portal no portão, toldos listrados e detalhes "de brinquedo").
+    // legíveis — rodapé, corpo, cornija —, moldura de portal no portão e detalhes "de brinquedo").
     // Mesmas cores: grafite, vermelho da marca, branco/alumínio.
     const trim = K.std('#2d3035', 0.42, 0.35), red = K.std(GAR.ACCENT, 0.32, 0.12), conc = K.std('#a7aaaf', 0.82, 0.02), white = K.std('#eceae4', 0.5, 0.05), bolt = K.std('#c9ccd2', 0.3, 0.85);
     // cornija: faixa grossa boleada no topo + friso vermelho logo abaixo
@@ -269,9 +269,8 @@
     const dTex = doorTex(), dMat = K.std(null, 0.4, 0.55, dTex, 0.7); dMat.alphaTest = 0.5;
     const door = K.plane(DOOR_W, DOOR_H, dMat, 0, DOOR_H / 2, FZ - 0.1, 0);
     const bar = K.box(DOOR_W, 0.08, 0.08, K.std('#17181a', 0.8, 0), 0, 0.04, FZ - 0.08, R, false);
-    // janelas: vidro 3D (o interior REAL da garagem aparece), caixilho GROSSO boleado, peitoril de concreto e TOLDO listrado
-    const glass = [], awM = K.std(null, 0.7, 0, awningTex(), 0.55); awM.side = THREE.DoubleSide;
-    const valM = K.std(null, 0.71, 0, valanceTex(), 0.55); valM.side = THREE.DoubleSide; valM.alphaTest = 0.5;
+    // janelas: vidro 3D (o interior REAL da garagem aparece), caixilho GROSSO boleado e peitoril de concreto
+    const glass = [];
     WINS.forEach(w => {
       const gm = new THREE.Mesh(new THREE.PlaneGeometry(w.w, w.h), glassMaterial(null)); gm.position.set(w.x, w.y, FZ + 0.03); gm.renderOrder = 3; R.add(gm); glass.push(gm);
       const t = 0.13, d = 0.22, fy = w.y, fx = w.x, z = FZ + 0.08;
@@ -279,15 +278,6 @@
       [-1, 1].forEach(sd => K.rb(t, w.h + 2 * t, d, 0.05, trim, fx + sd * (w.w / 2 + t / 2), fy, z, R));
       [-1, 0, 1].forEach(k => K.rb(0.06, w.h, 0.1, 0.025, trim, fx + k * w.w / 4, fy, FZ + 0.06, R, false));
       K.rb(w.w + 0.55, 0.13, 0.36, 0.05, conc, fx, fy - w.h / 2 - t - 0.06, FZ + 0.16, R);
-      // toldo: lona listrada curvada (sai da parede e cai), barrado recortado em "ondinhas", tubo branco na ponta e 2 braços
-      const AW = w.w + 0.7, AD = 0.95, ay = fy + w.h / 2 + t + 0.32, A1 = 1.15, ag = new THREE.PlaneGeometry(AW, 1, 1, 12), ap = ag.attributes.position;
-      for (let k = 0; k < ap.count; k++) { const a = (0.5 - ap.getY(k)) * A1; ap.setY(k, ay - AD * (1 - Math.cos(a)) * 0.9); ap.setZ(k, FZ + 0.02 + AD * Math.sin(a) / Math.sin(A1)); }
-      ag.computeVertexNormals(); const aw = K.put(ag, awM, fx, 0, 0, R); aw.castShadow = true;
-      const ez = FZ + 0.02 + AD, ey = ay - AD * (1 - Math.cos(A1)) * 0.9;
-      K.plane(AW, 0.24, valM, fx, ey - 0.12, ez, 0, R).castShadow = true;
-      const tube = K.cyl(0.03, 0.03, AW + 0.04, white, fx, ey, ez, R, 10); tube.rotation.z = Math.PI / 2;
-      [-1, 1].forEach(sd => { const y0 = ay - 0.42, dy = ey - y0, dz = ez - FZ, L = Math.hypot(dy, dz), arm = K.cyl(0.018, 0.018, L, bolt, fx + sd * (AW / 2 - 0.15), y0 + dy / 2, FZ + dz / 2, R, 8);
-        arm.rotation.x = Math.atan2(dz, dy); });
     });
     const dg = new THREE.Mesh(door.geometry, glassMaterial(dTex)); dg.position.z = -0.01; dg.renderOrder = 3; door.add(dg); glass.push(dg);
     buildStore(K, nightUp, glass);   // loja de conveniência ao lado (mesmo kit: apaga/acende com o dia e a noite)
@@ -313,18 +303,6 @@
     const mats = Object.values(K.mats).filter(m => m.isMeshStandardMaterial); mats.forEach(m => { m.emissiveIntensity *= GAR.REALISM ? 0.12 : GAR.EXT_GLOW_K; m.userData.envK = GAR.ENV; m.userData.e0 = m.emissiveIntensity; });
     return { R, door, bar, dTex, glass, nightUp, mats, sign: () => signLogo };
   }
-  // toldo: lona listrada vermelho/branco (largura de cada listra ~0,32 m), com trama leve e sombra nas dobras
-  const awningTex = () => { const t = mkTex(512, 256, (g, W, H) => { const n = 8, sw = W / n;
-      for (let k = 0; k < n; k++) { g.fillStyle = k % 2 ? '#f3f0e8' : GAR.ACCENT; g.fillRect(k * sw, 0, sw, H);
-        g.fillStyle = lin(g, k * sw, 0, k * sw + sw, 0, 'rgba(0,0,0,.10)', 'rgba(255,255,255,.06)'); g.fillRect(k * sw, 0, sw, H); }
-      g.fillStyle = lin(g, 0, 0, 0, H, 'rgba(0,0,0,.18)', 'rgba(0,0,0,0)'); g.fillRect(0, 0, W, H * 0.25);
-      for (let i = 0; i < 2500; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '0,0,0' : '255,255,255'},${(Math.random() * 0.05).toFixed(3)})`; g.fillRect(Math.random() * W, Math.random() * H, 2, 1); } });
-    t.wrapS = THREE.RepeatWrapping; t.repeat.set(1.9, 1); return t; };
-  const valanceTex = () => { const t = mkTex(512, 96, (g, W, H) => { const n = 8, sw = W / n;
-      for (let k = 0; k < n; k++) { g.fillStyle = k % 2 ? '#f3f0e8' : GAR.ACCENT; g.fillRect(k * sw, 0, sw, H); }
-      g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(0, 0, W, 5);
-      g.globalCompositeOperation = 'destination-out'; for (let k = 0; k <= n; k++) { g.beginPath(); g.arc(k * sw, H + sw * 0.18, sw * 0.5, 0, 6.2832); g.fill(); } g.globalCompositeOperation = 'source-over'; });
-    t.wrapS = THREE.RepeatWrapping; t.repeat.set(1.9, 1); return t; };
   // feixe de luz da arandela na parede (cone suave, mais forte perto da lâmpada)
   const washTex = () => mkTex(128, 256, (g, W, H) => { g.clearRect(0, 0, W, H);
     for (let y = 0; y < H; y++) { const t = 1 - y / H, half = W * (0.08 + 0.42 * (1 - t)), a = Math.pow(t, 1.6) * 0.9;
