@@ -41,7 +41,7 @@
     DOOR_TIME: 1.15,         // segundos para o portão abrir/fechar
     FADE_TIME: 0.38,         // segundos de cada fade (out e in)
     DOF: 1,                  // profundidade de campo (0 desliga; 1 = padrão; 2 = o dobro do desfoque)
-    DOF_SS: 1.5,             // a vitrine é desenhada com este fator de resolução e reduzida (bordas mais lisas)
+    DOF_SS: 2,                    // a vitrine é desenhada com este fator de resolução e reduzida (bordas mais lisas)
     GLOW: 0.38,              // luz própria do cenário (ele nunca fica preto)
     SHADOW_MAP: 4096,        // sombra do sol no pátio (cai para o máximo da placa de vídeo)
     EXT_GLOW_K: 0.42,        // fora: quanto sobra da luz própria do cenário (menos = luz e sombra de verdade, mais volume)
@@ -820,8 +820,25 @@
     varying vec2 vUv;
     float cocAt(vec2 uv) { float d = texture2D(tD, uv).x, z = uNear * uFar / (uFar - d * (uFar - uNear)), a = z - uFocus;
       return clamp((abs(a) - uRange) / uFall, 0.0, 1.0) * (a > 0.0 ? 1.0 : 0.55); }
+    // antisserrilhado de borda (FXAA): acha a direção da borda pelo contraste dos 4 cantos do pixel e mistura ao longo dela.
+    // Junto com a textura maior que a tela (supersample) e o filtro de 4 amostras, some com a "escadinha" dos caixilhos,
+    // quinas do prédio e postes finos.
+    float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+    vec3 tap4(vec2 uv) { return (texture2D(tC, uv + uPx * vec2(0.375, 0.125)).rgb + texture2D(tC, uv + uPx * vec2(-0.125, 0.375)).rgb + texture2D(tC, uv + uPx * vec2(-0.375, -0.125)).rgb + texture2D(tC, uv + uPx * vec2(0.125, -0.375)).rgb) * 0.25; }
+    vec3 fxaa(vec2 uv) {
+      vec3 M = tap4(uv);
+      float lNW = lum(texture2D(tC, uv + uPx * vec2(-1.0, -1.0)).rgb), lNE = lum(texture2D(tC, uv + uPx * vec2(1.0, -1.0)).rgb);
+      float lSW = lum(texture2D(tC, uv + uPx * vec2(-1.0, 1.0)).rgb), lSE = lum(texture2D(tC, uv + uPx * vec2(1.0, 1.0)).rgb), lM = lum(M);
+      float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE))), lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));
+      if (lMax - lMin < max(0.03, lMax * 0.09)) return M;                                   // sem borda: só o filtro normal
+      vec2 dir = vec2(-((lNW + lNE) - (lSW + lSE)), (lNW + lSW) - (lNE + lSE));
+      float red = max((lNW + lNE + lSW + lSE) * 0.03125, 1.0 / 128.0), rcp = 1.0 / (min(abs(dir.x), abs(dir.y)) + red);
+      dir = clamp(dir * rcp, vec2(-6.0), vec2(6.0)) * uPx;
+      vec3 A = 0.5 * (texture2D(tC, uv + dir * (1.0 / 3.0 - 0.5)).rgb + texture2D(tC, uv + dir * (2.0 / 3.0 - 0.5)).rgb);
+      vec3 B = A * 0.5 + 0.25 * (texture2D(tC, uv - dir * 0.5).rgb + texture2D(tC, uv + dir * 0.5).rgb);
+      float lB = lum(B); return (lB < lMin || lB > lMax) ? A : B; }
     void main() {
-      vec3 base = (texture2D(tC, vUv + uPx * vec2(0.375, 0.125)).rgb + texture2D(tC, vUv + uPx * vec2(-0.125, 0.375)).rgb + texture2D(tC, vUv + uPx * vec2(-0.375, -0.125)).rgb + texture2D(tC, vUv + uPx * vec2(0.125, -0.375)).rgb) * 0.25;
+      vec3 base = fxaa(vUv);
       float r = cocAt(vUv) * uMax; vec3 acc = base; float w = 1.0;
       if (r > 0.6) {
         for (int i = 0; i < 28; i++) { float fi = float(i) + 0.5, rr = sqrt(fi / 28.0) * r, an = fi * 2.39996323;
@@ -1200,7 +1217,7 @@
       const r = renderer || this.renderer, F = this.fx;
       if (!F) { r.render(this.scene, this.cam); return; }
       try {
-        r.getDrawingBufferSize(F.size); const ss = Math.min(GAR.DOF_SS, 2600 / Math.max(1, F.size.x)), w = Math.max(2, Math.round(F.size.x * Math.max(1, ss))), h = Math.max(2, Math.round(F.size.y * Math.max(1, ss)));
+        r.getDrawingBufferSize(F.size); const ss = Math.min(GAR.DOF_SS, 3400 / Math.max(1, F.size.x)), w = Math.max(2, Math.round(F.size.x * Math.max(1, ss))), h = Math.max(2, Math.round(F.size.y * Math.max(1, ss)));
         if (w !== F.w || h !== F.h) { F.w = w; F.h = h; F.rt.setSize(w, h);
           const hw = Math.max(2, F.size.x >> 1), hh = Math.max(2, F.size.y >> 1); F.T.ao.setSize(hw, hh); F.u.uAOPx.value.set(1 / hw, 1 / hh);
           F.T.b0.setSize(Math.max(2, w >> 2), Math.max(2, h >> 2)); F.T.b1.setSize(Math.max(2, w >> 2), Math.max(2, h >> 2)); F.T.b2.setSize(Math.max(2, w >> 3), Math.max(2, h >> 3)); F.T.b3.setSize(Math.max(2, w >> 3), Math.max(2, h >> 3)); }
