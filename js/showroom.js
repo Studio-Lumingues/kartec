@@ -45,6 +45,8 @@
     DOF_SS: 2,                    // a vitrine é desenhada com este fator de resolução e reduzida (bordas mais lisas)
     GLOW: 0.38,              // luz própria do cenário (ele nunca fica preto)
     SHADOW_MAP: 4096,        // sombra do sol no pátio (cai para o máximo da placa de vídeo)
+    REALISM: 1,              // tela principal com visual mais realista: luz de sol forte, quase sem luz própria, curva de filme (ACES), materiais PBR (0 = visual antigo)
+    SUN: 1.55, SKY: 0.6,     // (com REALISM) força do sol e do céu no pátio
     EXT_GLOW_K: 0.42,        // fora: quanto sobra da luz própria do cenário (menos = luz e sombra de verdade, mais volume)
     ENV: 0.4,                // força do reflexo do céu nos materiais do cenário (0 desliga); kart/piloto: 0,5; asfalto: 0,22
     AO: 0.85, AO_RADIUS: 1.3, AO_STRENGTH: 1.35,   // oclusão de ambiente (força final, raio em unidades, intensidade)
@@ -271,7 +273,7 @@
     // morros ao fundo (verde dos morros da corrida)
     const hill = (x, z, r, hex) => { const m = K.put(new THREE.SphereGeometry(1, 28, 14), K.soft(hex), x, -r * 0.06, z, R, false); m.scale.set(r, r * 0.3, r); m.receiveShadow = false; };
     hill(-48, -62, 34, '#4a7b33'); hill(8, -84, 44, '#557f3a'); hill(54, -58, 30, '#4a7b33'); hill(-88, -50, 40, '#5f8a45'); hill(92, -80, 46, '#5f8a45'); hill(-20, -110, 50, '#6a9150');
-    const mats = Object.values(K.mats).filter(m => m.isMeshStandardMaterial); mats.forEach(m => { m.emissiveIntensity *= GAR.EXT_GLOW_K; m.userData.envK = GAR.ENV; m.userData.e0 = m.emissiveIntensity; });
+    const mats = Object.values(K.mats).filter(m => m.isMeshStandardMaterial); mats.forEach(m => { m.emissiveIntensity *= GAR.REALISM ? 0.12 : GAR.EXT_GLOW_K; m.userData.envK = GAR.ENV; m.userData.e0 = m.emissiveIntensity; });
     return { R, door, bar, dTex, glass, nightUp, mats, sign: () => signLogo };
   }
   // feixe de luz da arandela na parede (cone suave, mais forte perto da lâmpada)
@@ -708,6 +710,7 @@
         const h = Math.sin(x * 0.009 - z * 0.012 + 0.7) * 0.5 + 0.5; c.push(m * (1 + 0.07 * h), m, m * (1 - 0.07 * 1.4 * h)); }
       g.setAttribute('color', new THREE.Float32BufferAttribute(c, 3));
       const mat = window.GfxFX && GfxFX.grassTone ? GfxFX.grassTone(new THREE.MeshLambertMaterial({ map: TX.get('grass', GS / 7, GS / 7), vertexColors: true })) : new THREE.MeshLambertMaterial({ color: 0x5d8f3a });
+      if (GAR.REALISM) mat.color.setRGB(0.74, 0.8, 0.66);   // visual realista: grama menos neon, verde mais natural
       const m = new THREE.Mesh(g, mat); m.rotation.x = -Math.PI / 2; m.position.set(0, -0.02, -40); m.receiveShadow = true; Wg.add(m); }
     // pátio de asfalto (realista, só do lobby: lobbyAsphalt) com zebras nas bordas
     const AX0 = -50, AX1 = 32, AZ0 = FZ * U, AZ1 = 30, AW = AX1 - AX0, AD = AZ1 - AZ0;   // vai até a frente da loja de conveniência
@@ -722,7 +725,7 @@
     // da garagem deram lugar à loja de conveniência)
     if (window.Pines) {
       const T = [[-12, -17, 1.4], [-28, -3, 1.3], [-27, -14, 2], [12, -9, 1.4], [15.5, -13, 1.9], [19, -6, 1.2], [24, -11, 1.6], [11.5, -18, 1.3], [-33, -8, 1.7], [31, -17, 2.1]];
-      const mat = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), { amp: 0.02, h0: 3.0, freq: 0.9 }), d = new THREE.Object3D();
+      const mat = Pines.material(new THREE.MeshLambertMaterial({ color: GAR.REALISM ? 0x93a888 : 0xffffff, vertexColors: true }), { amp: 0.02, h0: 3.0, freq: 0.9 }), d = new THREE.Object3D();   // realista: verde-pinheiro mais fechado
       [0, 1, 2, 3].forEach(v => { const L = T.filter(t => Pines.variantAt(t[0], t[1]) === v); if (!L.length) return;
         const im = new THREE.InstancedMesh(Pines.attach(Pines.single('hi', v), L.map(() => v)), mat, L.length);
         L.forEach((t, n) => { const [x, z] = V(t[0], t[1]); d.position.set(x, 0, z); d.rotation.set(0, t[0] * 1.7, 0); d.scale.setScalar(0.55 + t[2] * 0.3); d.updateMatrix(); im.setMatrixAt(n, d.matrix); });
@@ -829,8 +832,9 @@
   const FINAL_FRAG = DEC + `
     uniform sampler2D tC; uniform sampler2D tD; uniform sampler2D tAO; uniform sampler2D tB0; uniform sampler2D tB1;
     uniform vec2 uPx; uniform vec2 uAOPx; uniform float uNear; uniform float uFar; uniform float uFocus; uniform float uRange; uniform float uFall; uniform float uMax; uniform float uVig;
-    uniform float uAO; uniform float uBloom; uniform float uExp; uniform float uSat; uniform float uCon; uniform vec3 uTint;
+    uniform float uAO; uniform float uBloom; uniform float uExp; uniform float uSat; uniform float uCon; uniform vec3 uTint; uniform float uACES;
     varying vec2 vUv;
+    vec3 aces(vec3 x) { return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
     float cocAt(vec2 uv) { float d = texture2D(tD, uv).x, z = uNear * uFar / (uFar - d * (uFar - uNear)), a = z - uFocus;
       return clamp((abs(a) - uRange) / uFall, 0.0, 1.0) * (a > 0.0 ? 1.0 : 0.55); }
     // antisserrilhado de borda (FXAA): acha a direção da borda pelo contraste dos 4 cantos do pixel e mistura ao longo dela.
@@ -864,8 +868,9 @@
         a += (texture2D(tAO, vUv + uAOPx * vec2(1.2, 0.6)).r + texture2D(tAO, vUv + uAOPx * vec2(-0.6, 1.2)).r + texture2D(tAO, vUv + uAOPx * vec2(-1.2, -0.6)).r + texture2D(tAO, vUv + uAOPx * vec2(0.6, -1.2)).r) * 0.16;
         L *= mix(1.0, a, uAO); }
       if (uBloom > 0.0) L += (texture2D(tB0, vUv).rgb * 0.5 + texture2D(tB1, vUv).rgb * 0.8) * uBloom;
-      vec3 c = enc(L * uExp * uTint);
-      c = mix(c, 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2)), step(vec3(0.8), c));          // ombro suave: o que passa do branco não estoura
+      vec3 c;
+      if (uACES > 0.5) c = enc(aces(L * uExp * uTint * 1.08));                          // curva de filme: claros rolam suave, sombras mais fundas (visual realista)
+      else { c = enc(L * uExp * uTint); c = mix(c, 0.8 + 0.2 * (1.0 - exp(-(c - 0.8) / 0.2)), step(vec3(0.8), c)); }   // ombro suave: o que passa do branco não estoura
       float l = dot(c, vec3(0.299, 0.587, 0.114)); c = mix(vec3(l), c, uSat);
       c = mix(c, c * c * (3.0 - 2.0 * c), uCon);
       vec2 q = vUv - 0.5; c *= 1.0 - uVig * smoothstep(0.25, 0.95, length(q) * 1.35);
@@ -949,6 +954,14 @@
       const ext = buildExterior(gTex); this.ext = ext.R; this.extK = ext; ext.R.scale.setScalar(U); sc.add(ext.R);
       this.world = new THREE.Group(); this.world.name = 'Showroom-mundo'; sc.add(this.world);
       try { this.worldK = buildWorld(this.world); } catch (e) { console.warn('[Vitrine] assets da corrida no lobby', e); this.worldK = { lights: [], halos: [] }; }
+      if (GAR.REALISM) { const done = new Map(), conv = m => { if (!m || !(m.isMeshLambertMaterial || m.isMeshPhongMaterial) || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) return m;
+          if (done.has(m)) return done.get(m);
+          const n = new THREE.MeshStandardMaterial({ color: m.color, map: m.map, vertexColors: m.vertexColors, transparent: m.transparent, opacity: m.opacity, alphaTest: m.alphaTest, side: m.side,
+            roughness: m.isMeshPhongMaterial ? 0.45 : 0.82, metalness: 0, emissive: m.emissive, emissiveMap: m.emissiveMap, emissiveIntensity: (m.emissiveIntensity || 0) * 0.5, depthWrite: m.depthWrite });
+          // folhagem (cor por vértice ou cor esverdeada): verde menos saturado e um pouco mais escuro, como planta de verdade
+          const hsl = {}; n.color.getHSL(hsl); if (n.vertexColors) n.color.multiply(new THREE.Color(0.72, 0.8, 0.68)); else if (hsl.h > 0.17 && hsl.h < 0.45 && hsl.s > 0.25) n.color.setHSL(hsl.h, hsl.s * 0.7, hsl.l * 0.82);
+          n.userData = Object.assign({}, m.userData, { envK: 0.35 }); n.__ink = true; done.set(m, n); return n; };
+        this.world.traverse(o => { if (!o.material || o.isSprite) return; o.material = Array.isArray(o.material) ? o.material.map(conv) : conv(o.material); }); }
       this.int = buildInterior(gTex); this.int.scale.setScalar(U); this.int.position.set(0, 0, ZI); sc.add(this.int);
       this.door = { mesh: ext.door, bar: ext.bar, tex: ext.dTex, k: 0, lin: 0, target: 0 }; this.setDoor(0);
       // reflexo dos vidros: cubemap da própria cena
@@ -1097,11 +1110,11 @@
       const mv = sm((-e + 0.12) / 0.2); S.moon.material.opacity = mv; S.moonGlow.material.opacity = 0.35 * mv;
       mix(D.cloud, e, S.cloudM.color);
       if (this.mode !== 'int') {   // luz do pátio: sol (ou lua) e céu
-        const sunI = 0.95 * sm((e + 0.02) / 0.32), moonI = 0.32 * sm((-e - 0.02) / 0.25), K = this.key, H = this.hemi;
+        const sunI = (GAR.REALISM ? GAR.SUN : 0.95) * sm((e + 0.02) / 0.32), moonI = 0.32 * sm((-e - 0.02) / 0.25), K = this.key, H = this.hemi;
         if (sunI >= moonI) { K.intensity = sunI; mix(D.sun, e, K.color); } else { K.intensity = moonI; K.color.set(0x9db4ff); }
         const Ld = this.SUNDIR.clone(); if (sunI < moonI) Ld.negate(); if (Ld.y < 0.15) { Ld.y = 0.15; Ld.normalize(); }
         K.position.copy(K.target.position).addScaledVector(Ld, 60);
-        H.intensity = (0.32 + 0.48 * sm((e + 0.15) / 0.45)) * (this.pmrem ? 0.82 : 1); mix(D.hS, e, H.color); mix(D.hG, e, H.groundColor);
+        H.intensity = (0.32 + 0.48 * sm((e + 0.15) / 0.45)) * (this.pmrem ? 0.82 : 1) * (GAR.REALISM ? GAR.SKY : 1); mix(D.hS, e, H.color); mix(D.hG, e, H.groundColor);
         this.rim.intensity = 0.5 * (1 - nf * 0.7);
       }
       { const U2 = S.cloudU; S.cloudOff.x += dt * 18; S.cloudOff.y += dt * 7; S.cloudT += dt; U2.uT.value = S.cloudT;
@@ -1217,7 +1230,7 @@
         const V2 = () => ({ value: new THREE.Vector2() }), M = (frag, u, ext) => new THREE.ShaderMaterial({ uniforms: u, depthTest: false, depthWrite: false, vertexShader: POST_VS, fragmentShader: frag, extensions: ext || {} });
         const u = { tC: { value: rt.texture }, tD: { value: rt.depthTexture }, tAO: { value: T.ao.texture }, tB0: { value: T.b0.texture }, tB1: { value: T.b3.texture },
           uPx: V2(), uAOPx: V2(), uNear: { value: 1 }, uFar: { value: 400 }, uFocus: { value: 15 }, uRange: { value: 3 }, uFall: { value: 14 }, uMax: { value: 8 }, uVig: { value: 0 },
-          uAO: { value: 0 }, uBloom: { value: 0 }, uExp: { value: 1 }, uSat: { value: 1 }, uCon: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) } };
+          uAO: { value: 0 }, uBloom: { value: 0 }, uExp: { value: 1 }, uSat: { value: 1 }, uCon: { value: 0 }, uTint: { value: new THREE.Color(1, 1, 1) }, uACES: { value: 0 } };
         const P = { final: M(FINAL_FRAG, u),
           ao: M(AO_FRAG, { tD: u.tD, uProj: V2(), uNear: u.uNear, uFar: u.uFar, uRad: { value: GAR.AO_RADIUS }, uInt: { value: GAR.AO_STRENGTH } }, { derivatives: true }),
           bright: M(BRIGHT_FRAG, { tC: u.tC, uPx: V2(), uTh: { value: hdr ? 1.0 : 0.9 } }), blur: M(BLUR_FRAG, { tC: { value: null }, uDir: V2() }) };
@@ -1239,7 +1252,7 @@
         u.uFocus.value = Math.max(2, -((T.x - e[12]) * e[8] + (T.y + 1 - e[13]) * e[9] + (T.z - e[14]) * e[10]));   // foco no veículo
         u.uNear.value = c.near; u.uFar.value = c.far; u.uPx.value.set(1 / F.size.x, 1 / F.size.y);
         u.uRange.value = int ? 3.4 : 7; u.uFall.value = int ? 11 : 45; u.uMax.value = (int ? 10 : 5) * GAR.DOF * F.size.y / 1080; u.uVig.value = int ? 0.42 : 0.2;
-        u.uExp.value = GAR.EXPOSURE; u.uSat.value = GAR.SATURATION; u.uCon.value = GAR.CONTRAST;
+        u.uExp.value = GAR.EXPOSURE; u.uSat.value = GAR.SATURATION * (GAR.REALISM && !int ? 0.93 : 1); u.uCon.value = GAR.CONTRAST * (GAR.REALISM && !int ? 0.6 : 1); u.uACES.value = GAR.REALISM && !int ? 1 : 0;
         const nf = this.nightF || 0; u.uTint.value.setRGB(1 + 0.03 * (1 - nf), 1, 1 - 0.03 * (1 - nf) + 0.05 * nf);   // dia levemente quente, noite levemente fria
         r.setRenderTarget(F.rt); r.render(this.scene, c);
         const ao = full && GAR.AO > 0, bl = full && GAR.BLOOM > 0; u.uAO.value = ao ? GAR.AO : 0; u.uBloom.value = bl ? GAR.BLOOM * (0.55 + 0.45 * nf) : 0;
