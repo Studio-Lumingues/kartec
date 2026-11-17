@@ -55,6 +55,41 @@
   const toP = a => V3(-a[2], a[1], a[0]);
   const sstep = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
+  // ---------- SUBDIVISÃO DE LOOP (uma vez por personagem) ----------
+  // A malha da IA tem poucos triângulos: luvas, calça e dobras do macacão ficavam "quadradas". Cada triângulo vira 4 e
+  // os pontos são alisados pela regra de Loop. A posição é calculada na malha SOLDADA (as cópias de um vértice nas costuras
+  // de UV andam juntas: sem rachar), e UV/normal são interpolados por vértice indexado (cada lado da costura com a sua UV).
+  // Borda aberta ou aresta com mais de 2 faces: vira vinco (regra de borda), sem deformar.
+  function loopSubdivide(b) {
+    const P = b.P, N = b.N, U = b.U, I = b.I, nv = P.length / 3, nt = I.length / 3;
+    const wm = new Map(), wl = new Int32Array(nv); let nw = 0;
+    for (let i = 0; i < nv; i++) { const k = Math.round(P[i * 3] * 1e6) + ',' + Math.round(P[i * 3 + 1] * 1e6) + ',' + Math.round(P[i * 3 + 2] * 1e6); let w = wm.get(k); if (w === undefined) { w = nw++; wm.set(k, w); } wl[i] = w; }
+    const WP = new Float64Array(nw * 3); for (let i = 0; i < nv; i++) { const w = wl[i] * 3; WP[w] = P[i * 3]; WP[w + 1] = P[i * 3 + 1]; WP[w + 2] = P[i * 3 + 2]; }
+    const ek = (a, c) => a < c ? a * nw + c : c * nw + a, E = new Map(), nb = Array.from({ length: nw }, () => new Set());
+    for (let t = 0; t < nt; t++) { const w = [wl[I[t * 3]], wl[I[t * 3 + 1]], wl[I[t * 3 + 2]]];
+      for (let j = 0; j < 3; j++) { const a = w[j], c = w[(j + 1) % 3], o = w[(j + 2) % 3]; if (a === c) continue; nb[a].add(c); nb[c].add(a);
+        const k = ek(a, c); let e = E.get(k); if (!e) { e = { f: 0, o: [] }; E.set(k, e); } e.f++; e.o.push(o); } }
+    // vértices antigos (regra de Loop; borda/vinco: 3/4 + 1/8 dos dois vizinhos de borda)
+    const NP = new Float64Array(nw * 3);
+    for (let w = 0; w < nw; w++) { const ns = [...nb[w]], bd = ns.filter(c => { const e = E.get(ek(w, c)); return e && e.f !== 2; });
+      if (bd.length) { if (bd.length === 2) for (let d = 0; d < 3; d++) NP[w * 3 + d] = 0.75 * WP[w * 3 + d] + 0.125 * (WP[bd[0] * 3 + d] + WP[bd[1] * 3 + d]); else for (let d = 0; d < 3; d++) NP[w * 3 + d] = WP[w * 3 + d]; continue; }
+      const n = ns.length; if (n < 3) { for (let d = 0; d < 3; d++) NP[w * 3 + d] = WP[w * 3 + d]; continue; }
+      const be = n === 3 ? 3 / 16 : 3 / (8 * n); for (let d = 0; d < 3; d++) { let sm = 0; for (const c of ns) sm += WP[c * 3 + d]; NP[w * 3 + d] = (1 - n * be) * WP[w * 3 + d] + be * sm; } }
+    // um vértice novo por aresta INDEXADA (os dois lados de uma costura ganham um cada, com a mesma posição)
+    const mid = new Map(), oP = [], oN = [], oU = [];
+    for (let i = 0; i < nv; i++) { const w = wl[i] * 3; oP.push(NP[w], NP[w + 1], NP[w + 2]); oN.push(N[i * 3], N[i * 3 + 1], N[i * 3 + 2]); oU.push(U[i * 2], U[i * 2 + 1]); }
+    const edgeV = (i, j) => { const k = i < j ? i * nv + j : j * nv + i; let v = mid.get(k); if (v !== undefined) return v; v = oP.length / 3; mid.set(k, v);
+      const a = wl[i], c = wl[j], e = E.get(ek(a, c));
+      for (let d = 0; d < 3; d++) oP.push(e && e.f === 2 ? 0.375 * (WP[a * 3 + d] + WP[c * 3 + d]) + 0.125 * (WP[e.o[0] * 3 + d] + WP[e.o[1] * 3 + d]) : 0.5 * (WP[a * 3 + d] + WP[c * 3 + d]));
+      let nx = N[i * 3] + N[j * 3], ny = N[i * 3 + 1] + N[j * 3 + 1], nz = N[i * 3 + 2] + N[j * 3 + 2], l = Math.hypot(nx, ny, nz) || 1; oN.push(nx / l, ny / l, nz / l);
+      oU.push((U[i * 2] + U[j * 2]) / 2, (U[i * 2 + 1] + U[j * 2 + 1]) / 2); return v; };
+    const oI = new Uint32Array(nt * 12);
+    for (let t = 0; t < nt; t++) { const a = I[t * 3], c = I[t * 3 + 1], d = I[t * 3 + 2], ab = edgeV(a, c), bc = edgeV(c, d), ca = edgeV(d, a), o = t * 12;
+      oI.set([a, ab, ca, ab, c, bc, ca, bc, d, ab, bc, ca], o); }
+    return { P: new Float32Array(oP), N: new Float32Array(oN), U: new Float32Array(oU), I: oI };
+  }
+  const subdivOn = () => { try { const g = window.Settings && Settings.s && Settings.s.gfx; return !(g && (g.detail === 'low' || g.preset === 'massinha' || g.preset === 'low')); } catch (e) { return true; } };
+
   // pesos de um vértice (coordenadas do .glb) -> lista [osso, peso]
   function vertexWeights(x, y, z, lm) {
     const sd = z < 0 ? '_L' : '_R', az = Math.abs(z), out = [];
@@ -98,10 +133,12 @@
     'if (vKeep < 0.5) { vec3 mk = texture2D(uMask, vUv).rgb; float core = smoothstep(0.75, 1.0, vVM.z);',
     '  float texCol = smoothstep(0.32, 0.68, mk.r);',
     '  mk.r = mix(vVM.x, mk.r, core); mk.g = max(mk.g, mk.b * vSkin);',   // perto das bordas do vermelho: cor por vértice (pele: textura)
+    '  mk.g = mix(mk.g, mix(vVM.y, mk.g, core), vSkin);',   // borda do rosto/mãos também pela malha (lisa), não pelos pixels da IA
     // miolo do macacão/capacete (toda a malha em volta é vermelha): estampas, costuras e respingos brancos da textura viram
     // macacão. Miolo do rosto/mãos: pontinhos vermelhos viram pele (olhos e cílios, que são escuros, continuam)
     '  float coreR = core * vVM.x, coreK = core * vVM.y * vSkin, anyC = step(0.5, mk.r + mk.g + mk.b);',
-    '  mk.r = max(mk.r, coreR) * (1.0 - coreK); mk.g = max(mk.g, coreK * anyC);',
+    '  float coreO = core * (1.0 - vVM.x) * (1.0 - vVM.y);',   // miolo de região "outra" (viseira, borda escura do capacete, cinto)
+    '  mk.r = max(mk.r, coreR) * (1.0 - coreK) * (1.0 - coreO); mk.g = max(mk.g, coreK * anyC) * (1.0 - coreO);',
     // luvas e mangas pelo ESQUELETO: o que segue a mão é luva branca, o que segue o braço é manga (cor do macacão).
     // O punho vira uma linha lisa (faixa de peso do osso) em vez dos recortes brancos que a textura subia pela manga
     '  float glove = smoothstep(0.35, 0.65, vPart.x), sleeve = smoothstep(0.35, 0.65, vPart.y) * (1.0 - glove), pants = smoothstep(0.35, 0.65, vPart.z);',
@@ -111,7 +148,7 @@
     '  mk.r = max(mk.r, mk.b * torso);',
     '  float wK0 = smoothstep(0.32, 0.68, mk.g), wR = smoothstep(0.32, 0.68, mk.r);',
     '  float wK = wK0 * vSkin; wR = max(wR * (1.0 - wK), wK0 * (1.0 - vSkin));',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, vOther, texCol * (1.0 - max(wR, wK)) * (1.0 - core));',   // dente de cor fora do lugar
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vOther, texCol * (1.0 - max(wR, wK)) * max(1.0 - core, coreO));',   // dente/respingo vermelho fora do lugar
     '  float v = max(texelColor.r, max(texelColor.g, texelColor.b));',
     '  float head = smoothstep(uHeadY - 0.005, uHeadY + 0.025, vBind.y);',
     // quanto do sombreado PINTADO na textura fica (o resto do volume vem da luz do jogo): menos = cor limpa, sem o
@@ -308,7 +345,7 @@
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
       this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
       const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY }, uMask: { value: tpl.mask } };
-      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb8', hook: sh => {
+      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb12', hook: sh => {
         Object.assign(sh.uniforms, u);
         sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nattribute vec3 aPart;\nvarying vec3 vPart;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther; vPart = aPart;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
@@ -466,9 +503,10 @@
     scene.traverse(o => { if (!o.isMesh) return; const pn = o.parent && o.parent.name; if (pn === C.node) body = o; else if (C.pigs && C.pigs.includes(pn)) pigMesh[pn] = o; });
     if (!body) throw new Error('malha ' + C.node + ' não encontrada em ' + id + '.glb');
     const map = body.material.map;
-    const parts = [{ b: GLBAssets.bake(body, new THREE.Matrix4().multiplyMatrices(R_GLB, body.matrixWorld), map), pig: null }];
+    const SUB = subdivOn() ? loopSubdivide : (b => b);   // gráfico baixo/massinha: malha original (mais leve)
+    const parts = [{ b: SUB(GLBAssets.bake(body, new THREE.Matrix4().multiplyMatrices(R_GLB, body.matrixWorld), map)), pig: null }];
     Object.keys(pigMesh).forEach(pn => { const o = pigMesh[pn], pv = V3().setFromMatrixPosition(o.parent.matrixWorld).applyMatrix4(R_GLB);
-      parts.push({ b: GLBAssets.bake(o, new THREE.Matrix4().multiplyMatrices(R_GLB, o.matrixWorld), map), pig: pv.x > 0 ? 'pig_L' : 'pig_R', pivot: pv }); });
+      parts.push({ b: SUB(GLBAssets.bake(o, new THREE.Matrix4().multiplyMatrices(R_GLB, o.matrixWorld), map)), pig: pv.x > 0 ? 'pig_L' : 'pig_R', pivot: pv }); });
     GLBAssets.plainMap(map); map.generateMipmaps = true;
     // eixo de cada maria-chiquinha: do ponto de amarração até a ponta mais distante (base e ponta são 2 ossos)
     parts.forEach(p => { if (!p.pig) return; let far = 0; const Q = p.b.P;
@@ -494,6 +532,19 @@
           const bn = BONES[w[0]][0]; if (/^(hand|fingers)_/.test(bn)) PT[j * 3] += w[1] / tot; else if (/^(upperarm|forearm)_/.test(bn)) PT[j * 3 + 1] += w[1] / tot; else if (/^(thigh|shin)_/.test(bn)) PT[j * 3 + 2] += w[1] / tot; }); }
       ov += n; oi += p.b.I.length;
     });
+    // NORMAIS SUAVES: as do arquivo são quase por face (os triângulos apareciam como placas nas luvas, nas dobras e no
+    // capacete) e quebram nas costuras de UV (riscos claros nas costas do capacete). Aqui cada posição recebe a média das
+    // faces em volta, ponderada pela área, e as cópias da mesma posição (costuras) ficam com a MESMA normal.
+    { const key = i => Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5);
+      const wm = new Map(), wl = new Int32Array(nv); let nw = 0; for (let i = 0; i < nv; i++) { const k = key(i); let w = wm.get(k); if (w === undefined) { w = nw++; wm.set(k, w); } wl[i] = w; }
+      const acc = new Float32Array(nw * 3);
+      for (let t = 0; t < ni; t += 3) { const a = I[t], b = I[t + 1], c = I[t + 2];
+        const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+        const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;   // tamanho = 2x área: já pondera
+        for (const i of [a, b, c]) { const w = wl[i] * 3; acc[w] += nx; acc[w + 1] += ny; acc[w + 2] += nz; } }
+      for (let i = 0; i < nv; i++) { const w = wl[i] * 3, l = Math.hypot(acc[w], acc[w + 1], acc[w + 2]);
+        if (l > 1e-12) { const fx = acc[w] / l, fy = acc[w + 1] / l, fz = acc[w + 2] / l;
+          if (fx * N[i * 3] + fy * N[i * 3 + 1] + fz * N[i * 3 + 2] > -0.2) { N[i * 3] = fx; N[i * 3 + 1] = fy; N[i * 3 + 2] = fz; } } } }   // (se apontar ao contrário do arquivo, mantém)
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2));
     geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geo.setAttribute('aKeep', new THREE.BufferAttribute(KP, 1)); geo.setAttribute('aPart', new THREE.BufferAttribute(PT, 3));
