@@ -327,14 +327,21 @@
       let skA = 0, otA = 0; const seen = new Set(list); list.forEach(t => nbrs(t).forEach(u => { if (seen.has(u)) return; seen.add(u); if (kind[u] === 2) skA += area[u]; else if (kind[u] !== 1) otA += area[u]; }));
       if (skA < (skA + otA) * 0.45) return;   // olho: ~0,56 (a parede clara do relevo não conta como pele); viseira: ~0,03
       const nl = Math.hypot(n[0], n[1], n[2]) || 1; n[0] /= nl; n[1] /= nl; n[2] /= nl;
+      if (A < faceA * 0.0004) return;                                                   // pontinho solto: não é olho nem cílio
       list.forEach(t => face[t] = 1);
-      // cílio (mancha bem menor que um olho, <1% do rosto; olho ~6%): peça fina, a marca cobre 3 anéis em volta, inteiros
-      if (A < faceA * 0.01) { let rg = list.slice(); for (let k = 0; k < 3; k++) { const nx = []; rg.forEach(t => nbrs(t).forEach(u => { if (!face[u]) { face[u] = 1; nx.push(u); } })); rg = nx; } }
+      // o crescimento abaixo é limitado por DISTÂNCIA (não por anéis): na malha original (gráfico Baixo/Massinha) os
+      // triângulos são grandes e "3 anéis" já cobria meio rosto
+      const cc = [0, 0, 0]; list.forEach(t => { for (let d = 0; d < 3; d++) cc[d] += cen[t * 3 + d] / list.length; });
+      let Rr = 0; list.forEach(t => { Rr = Math.max(Rr, Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2])); });
+      const dTo = u => { let m = 1e9; const x = cen[u * 3], y = cen[u * 3 + 1], z = cen[u * 3 + 2];   // distância até a mancha
+        for (let i = 0; i < list.length; i += Math.max(1, list.length >> 7)) { const t = list[i]; m = Math.min(m, Math.hypot(x - cen[t * 3], y - cen[t * 3 + 1], z - cen[t * 3 + 2])); } return m; };
+      // cílio (mancha bem menor que um olho, <1% do rosto; olho ~6%): peça fina; marca o que está a até 6 mm dela
+      if (A < faceA * 0.01) { let rg = list.slice(); for (let k = 0; k < 8 && rg.length; k++) { const nx = []; rg.forEach(t => nbrs(t).forEach(u => { if (!face[u] && dTo(u) < 0.006) { face[u] = 1; nx.push(u); } })); rg = nx; } }
       // cresce pela parede do relevo (faces íngremes em relação à frente do olho), até 6 anéis
       let ring = list.slice();
       for (let k = 0; k < 6 && ring.length; k++) { const nx = [];
         ring.forEach(t => nbrs(t).forEach(u => { if (face[u]) return; const dt = nrm[u * 3] * n[0] + nrm[u * 3 + 1] * n[1] + nrm[u * 3 + 2] * n[2];
-          if (dt < 0.82) { face[u] = 1; nx.push(u); } }));
+          if (dt < 0.82 && Math.hypot(cen[u * 3] - cc[0], cen[u * 3 + 1] - cc[1], cen[u * 3 + 2] - cc[2]) < Rr * 1.3) { face[u] = 1; nx.push(u); } }));
         ring = nx; }
     });
     // CÍLIOS COLADOS NO OLHO: esfera ajustada à pele do rosto (mínimos quadrados); perto de cada olho, o que salta para
