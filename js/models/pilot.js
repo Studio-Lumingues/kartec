@@ -122,7 +122,7 @@
   // (corpo) ou do capacete (acima do pescoço, medido na pose de origem) e o tom de pele vira a pele escolhida;
   // o brilho do texel é mantido, então dobras e sombras pintadas continuam lá. vKeep = 1 no cabelo.
   const HSV = 'vec3 kHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x); }';
-  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; uniform sampler2D uMask; varying vec3 vBind; varying float vKeep; varying float vSkin; varying vec3 vVM; varying vec3 vOther; varying vec3 vPart;'].join('\n');
+  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; uniform sampler2D uMask; varying vec3 vBind; varying float vKeep; varying float vSkin; varying vec3 vVM; varying vec3 vOther; varying vec3 vPart; varying float vEye;'].join('\n');
   // Troca de cor pela MÁSCARA (feita uma vez por personagem, ver cleanTexture): R = vermelho (macacão/capacete, com os
   // reflexos pintados), G = tom de pele, B = brilho claro e quente (vira pele só dentro do rosto). A máscara é filtrada (bilinear) e passa por um limiar suave:
   // as bordas entre cores ficam lisas como desenho vetorial, em vez dos dentes e respingos cinza de antes.
@@ -157,7 +157,9 @@
     '  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uSuit, uHelmet, head) * sr, wR);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * sk, wK);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.95, 0.97) * mix(1.0, clamp(v / 0.95, 0.55, 1.0), 0.25), glove);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.205, 0.235) * mix(1.0, clamp(v / 0.6, 0.55, 1.0), 0.3), pants); }'
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.205, 0.235) * mix(1.0, clamp(v / 0.6, 0.55, 1.0), 0.3), pants);',
+    // olhos e cílios: escuro uniforme (o brilho vem da luz); some o risco branco da lateral do relevo
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.018, 0.013, 0.014), smoothstep(0.6, 0.9, vEye)); }'
   ].join('\n');
 
   // ---------- máscara de cores (uma vez por personagem) ----------
@@ -286,6 +288,90 @@
     return { vm: out, other: oth };
   }
 
+  // ---------- OLHOS E CÍLIOS (uma vez por personagem) ----------
+  // Os olhos são "botões" em relevo na própria malha do rosto. A frente é escura, mas a LATERAL do relevo recebe uma
+  // faixa esticada da textura com riscos brancos/creme (de lado, o olho parecia mal pintado; os cílios também).
+  // Aqui: manchas escuras pequenas no rosto (cercadas de pele) = olho/cílio; depois a marca cresce pelas faces vizinhas
+  // que são ÍNGREMES em relação à frente do olho (a parede do relevo) e para quando chega no rosto (que é paralelo).
+  // Saída por vértice: 1 = pintar de olho (escuro uniforme).
+  function eyeRegions(P, U, I, nv, M, headY) {
+    const out = new Float32Array(nv); if (!M) return out;
+    const { rgb, W, H, cls } = M, nt = I.length / 3;
+    const lum = (u, v) => { u -= Math.floor(u); v -= Math.floor(v); const q = (Math.min(H - 1, v * H | 0) * W + Math.min(W - 1, u * W | 0)) * 4; return (rgb[q] * 0.3 + rgb[q + 1] * 0.59 + rgb[q + 2] * 0.11) / 255; };
+    const clsAt = (u, v) => { u -= Math.floor(u); v -= Math.floor(v); return cls[Math.min(H - 1, v * H | 0) * W + Math.min(W - 1, u * W | 0)]; };
+    const wm = new Map(), wl = new Int32Array(nv); let nw = 0;
+    for (let i = 0; i < nv; i++) { const k = Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5); let w = wm.get(k); if (w === undefined) { w = nw++; wm.set(k, w); } wl[i] = w; }
+    const kind = new Int8Array(nt), nrm = new Float32Array(nt * 3), area = new Float32Array(nt), cen = new Float32Array(nt * 3);   // 1 escuro, 2 pele, 0 outro
+    for (let t = 0; t < nt; t++) { const a = I[t * 3], b = I[t * 3 + 1], c = I[t * 3 + 2];
+      const ux = P[b * 3] - P[a * 3], uy = P[b * 3 + 1] - P[a * 3 + 1], uz = P[b * 3 + 2] - P[a * 3 + 2], vx = P[c * 3] - P[a * 3], vy = P[c * 3 + 1] - P[a * 3 + 1], vz = P[c * 3 + 2] - P[a * 3 + 2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx; const l = Math.hypot(nx, ny, nz) || 1; area[t] = l / 2; nrm[t * 3] = nx / l; nrm[t * 3 + 1] = ny / l; nrm[t * 3 + 2] = nz / l;
+      for (let d = 0; d < 3; d++) cen[t * 3 + d] = (P[a * 3 + d] + P[b * 3 + d] + P[c * 3 + d]) / 3;
+      if (cen[t * 3 + 1] < headY) continue;
+      const cu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, cv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3;
+      let L = lum(cu, cv) * 2, sk = clsAt(cu, cv) >= 2 ? 2 : 0;
+      for (const i of [a, b, c]) { const pu = cu + (U[i * 2] - cu) * 0.5, pv = cv + (U[i * 2 + 1] - cv) * 0.5; L += lum(pu, pv); if (clsAt(pu, pv) >= 2) sk++; }
+      kind[t] = L / 5 < 0.2 ? 1 : sk >= 3 ? 2 : 0; }
+    const byW = Array.from({ length: nw }, () => []); for (let t = 0; t < nt; t++) for (let j = 0; j < 3; j++) byW[wl[I[t * 3 + j]]].push(t);
+    const nbrs = t => { const r = new Set(); for (let j = 0; j < 3; j++) for (const u of byW[wl[I[t * 3 + j]]]) if (u !== t) r.add(u); return r; };
+    // manchas escuras ligadas
+    const comp = new Int32Array(nt).fill(-1), comps = [];
+    for (let t = 0; t < nt; t++) { if (kind[t] !== 1 || comp[t] >= 0) continue; const id = comps.length, list = [t]; comp[t] = id;
+      for (let q = 0; q < list.length; q++) for (const u of nbrs(list[q])) if (kind[u] === 1 && comp[u] < 0) { comp[u] = id; list.push(u); }
+      comps.push(list); }
+    const face = new Uint8Array(nt);
+    let faceA = 0; for (let t = 0; t < nt; t++) if (kind[t] === 2) faceA += area[t];
+    comps.forEach(list => {
+      let A = 0; const n = [0, 0, 0]; list.forEach(t => { A += area[t]; for (let d = 0; d < 3; d++) n[d] += nrm[t * 3 + d] * area[t]; });
+      if (A > faceA * 0.12) return;                                                     // grande demais: não é olho (viseira, borda do capacete)
+      // cercada de pele?
+      let skA = 0, otA = 0; const seen = new Set(list); list.forEach(t => nbrs(t).forEach(u => { if (seen.has(u)) return; seen.add(u); if (kind[u] === 2) skA += area[u]; else if (kind[u] !== 1) otA += area[u]; }));
+      if (skA < (skA + otA) * 0.45) return;   // olho: ~0,56 (a parede clara do relevo não conta como pele); viseira: ~0,03
+      const nl = Math.hypot(n[0], n[1], n[2]) || 1; n[0] /= nl; n[1] /= nl; n[2] /= nl;
+      list.forEach(t => face[t] = 1);
+      // cílio (mancha bem menor que um olho, <1% do rosto; olho ~6%): peça fina, a marca cobre 3 anéis em volta, inteiros
+      if (A < faceA * 0.01) { let rg = list.slice(); for (let k = 0; k < 3; k++) { const nx = []; rg.forEach(t => nbrs(t).forEach(u => { if (!face[u]) { face[u] = 1; nx.push(u); } })); rg = nx; } }
+      // cresce pela parede do relevo (faces íngremes em relação à frente do olho), até 6 anéis
+      let ring = list.slice();
+      for (let k = 0; k < 6 && ring.length; k++) { const nx = [];
+        ring.forEach(t => nbrs(t).forEach(u => { if (face[u]) return; const dt = nrm[u * 3] * n[0] + nrm[u * 3 + 1] * n[1] + nrm[u * 3 + 2] * n[2];
+          if (dt < 0.82) { face[u] = 1; nx.push(u); } }));
+        ring = nx; }
+    });
+    // CÍLIOS COLADOS NO OLHO: esfera ajustada à pele do rosto (mínimos quadrados); perto de cada olho, o que salta para
+    // fora dela mais que ~1/3 da altura do olho é olho/cílio. O rosto, por construção, fica em cima da esfera.
+    { const pts = []; for (let t = 0; t < nt; t++) if (kind[t] === 2 && !face[t]) pts.push(t);
+      if (pts.length > 50) {
+        // x² + y² + z² = 2ax + 2by + 2cz + d  ->  sistema normal 4x4
+        const A = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], B = [0, 0, 0, 0];
+        pts.forEach(t => { const x = cen[t * 3], y = cen[t * 3 + 1], z = cen[t * 3 + 2], r = [2 * x, 2 * y, 2 * z, 1], f = x * x + y * y + z * z, w = area[t];
+          for (let i = 0; i < 4; i++) { B[i] += r[i] * f * w; for (let j = 0; j < 4; j++) A[i][j] += r[i] * r[j] * w; } });
+        for (let i = 0; i < 4; i++) { let p = i; for (let k = i + 1; k < 4; k++) if (Math.abs(A[k][i]) > Math.abs(A[p][i])) p = k; [A[i], A[p]] = [A[p], A[i]]; [B[i], B[p]] = [B[p], B[i]];
+          for (let k = i + 1; k < 4; k++) { const f = A[k][i] / A[i][i]; for (let j = i; j < 4; j++) A[k][j] -= f * A[i][j]; B[k] -= f * B[i]; } }
+        const X = [0, 0, 0, 0]; for (let i = 3; i >= 0; i--) { let v = B[i]; for (let j = i + 1; j < 4; j++) v -= A[i][j] * X[j]; X[i] = v / A[i][i]; }
+        const c0 = [X[0], X[1], X[2]], R0 = Math.sqrt(Math.max(1e-9, X[3] + X[0] * X[0] + X[1] * X[1] + X[2] * X[2]));
+        const off = t => Math.hypot(cen[t * 3] - c0[0], cen[t * 3 + 1] - c0[1], cen[t * 3 + 2] - c0[2]) - R0;
+        comps.forEach(list => { if (!face[list[0]]) return;
+          const cc = [0, 0, 0]; list.forEach(t => { for (let d = 0; d < 3; d++) cc[d] += cen[t * 3 + d] / list.length; });
+          let Rr = 0, hMax = 0; list.forEach(t => { Rr = Math.max(Rr, Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2])); hMax = Math.max(hMax, off(t)); });
+          const lim = Math.max(0.0025, hMax * 0.35);
+          for (let t = 0; t < nt; t++) if (!face[t] && cen[t * 3 + 1] >= headY && Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2]) < Rr * 1.8 && off(t) > lim) face[t] = 1; });
+      } }
+    // pontas claras dos cílios (e furinhos no olho): ilhas PEQUENAS, de qualquer cor, cercadas (>= 50% da borda) por
+    // olho/cílio marcado viram olho/cílio — preenchimento de buraco
+    for (let pass = 0; pass < 3; pass++) { const sc = new Int32Array(nt).fill(-1);
+      for (let t = 0; t < nt; t++) { if (face[t] || sc[t] >= 0 || cen[t * 3 + 1] < headY) continue; const list = [t]; sc[t] = t;
+        for (let q = 0; q < list.length && list.length < 4000; q++) for (const u of nbrs(list[q])) if (!face[u] && sc[u] < 0 && cen[u * 3 + 1] >= headY) { sc[u] = t; list.push(u); }
+        let A = 0; list.forEach(u => A += area[u]); if (A > faceA * 0.02 || list.length >= 4000) continue;
+        let inB = 0, outB = 0; list.forEach(x => nbrs(x).forEach(u => { if (sc[u] === t) return; if (face[u]) inB++; else outB++; }));
+        if (inB >= (inB + outB) * 0.5) list.forEach(x => face[x] = 1); } }
+    // por vértice: fração (por área) das faces em volta que são olho; na borda com o rosto fica ~0,5 e o shader só pinta
+    // de ~0,6 para cima: a cor não vaza meio triângulo para dentro do rosto (era a franja serrilhada em volta do olho)
+    const fA = new Float32Array(nw), tA = new Float32Array(nw);
+    for (let t = 0; t < nt; t++) for (let j = 0; j < 3; j++) { const w = wl[I[t * 3 + j]]; tA[w] += area[t]; if (face[t]) fA[w] += area[t]; }
+    for (let i = 0; i < nv; i++) { const w = wl[i]; out[i] = tA[w] > 0 ? fA[w] / tA[w] : 0; }
+    return out;
+  }
+
   // ---------- regiões de pele (uma vez por personagem) ----------
   // Cada triângulo é classificado pela cor da textura no seu miolo (longe das bordas da ilha de UV). Os triângulos
   // de pele que se tocam (vértices na mesma posição) formam regiões; só as grandes (rosto, mãos) contam como pele.
@@ -345,9 +431,9 @@
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
       this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
       const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY }, uMask: { value: tpl.mask } };
-      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb12', hook: sh => {
+      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb13', hook: sh => {
         Object.assign(sh.uniforms, u);
-        sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nattribute vec3 aPart;\nvarying vec3 vPart;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther; vPart = aPart;');
+        sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nattribute vec3 aPart;\nvarying vec3 vPart;\nattribute float aEye;\nvarying float vEye;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther; vPart = aPart; vEye = aEye;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
       } });
       this.mesh.material = mat; this.mesh.castShadow = true; this.mesh.frustumCulled = false;
@@ -552,6 +638,7 @@
     const VMK = vertexMasks(P, U, I, nv, CM);
     geo.setAttribute('aVM', new THREE.BufferAttribute(VMK.vm, 3)); geo.setAttribute('aOther', new THREE.BufferAttribute(VMK.other, 3));
     geo.setAttribute('aSkin', new THREE.BufferAttribute(skinRegions(P, U, I, nv, map.image, CM), 1));
+    geo.setAttribute('aEye', new THREE.BufferAttribute(eyeRegions(P, U, I, nv, CM, lm.head[1] + 0.01), 1));
     geo.setIndex(new THREE.BufferAttribute(nv > 65535 ? I : Uint16Array.from(I), 1)); geo.computeBoundingBox(); geo.computeBoundingSphere();
     // (as normais de sombreamento ficam as do arquivo: com a rampa toon suave elas dão o rosto mais limpo; as suavizadas
     //  vão só para o contorno, em Toon.outline, onde acabam com os rasgos nas costuras)
