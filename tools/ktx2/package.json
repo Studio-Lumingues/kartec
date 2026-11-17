@@ -8,7 +8,8 @@
     "restaurar": "node converter.mjs --restaurar",
     "refazer": "node converter.mjs --refazer",
     "inspecionar": "node inspecionar.mjs",
-    "simplificar": "node simplificar.mjs"
+    "simplificar": "node simplificar.mjs",
+    "lixar": "node lixar.mjs"
   },
   "dependencies": {
     "@gltf-transform/core": "4.1.1",

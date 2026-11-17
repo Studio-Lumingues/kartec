@@ -1,19 +1,20 @@
 // =====================================================================================
-// logo3d.js — o "KARTEC" da logo em 3D (assets/models/karttec_logo.glb)
+// logo3d.js — o "KARTEC" da logo em 3D (assets/models/karttec_logo.min.glb)
 // A logo 2D (SVG) fica só como "caixa" invisível que marca o lugar: a placa SUPER, as linhas de velocidade e o
 // KARTEC dela são escondidos. O modelo 3D é desenhado num canvas próprio que segue essa caixa na tela (posição,
 // tamanho e transparência), inclusive quando ela entra na abertura e desliza para o canto do menu.
 // No menu, o jogador pode arrastar a logo para os lados para girá-la (só na horizontal).
 // * O modelo vem sem cores: elas são pintadas por shader pela altura de cada camada (letras douradas em
 //   degradê, contorno branco, contorno cinza-escuro), igual às cores da logo 2D.
-// * Acabamento: plástico envernizado (clearcoat), com aspereza diferente em cada camada.
+// * Acabamento: plástico envernizado (clearcoat), com aspereza diferente em cada camada. A superfície do modelo foi
+//   "lixada" (tools/ktx2/lixar.mjs) para o brilho correr liso nas faces grandes, sem manchas.
 // * Página aberta direto do disco (file://): usa a cópia embutida assets/models/karttec_logo.glb.js.
 // * Se o 3D não carregar, o KARTEC do SVG volta a aparecer.
 // =====================================================================================
 (function () {
   const C = Object.assign({
-    MODEL: ['assets/models/karttec_logo.min.glb', 'assets/models/karttec_logo.glb'],
-    EMBED: 'assets/models/karttec_logo.glb.js',
+    MODEL: ['assets/models/karttec_logo.min.glb?v=202611172330'],
+    EMBED: 'assets/models/karttec_logo.glb.js?v=202611172330',
     BOX: { cx: 0.5, cy: 0.5, h: 0.8 },     // centro (x, y) e altura do 3D, em frações da caixa da logo (viewBox 680 x 300)
     LAYERS: [0.193, 0.165],                // alturas (z do modelo) que separam letras / contorno branco / contorno cinza
     SWAY: 0.16,
