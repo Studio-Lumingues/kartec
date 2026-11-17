@@ -167,7 +167,9 @@
     if (r) { r.dispose(); try { r.forceContextLoss(); } catch (e) { } }
   }
   const orig = {};   // cópia com os materiais originais do .glb (para o ícone em alta qualidade)
-  function ready(k, g, size) { orig[k] = g.scene.clone(true); tpl[k] = prepModel(g.scene, size); makeIcon(k); }
+  function ready(k, g, size) { orig[k] = g.scene.clone(true); tpl[k] = prepModel(g.scene, size); makeIcon(k);
+    // a corrida já começou e o modelo chegou agora: entra no grupo de aquecimento e compila na hora (antes de alguém usar)
+    const I = window.Items; if (I && I._warm && I._warm.parent) { try { const m = tpl[k].clone(true); m.visible = false; I._warm.add(m); if (window.Game && Game.precompile && Game.scene) Game.precompile(Game.scene); } catch (e) { } } }
 
   // versão embutida (js/models/entidades/*.glb.js): funciona mesmo abrindo o jogo direto do arquivo (file://),
   // onde o navegador bloqueia a leitura do .glb
@@ -815,7 +817,29 @@
         const t = sh.l / sh.ml; sh.m.material.uniforms.uFade.value = Math.min(1, t * 2.2); sh.m.material.userData.U.uTime.value += dt * 3;
         if (t < 0.3) sh.m.scale.multiplyScalar(Math.max(0, 1 - 2.5 * dt)); });
     },
+    // AQUECIMENTO DE SHADERS: os itens só eram criados no primeiro uso, e aí a placa de vídeo compilava os shaders deles
+    // no meio da corrida (o jogo congelava ao usar tijolo, escudo, banana, foguete ou ao levar um acerto). Aqui, ao montar
+    // a pista, criamos uma cópia ESCONDIDA de cada modelo e do rastro do giro de cada kart. O Game.precompile (que já
+    // roda atrás da cortina e liga até o que está escondido) compila tudo junto com a pista. As cópias ficam na cena,
+    // escondidas, até o fim da corrida: material vivo = programa guardado (se fosse descartado, o three apagaria o
+    // programa e o primeiro uso compilaria de novo).
+    warm(karts) {
+      this.unwarm(); if (!this.group) return;
+      const g = this._warm = new THREE.Group(); g.name = 'itemWarm'; g.position.set(0, -500, 0);
+      const put = o => { if (!o) return; o.traverse(m => { m.frustumCulled = false; if (m.isMesh) m.userData.noOutline = true; }); g.add(o); };
+      ['banana', 'dino', 'brick', 'rocket'].forEach(k => { try { put(make(k)); } catch (e) { console.warn('[itens] aquecer ' + k, e); } });
+      try { put(shieldModel(false)); } catch (e) { } try { put(bazookaModel()); } catch (e) { }
+      g.visible = false; this.group.add(g);
+      // rastro do giro (cópias transparentes dos materiais de cada kart)
+      this._warmGhosts = [];
+      (karts || []).forEach(k => { try { const r = kartRoot(k, this.scene); if (!r) return; const G = makeGhosts(r); G.list.forEach(x => { x.visible = false; x.name = 'spinGhostWarm'; }); this._warmGhosts.push(G); } catch (e) { } });
+    },
+    unwarm() {
+      if (this._warm) { this._warm.parent && this._warm.parent.remove(this._warm); this._warm = null; }
+      (this._warmGhosts || []).forEach(G => { G.list.forEach(x => x.parent && x.parent.remove(x)); G.mats.forEach(m => m.dispose()); }); this._warmGhosts = [];
+    },
     dispose() {
+      this.unwarm();
       if (this.group && this.group.parent) this.group.parent.remove(this.group);
       [this.boxGeo, this.glowGeo, this.glassMat, this.frameMat, this.qMat, this.shGeo, this.shMat].concat(this.boxMats || []).forEach(o => o && o.dispose()); this.boxMats = []; this.glowGeo = null; (this.shards || []).forEach(sh => sh.m.material.dispose()); this.shards = []; (this.shardGeos || []).forEach(g => g.dispose()); this.shardGeos = null;
       this.bananas.forEach(o => o.mesh.parent && o.mesh.parent.remove(o.mesh));

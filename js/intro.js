@@ -28,12 +28,15 @@
       const c = TX.cvs(4, 256), g = c.getContext('2d'), gr = g.createLinearGradient(0, 0, 0, 256); gr.addColorStop(0, '#2f6fe0'); gr.addColorStop(0.5, '#8cc4ff'); gr.addColorStop(1, '#e8f6ff'); g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
       this.sky = new THREE.Mesh(new THREE.SphereGeometry(800, 24, 12), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), side: THREE.BackSide, fog: false, depthWrite: false })); sc.add(this.sky);
       // reta longa: grama, asfalto, zebras e faixas
+      // Os pisos são SUBDIVIDIDOS: a névoa do jogo é calculada pela distância de cada vértice (main.js troca o fog_vertex
+      // por length(mvPosition)). Com um quadrado só, os 4 cantos ficavam a mais de 1 km e o chão inteiro, até embaixo dos
+      // karts, saía na cor da névoa (azul-acinzentado).
       const LEN = 3200, Z0 = -200;
-      const grass = new THREE.Mesh(new THREE.PlaneGeometry(1600, LEN), new THREE.MeshLambertMaterial({ map: TX.get('grass', 120, 240) })); grass.rotation.x = -Math.PI / 2; grass.position.z = Z0 + LEN / 2; grass.receiveShadow = true; sc.add(grass);
-      const road = new THREE.Mesh(new THREE.PlaneGeometry(18, LEN), new THREE.MeshLambertMaterial({ map: TX.get('asphalt', 2, LEN / 9) })); road.rotation.x = -Math.PI / 2; road.position.set(0, 0.02, Z0 + LEN / 2); road.receiveShadow = true; sc.add(road);
+      const grass = new THREE.Mesh(new THREE.PlaneGeometry(1600, LEN, 40, 80), new THREE.MeshLambertMaterial({ map: TX.get('grass', 120, 240) })); grass.rotation.x = -Math.PI / 2; grass.position.z = Z0 + LEN / 2; grass.receiveShadow = true; sc.add(grass);
+      const road = new THREE.Mesh(new THREE.PlaneGeometry(18, LEN, 2, 200), new THREE.MeshLambertMaterial({ map: TX.get('asphalt', 2, LEN / 9) })); road.rotation.x = -Math.PI / 2; road.position.set(0, 0.02, Z0 + LEN / 2); road.receiveShadow = true; sc.add(road);
       const curbC = TX.cvs(16, 64), cg = curbC.getContext('2d'); cg.fillStyle = '#fff'; cg.fillRect(0, 0, 16, 64); cg.fillStyle = '#ff3d47'; cg.fillRect(0, 0, 16, 32);
       const curbT = new THREE.CanvasTexture(curbC); curbT.wrapS = curbT.wrapT = THREE.RepeatWrapping; curbT.repeat.set(1, LEN / 4);
-      [-1, 1].forEach(s => { const cb = new THREE.Mesh(new THREE.PlaneGeometry(1.4, LEN), new THREE.MeshLambertMaterial({ map: curbT })); cb.rotation.x = -Math.PI / 2; cb.position.set(s * 9.7, 0.04, Z0 + LEN / 2); sc.add(cb); });
+      [-1, 1].forEach(s => { const cb = new THREE.Mesh(new THREE.PlaneGeometry(1.4, LEN, 1, 200), new THREE.MeshLambertMaterial({ map: curbT })); cb.rotation.x = -Math.PI / 2; cb.position.set(s * 9.7, 0.04, Z0 + LEN / 2); sc.add(cb); });
       const dash = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.35, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }), 400), d = new THREE.Object3D();
       for (let i = 0; i < 400; i++) { d.position.set(0, 0.05, Z0 + i * 8); d.rotation.x = -Math.PI / 2; d.updateMatrix(); dash.setMatrixAt(i, d.matrix); } sc.add(dash);
       // árvores e postes dos dois lados (instanciados)

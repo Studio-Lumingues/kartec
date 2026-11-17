@@ -498,6 +498,7 @@
       document.body.classList.toggle('moto', !!(this.player.m && this.player.m.moto));
       this.wrongT = 0;
       if (this.lite) this.setLite(true);
+      if (window.Items && Items.warm) try { Items.warm(this.karts); } catch (e) { console.warn('[itens] aquecer', e); }   // modelos dos itens entram na pré-compilação
       this.precompile(scene);
       // vitrine e pódio não aparecem durante a corrida: saem da GPU (voltam sozinhos quando forem desenhados de novo)
       try { const n = hibernate(window.Showroom && Showroom.scene, scene) + hibernate(window.Podium && Podium.scene, scene);
