@@ -1562,6 +1562,7 @@
           else if (Game.lite && fastWin >= 3 && dpr >= Math.min(maxD, 1.0)) { Game.setLite(false); liteOffAt = now; fastWin = 0; }
         } } }
     Game.rawDt = raw; safe('jogo', () => Game.update(dt));
+    if (window.Settings) safe('desempenho', () => Settings.perfTick(raw, Game.state === 'race' && !Game.paused));
     if (Game.player && Game.scene && (!isFinite(Game.player.speed) || !isFinite(Game.player.pos.x))) Game.player.respawn();
     if (Game.bot && Game.scene && (!isFinite(Game.bot.speed) || !isFinite(Game.bot.pos.x))) Game.bot.respawn();
     safe('render', () => Game.render());
