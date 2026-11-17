@@ -1,0 +1,24 @@
+# Normaliza fim de linha dos arquivos de texto
+* text=auto eol=lf
+
+# Scripts do Windows mantêm CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Arquivos binários (modelos 3D, texturas, imagens, áudio e fontes)
+*.glb    binary
+*.gltf   binary
+*.ktx2   binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.gif    binary
+*.ico    binary
+*.mp3    binary
+*.ogg    binary
+*.wav    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
