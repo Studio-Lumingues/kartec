@@ -756,20 +756,38 @@
     finishBanner() {
       this._fbBanner = true;
       if (!document.getElementById('finishBannerCss')) { const st = document.createElement('style'); st.id = 'finishBannerCss';
-        st.textContent = '#finishBanner{position:fixed;left:0;right:0;top:24%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif}' +
-          '#finishBanner .w{display:inline-block;position:relative;animation:fbPop .7s cubic-bezier(.2,1.6,.4,1) both, fbOut .6s ease-in 2.6s forwards}' +
-          '#finishBanner .halo{position:absolute;left:50%;top:50%;width:140%;height:220%;transform:translate(-50%,-50%);background:radial-gradient(closest-side,rgba(255,220,120,.55),rgba(255,120,80,.18) 55%,rgba(255,120,80,0));animation:fbHalo 1.1s ease-in-out infinite alternate}' +
-          '#finishBanner b{position:relative;display:block;font-size:clamp(44px,8.5vw,120px);font-style:italic;letter-spacing:2px;transform:skewX(-8deg);' +
-          'background:linear-gradient(100deg,#ffe066 0%,#ffb627 30%,#fff9d6 45%,#ffb627 55%,#ff7a2f 80%,#ffe066 100%);background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;' +
-          '-webkit-text-stroke:3px #0c0c0e;filter:drop-shadow(0 6px 0 #0c0c0e) drop-shadow(0 0 18px rgba(255,200,80,.85)) drop-shadow(0 0 40px rgba(255,140,60,.6));animation:fbShine 1.3s linear infinite}' +
-          '#finishBanner i{position:absolute;width:26px;height:26px;background:#fff;clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);animation:fbStar 1s ease-in-out infinite;filter:drop-shadow(0 0 8px #fff7c0)}' +
-          '@keyframes fbPop{0%{transform:scale(.2) rotate(-6deg);opacity:0}100%{transform:scale(1) rotate(0);opacity:1}}@keyframes fbOut{to{transform:translateY(-40px) scale(1.08);opacity:0}}' +
-          '@keyframes fbShine{from{background-position:120% 0}to{background-position:-100% 0}}@keyframes fbHalo{from{opacity:.6;transform:translate(-50%,-50%) scale(.92)}to{opacity:1;transform:translate(-50%,-50%) scale(1.06)}}' +
-          '@keyframes fbStar{0%,100%{transform:scale(.3) rotate(0);opacity:.2}50%{transform:scale(1) rotate(45deg);opacity:1}}';
+        // A palavra é desenhada 4 vezes, uma por cima da outra, cada cópia é uma CAMADA da palavra inteira:
+        //   .o contorno preto grosso + sombra   .x lateral 3D (cópias empilhadas para baixo)
+        //   .l filete claro em volta da letra   .t face (quadriculado em cima sumindo num tom forte e liso embaixo)
+        // Assim o contorno de uma letra nunca passa por cima da letra vizinha. As 4 cópias usam as mesmas animações e
+        // atrasos, então andam juntas: .c faz a entrada (cai girando 360° no eixo X), .f a flutuação (sobe e desce).
+        // O .w inteiro passa por hue-rotate em loop (a cor vai trocando; o preto continua preto).
+        const ext = []; for (let k = 1; k <= 9; k++) ext.push('0 ' + (k * 0.012).toFixed(3) + 'em 0 #7a1a00');
+        st.textContent = '#finishBanner{position:fixed;left:0;right:0;top:20%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif;--fs:clamp(52px,10.5vw,150px)}' +
+          '#finishBanner .w{display:inline-block;position:relative;animation:fbHue 4s linear infinite, fbOut .45s cubic-bezier(.5,0,1,.5) 2.75s forwards}' +
+          '#finishBanner .row{display:flex;align-items:center;perspective:900px}#finishBanner .row+.row{position:absolute;left:0;top:0;right:0;bottom:0}' +
+          '#finishBanner .c{display:inline-block;font-size:var(--fs);line-height:1;margin:0 .006em;transform:translateY(var(--y)) rotate(var(--r));animation:fbFlip .8s cubic-bezier(.3,1.25,.5,1) both;animation-delay:var(--d)}' +
+          '#finishBanner .f{display:block;animation:fbBob 1.6s ease-in-out infinite;animation-delay:var(--b)}' +
+          '#finishBanner b{display:block;font-weight:400}' +
+          '#finishBanner .o{filter:drop-shadow(.012em .012em 0 #141414) drop-shadow(0 .06em 0 #141414) drop-shadow(0 -.05em 0 #141414)}#finishBanner .o b{color:#141414;-webkit-text-stroke:.24em #141414;text-shadow:0 .13em 0 #141414,.04em .15em 0 #141414,0 .2em .12em rgba(0,0,0,.35)}' +
+          '#finishBanner .x b{color:#7a1a00;text-shadow:' + ext.join(',') + '}' +
+          '#finishBanner .l b{color:#ffd27a;-webkit-text-stroke:.06em #ffd27a}' +
+          '#finishBanner .t b{color:transparent;-webkit-background-clip:text;background-clip:text;' +
+          'background-image:linear-gradient(0deg,#e02800 0%,#e83000 28%,rgba(240,60,0,0) 62%),' +
+          'conic-gradient(rgba(200,50,0,.42) 25%,transparent 0 50%,rgba(200,50,0,.42) 0 75%,transparent 0),' +
+          'linear-gradient(180deg,#ffc04a 0%,#ff9a24 40%,#ff6a14 70%,#e83000 100%);background-size:100% 100%,.16em .16em,100% 100%}' +
+          '@keyframes fbFlip{0%{transform:translateY(-1.6em) rotate(var(--r)) rotateX(-360deg) scale(.7);opacity:0}15%{opacity:1}70%{transform:translateY(calc(var(--y) + .05em)) rotate(var(--r)) rotateX(0) scale(1.08,.9)}100%{transform:translateY(var(--y)) rotate(var(--r)) rotateX(0) scale(1)}}' +
+          '@keyframes fbBob{0%,100%{transform:translateY(-.045em)}50%{transform:translateY(.045em)}}' +
+          '@keyframes fbHue{from{filter:hue-rotate(0deg)}to{filter:hue-rotate(360deg)}}' +
+          '@keyframes fbOut{0%{transform:scale(1);opacity:1}30%{transform:scale(1.06)}100%{transform:scale(.2) translateY(-30px);opacity:0}}';
         document.head.appendChild(st); }
       let el = document.getElementById('finishBanner'); if (el) el.remove();
       el = document.createElement('div'); el.id = 'finishBanner';
-      el.innerHTML = '<span class="w"><span class="halo"></span><b>CHEGADA!</b>' + [[-4, 10, 0], [96, 4, .3], [88, 78, .6], [6, 82, .45], [50, -14, .15]].map(([x, y, d]) => '<i style="left:' + x + '%;top:' + y + '%;animation-delay:' + d + 's"></i>').join('') + '</span>';
+      // giro e altura de cada letra (dá o ar "desenhado à mão"); a exclamação fica mais inclinada
+      const tilt = [[-7, -2], [4, 3], [-3, -3], [5, 2], [-4, -1], [3, 3], [-2, -2], [10, -4]];
+      const word = [...'CHEGADA!'].map((ch, i) => { const [r, y] = tilt[i % tilt.length];
+        return '<span class="c" style="--r:' + r + 'deg;--y:' + (y / 100) + 'em;--d:' + (i * 0.07).toFixed(2) + 's;--b:' + (-i * 0.2).toFixed(2) + 's"><span class="f"><b>' + ch + '</b></span></span>'; }).join('');
+      el.innerHTML = '<span class="w">' + ['o', 'x', 'l', 't'].map(c => '<span class="row ' + c + '">' + word + '</span>').join('') + '</span>';
       document.body.appendChild(el); clearTimeout(this._fbBT); this._fbBT = setTimeout(() => { if (el.parentNode) el.remove(); }, 3400);
     },
     hideFinishBoard() { this._fbBanner = false; this._fbT0 = 0; this._fbSeen = null; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
