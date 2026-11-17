@@ -1336,12 +1336,12 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .qScale .bars i.on { opacity: .7; }
 .qScale button.on .bars i.on { opacity: 1; }
 /* estrelinha no nível recomendado */
-.qScale button.rec::before { content: "★"; position: absolute; top: -11px; right: -7px; width: 22px; height: 22px; display: grid; place-items: center;
-  border: 2.5px solid var(--b-ink, #000417); border-radius: 50%; background: var(--gold); color: var(--b-ink, #000417); font-size: 11px; line-height: 1; }
+.qScale .recStar { display: none; position: absolute; top: -13px; right: -9px; width: 26px; height: 26px; filter: drop-shadow(0 2px 0 var(--b-ink, #000417)); }
+.qScale button.rec .recStar { display: block; }
 .gqDesc { margin: 12px 2px 10px; min-height: 2.6em; font: 700 13.5px/1.35 var(--ui); color: var(--b-ink-2, #4b4f63); }
 .gqDesc b { color: var(--b-ink, #000417); }
 .gqRec { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: linear-gradient(180deg, #fff7d6, #ffe89a); border: 2px solid var(--b-ink, #000417); }
-.gqRec .star { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--b-ink, #000417); font-size: 11px; }
+.gqRec .star { flex: none; width: 24px; height: 24px; }
 .gqRecTxt { flex: 1; min-width: 0; font: 700 13px var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gqRecTxt b { color: var(--b-accent, #E8213A); font-weight: 900; }
 .gqRecTxt small { font-size: 12px; color: var(--b-ink-2, #4b4f63); }
@@ -1349,6 +1349,7 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .linkBtn:hover, .linkBtn:focus-visible { color: var(--b-accent, #E8213A); outline: none; }
 /* grupos */
 .gGroup { display: grid; gap: 2px; padding: 10px 14px 6px; border: 2px solid rgba(0, 4, 23, .18); border-radius: 14px; background: rgba(255, 255, 255, .45); }
+.gGroup h4 .gIc { flex: none; width: 22px; height: 22px; }
 .gGroup h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 900 12px var(--ui); letter-spacing: 1px; text-transform: uppercase; color: var(--b-ink-2, #4b4f63); }
 .gRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(0, 4, 23, .1); }
 .gGroup h4 + .gRow { border-top: 0; }
@@ -1411,16 +1412,16 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .recScale li.rec { background: linear-gradient(180deg, #fff6b8, var(--gold)); translate: 0 -6px; box-shadow: 0 10px 0 var(--b-ink, #000417); }
 .recScale li.rec .bars i.on { opacity: 1; background: var(--b-accent, #E8213A); }
 .recScale li.rec span { color: var(--b-ink, #000417); font-weight: 900; }
-.recScale li.rec::before { content: "★"; position: absolute; top: -13px; left: 50%; translate: -50% 0; width: 24px; height: 24px; display: grid; place-items: center;
-  border: 3px solid var(--b-ink, #000417); border-radius: 50%; background: #fff; color: var(--b-accent, #E8213A); font-size: 12px; line-height: 1; }
+.recScale li .recStar { position: absolute; top: -15px; left: 50%; translate: -50% 0; width: 28px; height: 28px; filter: drop-shadow(0 2px 0 var(--b-ink, #000417)); }
+.recScale li .recStar svg, .qScale .recStar svg, .gqRec .star svg, .gGroup h4 .gIc svg { display: block; width: 100%; height: 100%; }
 .recScale li.now::after { content: "agora"; position: absolute; bottom: -12px; left: 50%; translate: -50% 0; padding: 1px 7px; border-radius: 999px;
   background: var(--b-ink, #000417); color: #fff; font: 900 10px var(--ui); letter-spacing: .4px; text-transform: uppercase; }
-.recScale li.rec.now::after { content: "agora ✓"; }
+.recScale li.rec.now::after { content: "agora"; }
 /* linha de informação: placa (ou "teste rápido") + qualidade atual quando ela não está na régua */
 .recSheet .recMeta { margin: 8px 0 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .recSheet .recMeta span { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 11px; border-radius: 999px; border: 2px solid var(--b-ink, #000417);
   background: rgba(255, 255, 255, .7); font: 800 12px var(--ui); color: var(--b-ink, #000417); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.recSheet .recMeta .ic, .recSheet .recMeta .ic svg { width: 16px; height: 16px; flex: none; display: block; }
+.recSheet .recMeta .ic, .recSheet .recMeta .ic svg { width: 18px; height: 18px; flex: none; display: block; }
 /* botões: mesma largura, mesma altura, centralizados */
 .recSheet .recActions { width: 100%; display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; align-items: stretch; }
 .recSheet .recActions button { min-width: 0; margin: 0; display: flex; align-items: center; justify-content: center; padding: 12px 14px; white-space: nowrap; }
