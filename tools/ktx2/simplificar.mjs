@@ -1,7 +1,7 @@
 // =====================================================================================
 // simplificar.mjs — reduz a quantidade de triângulos (e o tamanho das texturas) de um .glb
 //
-//   npm run simplificar -- assets/models/banana.glb --tris 15000 --tex 1024
+//   npm run simplificar -- public/assets/models/banana.glb --tris 15000 --tex 1024
 //
 //   --tris N   alvo de triângulos (padrão 30000). O resultado fica perto disso.
 //   --tex N    maior lado das texturas (padrão 2048)

@@ -18,36 +18,42 @@ npm start          # http://localhost:8080  (outra porta: PORT=9000 npm start)
 ## Estrutura de pastas
 
 ```
-├── index.html, style.css     # página do jogo (a Vercel publica a raiz)
-├── js/
-│   ├── core/        # config, main (loop e cena), áudio, setup do KTX2
-│   ├── jogo/        # física do kart, bots, itens, personalização
-│   ├── mundo/       # pistas, cenário, céu, efeitos e pós-processamento
-│   ├── interface/   # telas e menus, garagem, vitrine 3D, logo, HUD
-│   ├── online/      # cliente de rede e telas do modo online
-│   ├── models/      # montagem dos karts e pilotos a partir dos .glb
-│   └── vendor/      # bibliotecas de terceiros (Three.js r128 e loaders)
-├── assets/
-│   ├── models/      # modelos 3D (.glb) + cópias embutidas (*.glb.js / *_glb.js) para abrir via file://
-│   ├── audio/       # sons (embutidos em audio_ogg.js / audio_mp3.js) e créditos
-│   ├── ui/          # imagens dos botões do menu e logo do estúdio
-│   ├── cursores/    # pacote de cursores
-│   ├── tracks/      # imagens de prévia das pistas
-│   └── fonts/       # licença das fontes
-├── server/          # servidor Node (arquivos do jogo + WebSocket do online)
-├── api/             # função da Vercel (hora do deploy para o Patch notes)
-├── deploy/          # scripts para a VM da Oracle Cloud
-├── tools/ktx2/      # ferramentas para comprimir e simplificar modelos 3D
-└── docs/            # este guia e as imagens do manual (README)
+├── public/              # o jogo (é o que a Vercel publica e o que o servidor entrega)
+│   ├── index.html, style.css
+│   ├── js/
+│   │   ├── core/        # config, main (loop e cena), áudio, setup do KTX2
+│   │   ├── jogo/        # física do kart, bots, itens, personalização
+│   │   ├── mundo/       # pistas, cenário, céu, efeitos e pós-processamento
+│   │   ├── interface/   # telas e menus, garagem, vitrine 3D, logo, HUD
+│   │   ├── online/      # cliente de rede e telas do modo online
+│   │   ├── models/      # montagem dos karts e pilotos a partir dos .glb
+│   │   └── vendor/      # bibliotecas de terceiros (Three.js r128 e loaders)
+│   └── assets/
+│       ├── models/      # modelos 3D (.glb) + cópias embutidas (*.glb.js / *_glb.js) para abrir via file://
+│       ├── audio/       # sons (embutidos em audio_ogg.js / audio_mp3.js) e créditos
+│       ├── ui/          # imagens dos botões do menu e logo do estúdio
+│       ├── cursores/    # pacote de cursores
+│       ├── tracks/      # imagens de prévia das pistas
+│       └── fonts/       # licença das fontes
+├── server/              # servidor Node (entrega public/ + WebSocket do online)
+├── api/                 # função da Vercel (hora do deploy para o Patch notes)
+├── deploy/              # scripts para a VM da Oracle Cloud
+├── tools/ktx2/          # ferramentas para comprimir e simplificar modelos 3D
+├── docs/                # este guia e as imagens do manual (README)
+└── .github/             # guia de contribuição e modelos de issue/PR
 ```
 
-Os scripts do jogo são carregados pelo `index.html` na ordem certa (não usam `import`). Para criar um arquivo novo,
-coloque-o na pasta da área dele e adicione a tag `<script>` no `index.html`.
+Na raiz ficam só arquivos que as plataformas procuram lá: `package.json` (Render/npm), `render.yaml` (Render),
+`vercel.json` e `api/` (Vercel) e os arquivos de configuração do git e do editor.
+
+Os scripts do jogo são carregados pelo `public/index.html` na ordem certa (não usam `import`). Para criar um arquivo
+novo, coloque-o na pasta da área dele e adicione a tag `<script>` no `index.html`. Sem servidor, dá para abrir
+`public/index.html` direto no navegador.
 
 ## Publicar no Render
 
 1. Suba esta pasta para um repositório no GitHub (a raiz do repositório é esta pasta, onde ficam
-   `index.html`, `package.json` e `render.yaml`).
+   `package.json`, `render.yaml` e a pasta `public/`).
 2. No Render: **New + > Blueprint**, escolha o repositório e confirme. O `render.yaml` já configura tudo:
    serviço web Node, região Virginia, plano Free, `npm install` / `npm start` e verificação em `/health`.
    (Sem Blueprint: **New + > Web Service**, Runtime Node, Build `npm install`, Start `npm start`.)
@@ -88,7 +94,7 @@ Avisos do plano Free do Render:
    Vercel (opcional). Ele instala Node.js e Caddy, cria o serviço `super-kartec` (reinicia sozinho e sobe
    com a VM), libera 80/443 no firewall da VM e ativa o HTTPS automático.
 6. **Jogar**: `https://kartec.duckdns.org` (ou `http://IP-DA-VM` sem domínio).
-   Com o jogo na Vercel: em `js/core/config.js`, `ONLINE_SERVER: 'wss://kartec.duckdns.org/ws'`.
+   Com o jogo na Vercel: em `public/js/core/config.js`, `ONLINE_SERVER: 'wss://kartec.duckdns.org/ws'`.
 
 **Atualizar**: envie o zip novo, descompacte e rode `sudo bash deploy/update.sh` dentro da pasta.
 
@@ -108,7 +114,7 @@ roda no Render. O atraso das corridas continua dependendo de onde o servidor est
    Em *Environment*, defina `ALLOWED_ORIGINS` com o endereço do jogo na Vercel
    (ex.: `https://meu-jogo.vercel.app`) para só o seu site usar o servidor. Opcional: `SERVE_STATIC=0`
    faz o Render servir só o online.
-2. **No jogo**, em `js/core/config.js`, preencha:
+2. **No jogo**, em `public/js/core/config.js`, preencha:
    `ONLINE_SERVER: 'wss://super-kartec.onrender.com/ws',`
 3. **Vercel**: New Project > importe o repositório > Framework Preset **Other**, sem comando de build,
    diretório de saída `.` (o `vercel.json` já faz isso; o `.vercelignore` deixa o servidor de fora).
@@ -128,7 +134,7 @@ Verificação: `/health` responde `{"ok":true,"rooms":N,"players":M}`.
 ## Texturas KTX2 (menos memória de vídeo)
 
 As texturas dos modelos `.glb` podem ficar em KTX2 (Basis Universal), que continua comprimido dentro da placa de
-vídeo: 4 a 8 vezes menos memória que PNG/JPG. O jogo já sabe ler (`js/vendor/KTX2Loader.js` + `js/core/ktx2-setup.js`);
+vídeo: 4 a 8 vezes menos memória que PNG/JPG. O jogo já sabe ler (`public/js/vendor/KTX2Loader.js` + `public/js/core/ktx2-setup.js`);
 arquivos não convertidos continuam funcionando normalmente.
 
 Para converter todos os `.glb` do jogo (Node.js 18 ou mais novo):
@@ -167,5 +173,5 @@ com outro `--tris`). Ele preserva UV, normais e texturas. Confira o modelo no jo
 o `--tris`. Referência: personagem/item de jogo de kart, 10 a 60 mil triângulos.
 
 Valores usados: Fatecxie 60 mil (era 1,9 milhão), dinossauro 30 mil (era 107 mil), banana 15 mil (era 62 mil).
-A Fatecxie ganha, ao simplificar, as partes marcadas (asas, corpo, semáforo) e a cor da pele, que o `js/interface/ui.js` usa.
+A Fatecxie ganha, ao simplificar, as partes marcadas (asas, corpo, semáforo) e a cor da pele, que o `public/js/interface/ui.js` usa.
 Se gerar o `fatecxie.glb` de outro jeito, rode o simplificador nele mesmo assim (pode ser com `--tris` alto).

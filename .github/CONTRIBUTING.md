@@ -13,7 +13,7 @@ npm start          # http://localhost:8080
 
 O servidor (`server/server.js`) entrega os arquivos do jogo e o WebSocket do modo online no mesmo endereço. Para usar outra porta: `PORT=9000 npm start`.
 
-Mais detalhes (deploy no Render e na Vercel, estrutura do código) estão no [guia técnico](docs/TECNICO.md).
+Mais detalhes (deploy no Render e na Vercel, estrutura do código) estão no [guia técnico](../docs/TECNICO.md).
 
 ## Fluxo de trabalho
 
@@ -37,4 +37,4 @@ Mais detalhes (deploy no Render e na Vercel, estrutura do código) estão no [gu
 
 ## Encontrou um bug?
 
-Abra uma [issue](../../issues/new/choose) usando o modelo de bug. Conte o navegador usado, o que aconteceu e, se der, mande um print.
+Abra uma [issue](https://github.com/Studio-Lumingues/kartec/issues/new/choose) usando o modelo de bug. Conte o navegador usado, o que aconteceu e, se der, mande um print.

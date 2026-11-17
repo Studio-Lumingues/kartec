@@ -26,7 +26,7 @@ const PORT = +process.env.PORT || 8080, HOST = process.env.HOST || '0.0.0.0';
 // Vazio = qualquer site. SERVE_STATIC=0 desliga a entrega dos arquivos do jogo (servidor só de online).
 const ALLOWED = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim().replace(/\/$/, '').toLowerCase()).filter(Boolean);
 const SERVE_STATIC = process.env.SERVE_STATIC !== '0';
-const ROOT = path.resolve(__dirname, '..');
+const ROOT = path.resolve(__dirname, '..', 'public');   // arquivos do jogo
 const PROTOCOL = 1, MAX_PLAYERS = 8, MAX_ROOMS = 200, TRACK_COUNT = 3;
 const FINISH_GRACE_MS = 45000, LOAD_TIMEOUT_MS = 20000, COUNTDOWN_MS = 3600, START_MARGIN_MS = 900;
 const PREVIEW_MS = 16600;   // pré-visualização da pista antes da contagem (mesma duração do showcase do cliente)
@@ -40,7 +40,7 @@ const now = () => Number(process.hrtime.bigint() / 1000n) / 1000;      // ms com
 
 // ---------------------------------------------------------------- HTTP (arquivos do jogo)
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json',
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain' };
+  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.glb': 'model/gltf-binary', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain' };
 const gzCache = new Map();
 const server = http.createServer((req, res) => {
   try {
@@ -60,7 +60,7 @@ const server = http.createServer((req, res) => {
       if (err || !st.isFile()) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('404'); return; }
       const ext = path.extname(file).toLowerCase(), type = MIME[ext] || 'application/octet-stream';
       const etag = '"' + st.size.toString(36) + '-' + st.mtimeMs.toString(36) + '"';
-      const big = /assets\/(audio_|pilot)/.test(url);   // mídia pesada: cache longo (o nome leva ?v= da versão)
+      const big = /assets\/(audio|models)\//.test(url);   // mídia pesada: cache longo (o nome leva ?v= da versão)
       const headers = { 'Content-Type': type, 'ETag': etag, 'Cache-Control': big ? 'public, max-age=86400' : 'no-cache', 'X-Content-Type-Options': 'nosniff' };
       if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); res.end(); return; }
       const gz = /gzip/.test(req.headers['accept-encoding'] || '') && /text|javascript|json|svg|gltf/.test(type);
