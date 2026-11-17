@@ -1313,16 +1313,79 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 #garage.pilotView .gDots { visibility: hidden; }
 
 /* ======================= gráficos recomendados (settings.js) ======================= */
-/* linha no topo da aba Gráficos */
-.recRow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border: 3px solid var(--ink); border-radius: var(--r-md); background: linear-gradient(180deg, #fff7d6, #ffe58a); box-shadow: 0 4px 0 var(--ink); }
-.recTxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.recTxt b { font-weight: 900; font-size: 15px; }
-.recTxt em { font: 400 17px var(--display); font-style: normal; color: var(--red-deep); }
-.recTxt small { font-size: 12px; font-weight: 700; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recRow .ghost { flex: none; padding: 8px 14px; font-size: 13px; }
-/* estrelinha no botão da qualidade recomendada */
-.seg button.rec { position: relative; }
-.seg button.rec::after { content: "★"; position: absolute; top: -9px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--ink); color: var(--ink); font-size: 12px; line-height: 1; }
+/* ---------- aba Gráficos das configurações (settings.js) ----------
+   Qualidade (régua de níveis) em destaque · "Na tela" com chaves · "Ajustes avançados" fechado, em grupos.
+   Controles próprios (.pick / .sw) em vez de .seg: cada opção vira UMA barra segmentada, sem a pilha de botões soltos */
+#setGfx { gap: 14px; grid-template-columns: minmax(0, 1fr); }
+#setGfx > *, .gAdv > *, .gGroup > *, .gQual > * { min-width: 0; }
+#setGfx h3 { margin: 0; font: 400 22px var(--display); letter-spacing: .2px; }
+/* bloco da qualidade */
+.gQual { padding: 14px 14px 12px; border: 3px solid var(--b-ink, #000417); border-radius: 16px; background: rgba(255, 255, 255, .62); box-shadow: 0 5px 0 var(--b-ink, #000417); }
+.gqTop { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.qScale { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.qScale button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 2px 9px; min-width: 0;
+  border: 3px solid var(--b-ink, #000417); border-radius: 12px; background: #fff; box-shadow: 0 4px 0 var(--b-ink, #000417); color: var(--b-ink, #000417);
+  font: 800 13px var(--ui); transition: translate .18s cubic-bezier(.2, .9, .3, 1.15), box-shadow .18s, background .15s; }
+.qScale button span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.qScale button:hover, .qScale button:focus-visible { translate: 0 -2px; box-shadow: 0 6px 0 var(--b-ink, #000417); outline: none; }
+.qScale button.on { background: var(--b-accent, #E8213A); color: #fff; }
+.qScale .bars { display: flex; align-items: flex-end; gap: 2px; height: 20px; }
+.qScale .bars i { display: block; width: 5px; border-radius: 2px; background: currentColor; opacity: .16; }
+.qScale .bars i:nth-child(1) { height: 5px; } .qScale .bars i:nth-child(2) { height: 9px; } .qScale .bars i:nth-child(3) { height: 13px; }
+.qScale .bars i:nth-child(4) { height: 17px; } .qScale .bars i:nth-child(5) { height: 20px; }
+.qScale .bars i.on { opacity: .7; }
+.qScale button.on .bars i.on { opacity: 1; }
+/* estrelinha no nível recomendado */
+.qScale button.rec::before { content: "★"; position: absolute; top: -11px; right: -7px; width: 22px; height: 22px; display: grid; place-items: center;
+  border: 2.5px solid var(--b-ink, #000417); border-radius: 50%; background: var(--gold); color: var(--b-ink, #000417); font-size: 11px; line-height: 1; }
+.gqDesc { margin: 12px 2px 10px; min-height: 2.6em; font: 700 13.5px/1.35 var(--ui); color: var(--b-ink-2, #4b4f63); }
+.gqDesc b { color: var(--b-ink, #000417); }
+.gqRec { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: linear-gradient(180deg, #fff7d6, #ffe89a); border: 2px solid var(--b-ink, #000417); }
+.gqRec .star { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--b-ink, #000417); font-size: 11px; }
+.gqRecTxt { flex: 1; min-width: 0; font: 700 13px var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gqRecTxt b { color: var(--b-accent, #E8213A); font-weight: 900; }
+.gqRecTxt small { font-size: 12px; color: var(--b-ink-2, #4b4f63); }
+.linkBtn { flex: none; padding: 4px 2px; border: 0; background: none; font: 900 13px var(--ui); color: var(--b-ink, #000417); text-decoration: underline; text-underline-offset: 3px; cursor: inherit; }
+.linkBtn:hover, .linkBtn:focus-visible { color: var(--b-accent, #E8213A); outline: none; }
+/* grupos */
+.gGroup { display: grid; gap: 2px; padding: 10px 14px 6px; border: 2px solid rgba(0, 4, 23, .18); border-radius: 14px; background: rgba(255, 255, 255, .45); }
+.gGroup h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 900 12px var(--ui); letter-spacing: 1px; text-transform: uppercase; color: var(--b-ink-2, #4b4f63); }
+.gRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(0, 4, 23, .1); }
+.gGroup h4 + .gRow { border-top: 0; }
+.gLbl { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.gLbl b { font: 800 15px var(--ui); color: var(--b-ink, #000417); }
+.gLbl small { font: 700 12px var(--ui); color: var(--b-ink-2, #4b4f63); }
+/* barra segmentada: um contorno só, opções coladas, a escolhida em vermelho */
+.pick { flex: none; display: inline-flex; padding: 3px; gap: 2px; border: 2.5px solid var(--b-ink, #000417); border-radius: 11px; background: #fff; box-shadow: 0 3px 0 var(--b-ink, #000417); }
+.pick button { padding: 6px 10px; border: 0; border-radius: 7px; background: none; color: var(--b-ink, #000417); font: 800 13px var(--ui); white-space: nowrap; transition: background .15s, color .15s; }
+.pick button:hover, .pick button:focus-visible { background: rgba(0, 4, 23, .08); outline: none; }
+.pick button.on { background: var(--b-accent, #E8213A); color: #fff; }
+.pick.chips { box-shadow: 0 2px 0 var(--b-ink, #000417); }
+.pick.chips button { padding: 4px 10px; font-size: 12px; }
+/* chave liga/desliga */
+.sw { flex: none; position: relative; width: 52px; height: 30px; padding: 0; border: 2.5px solid var(--b-ink, #000417); border-radius: 999px; background: #d9dae2; box-shadow: 0 3px 0 var(--b-ink, #000417); transition: background .2s; }
+.sw i { position: absolute; top: 2px; left: 2px; width: 21px; height: 21px; border-radius: 50%; background: #fff; border: 2.5px solid var(--b-ink, #000417); box-sizing: border-box; transition: translate .22s cubic-bezier(.2, .9, .3, 1.2); }
+.sw.on { background: var(--b-accent, #E8213A); }
+.sw.on i { translate: 22px 0; }
+.sw:focus-visible { outline: 3px solid var(--select); outline-offset: 2px; }
+/* ajustes avançados (abre e fecha) */
+.gAdv { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.gAdv[open] { gap: 12px; }
+.gAdv summary { list-style: none; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 10px; padding: 12px 14px; border: 3px solid var(--b-ink, #000417); border-radius: 14px; background: #fff; box-shadow: 0 4px 0 var(--b-ink, #000417); cursor: inherit; }
+.gAdv summary::-webkit-details-marker { display: none; }
+.gAdv summary span { font: 400 18px var(--display); }
+.gAdv summary small { grid-column: 1; font: 700 12px var(--ui); color: var(--b-ink-2, #4b4f63); }
+.gAdv summary .chev { grid-column: 2; grid-row: 1 / span 2; width: 12px; height: 12px; border-right: 3px solid var(--b-ink, #000417); border-bottom: 3px solid var(--b-ink, #000417); rotate: 45deg; translate: 0 -3px; transition: rotate .2s; }
+.gAdv[open] summary .chev { rotate: -135deg; translate: 0 3px; }
+.gAdv summary:hover, .gAdv summary:focus-visible { background: #fff7d6; outline: none; }
+@media (max-width: 560px) {
+  .gRow { flex-direction: column; align-items: stretch; gap: 6px; }
+  .gRow .sw { align-self: flex-end; margin-top: -30px; }
+  .pick { display: flex; width: 100%; box-sizing: border-box; } .pick button { flex: 1 1 0; min-width: 0; padding: 6px 2px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+  .gqTop .pick.chips { width: auto; } .gqRec { flex-wrap: wrap; } .gqRecTxt { flex: 1 1 calc(100% - 34px); white-space: normal; } .gqRec .linkBtn { margin-left: 30px; }
+  .qScale { gap: 4px; } .qScale button { padding: 8px 1px 7px; font-size: 10.5px; letter-spacing: -.2px; } .qScale .bars i { width: 4px; }
+
+}
 
 /* pergunta da 1ª visita (modal #recModal): tudo centralizado numa coluna só
    ícone · título · frase · régua com os 5 níveis (recomendado em amarelo, atual marcado) · placa · 2 botões iguais */
