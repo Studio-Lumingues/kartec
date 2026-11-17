@@ -282,34 +282,34 @@
         '<div class="pick" data-g="' + id + '" role="radiogroup" aria-label="' + label + '">' + items.map(([v, t]) => '<button type="button" data-v="' + v + '" role="radio">' + t + '</button>').join('') + '</div></div>';
       const tog = (id, label, hint) => '<div class="gRow"><div class="gLbl"><b>' + label + '</b>' + (hint ? '<small>' + hint + '</small>' : '') + '</div>' +
         '<button type="button" class="sw" data-g="' + id + '" role="switch" aria-label="' + label + '"><i></i></button></div>';
-      const group = (title, icon, rows) => '<section class="gGroup"><h4><span aria-hidden="true">' + icon + '</span>' + title + '</h4>' + rows + '</section>';
+      const group = (title, rows) => '<section class="gGroup"><h4>' + title + '</h4>' + rows + '</section>';
       const level = (t, i) => '<button type="button" data-v="' + t + '" role="radio"><b class="bars" aria-hidden="true">' +
-        TIERS.map((_, j) => '<i class="' + (j <= i ? 'on' : '') + '"></i>').join('') + '</b><span>' + TIER_NAME[t] + '</span></button>';
+        TIERS.map((_, j) => '<i class="' + (j <= i ? 'on' : '') + '"></i>').join('') + '</b><span>' + TIER_NAME[t] + '</span><em class="recTag">recomendado</em></button>';
       let advOpen = false; try { advOpen = localStorage.getItem(CFG.STORAGE + ':advOpen') === '1'; } catch (e) { }
       $('setGfx').innerHTML =
         '<section class="gQual">' +
           '<div class="gqTop"><h3>Qualidade</h3><div class="pick chips" data-g="preset" role="radiogroup" aria-label="Modo"><button type="button" data-v="auto" role="radio">Automática</button></div></div>' +
           '<div class="qScale" data-g="preset" role="radiogroup" aria-label="Qualidade">' + TIERS.map(level).join('') + '</div>' +
           '<p id="gqDesc" class="gqDesc"></p>' +
-          '<div class="gqRec"><span class="star" aria-hidden="true">★</span><span class="gqRecTxt">Recomendado para esta máquina: <b id="recName"></b><small id="recGpu"></small></span>' +
+          '<div class="gqRec"><span class="gqRecTxt">Recomendado para esta máquina: <b id="recName"></b><small id="recGpu"></small></span>' +
             '<button type="button" id="recAgain" class="linkBtn">Detectar de novo</button></div>' +
         '</section>' +
-        group('Na tela', '🎥', tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS')) +
+        group('Na tela', tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS')) +
         '<details class="gAdv"' + (advOpen ? ' open' : '') + '><summary><span>Ajustes avançados</span><small>Para quem quer mexer em cada detalhe</small><i class="chev" aria-hidden="true"></i></summary>' +
-          group('Desempenho', '⚡',
+          group('Desempenho',
             opt('res', 'Resolução', [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%'], ['1.5', '150%'], ['2', 'Máx.']], 'O que mais pesa: menor = mais FPS') +
             opt('fpsCap', 'Limite de FPS', [['30', '30'], ['60', '60'], ['0', 'Livre']], 'Limitar esquenta menos e poupa bateria')) +
-          group('Luz e efeitos', '☀️',
+          group('Luz e efeitos',
             opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']]) +
             opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Brilho, raios de sol e sombra de contato') +
             tog('dof', 'Desfoque de distância', 'Só com o pós-efeito Completo') +
             opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo']], 'O reflexo pesa perto do rio')) +
-          group('Mundo', '🌲',
+          group('Mundo',
             opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Vale na próxima corrida') +
             opt('scenery', 'Cenário', [['min', 'Mínimo'], ['low', 'Leve'], ['medium', 'Médio'], ['high', 'Cheio'], ['ultra', 'Ultra']], 'Árvores até o horizonte · próxima corrida') +
             opt('view', 'Distância de visão', [['veryNear', 'Mín.'], ['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
             opt('particles', 'Partículas', [['min', 'Mínimas'], ['low', 'Poucas'], ['normal', 'Normais']], 'Fumaça, poeira e faíscas')) +
-          group('Texturas', '🎨',
+          group('Texturas',
             opt('textures', 'Texturas', [['flat', 'Cor lisa'], ['full', 'Detalhadas']], 'Cor lisa é o mais leve · próxima corrida') +
             opt('texRes', 'Qualidade dos modelos 3D', [['512', '512'], ['1024', '1K'], ['2048', '2K'], ['max', 'Original']], 'Memória de vídeo · vale ao recarregar (F5)')) +
         '</details>';
@@ -372,12 +372,11 @@
         // régua: Massinha ... Ultra, barrinhas crescendo; recomendado em amarelo, atual com a etiqueta "agora"
         $('recScale').innerHTML = TIERS.map((t, i) => '<li class="' + (t === r.preset ? 'rec ' : '') + (t === now ? 'now' : '') + '"' +
           (t === r.preset ? ' aria-current="true"' : '') + '><b class="bars" aria-hidden="true">' + TIERS.map((_, j) => '<i class="' + (j <= i ? 'on' : '') + '"></i>').join('') +
-          '</b><span>' + TIER_NAME[t] + '</span></li>').join('');
+          '</b><span>' + TIER_NAME[t] + '</span>' + (t === r.preset ? '<em class="recTag">recomendado</em>' : '') + '</li>').join('');
         // placa (quando o navegador conta qual é) e a qualidade atual quando ela não está na régua (Automática/Personalizada)
         const gpu = this.gpuName();
-        $('recMeta').innerHTML = '<span><span class="ic" data-ic="monitor"></span>' + esc(gpu || 'Teste rápido de desempenho') + '</span>' +
+        $('recMeta').innerHTML = '<span>' + esc(gpu ? 'Placa: ' + gpu : 'Medido com um teste rápido') + '</span>' +
           (TIERS.includes(now) ? '' : '<span>Agora: ' + esc(TIER_NAME[now] || now) + '</span>');
-        if (window.Icon && Icon.hydrate) try { Icon.hydrate($('recMeta')); } catch (e) { }
         let done = false;
         const answer = yes => {
           if (done) return; done = true; removeEventListener('keydown', onKey, true); hid.disconnect();
@@ -387,7 +386,7 @@
           this.save();
           if (yes) { this.apply(); this.sync(); }
           if (UI.modal === 'recModal') UI.closeModal();
-          if (UI.toast) UI.toast(yes ? 'Gráficos: qualidade ' + TIER_NAME[r.preset] + ' ✓' : 'Tudo bem! Dá para mudar em Configurações › Gráficos', 2600);
+          if (UI.toast) UI.toast(yes ? 'Gráficos: qualidade ' + TIER_NAME[r.preset] : 'Tudo bem! Dá para mudar em Configurações › Gráficos', 2600);
           if (yes && this.s.gfx.texRes !== texBefore && UI.toast) setTimeout(() => UI.toast('As texturas 3D mudam ao recarregar o jogo (F5)', 2600), 2700);
         };
         const onKey = e => { if (UI.modal !== 'recModal') return;
