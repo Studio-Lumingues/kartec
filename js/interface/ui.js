@@ -14,7 +14,7 @@
 
   // ================================ FATECXIE ================================
   // A fadinha que traz o semáforo na largada, presa à câmera como o "juiz" voador dos jogos de kart.
-  // Modelo 3D: js/models/entidades/fatecxie.glb (fadinha + semáforo na mão, numa malha só, compactada com meshopt).
+  // Modelo 3D: assets/models/fatecxie.glb (fadinha + semáforo na mão, numa malha só, compactada com meshopt).
   // * Carrega em segundo plano logo depois que a página abre (o arquivo é grande).
   // * Ao carregar, as asas são separadas do corpo (pela forma e pela cor da textura) em duas malhas que giram num
   //   pivô no centro do corpo. Nada é copiado: corpo e asas usam os MESMOS atributos, só o índice muda.
@@ -29,7 +29,7 @@
   };
   // valores-padrão (o config.js pode trocar qualquer um em CFG.FAIRY)
   const FAIRY_DEF = {
-    MODEL: 'js/models/entidades/fatecxie.glb', SCALE: 3.4, POS: [1.2, 2.4, -7], ROT_Y: -Math.PI / 2 + 0.15, GLOW: 0.45,
+    MODEL: 'assets/models/fatecxie.glb', SCALE: 3.4, POS: [1.2, 2.4, -7], ROT_Y: -Math.PI / 2 + 0.15, GLOW: 0.45,
     LAMPS: [[0.134, -0.166, 0.3339], [0.135, -0.2801, 0.339], [0.134, -0.4082, 0.3374]], LAMP_R: 0.041,
     BODY: { CENTER: [-0.047, 0.178, -0.012], RADIUS: 0.1385 },
     WINGS: { HZ: 12, YAW: 0.55, ROLL: 0.32, OPACITY: 0.9, BLUR: 3, SHUTTER: 0.85 },
@@ -49,7 +49,7 @@
     DIM: [0x4a1212, 0x4a3c10, 0x12401a], ON: [0xff2a2a, 0xffd21a, 0x3dff5a],
     // baixa e prepara o modelo uma vez só (a promessa é reaproveitada). Status em Fairy.status.
     // * Página aberta direto do disco (file://): o navegador bloqueia ler o .glb, então o modelo vem da cópia
-    //   embutida em script (js/models/entidades/fatecxie.glb.js), que funciona sem servidor.
+    //   embutida em script (assets/models/fatecxie.glb.js), que funciona sem servidor.
     // * Em servidor (npm start, Vercel, Render): lê o .glb (mais leve); se falhar, usa a cópia embutida.
     // * Carrega sozinho o decodificador meshopt se o index.html não tiver a tag.
     preload() {
@@ -64,7 +64,7 @@
           e => { console.warn('[Fatecxie] não abriu ' + urls[i]); tryUrls(urls, i + 1).then(res, rej); });
       });
       const fromEmbedded = () => this.embedded().then(buf => new Promise((res, rej) => {
-        if (!buf) return rej(new Error('cópia embutida js/models/entidades/fatecxie.glb.js não encontrada'));
+        if (!buf) return rej(new Error('cópia embutida assets/models/fatecxie.glb.js não encontrada'));
         mkLoader().parse(buf, '', g => { this.url = 'fatecxie.glb.js (embutido)'; res(g); }, rej);
       }));
       const local = location.protocol === 'file:';
@@ -82,12 +82,12 @@
         window.FATECXIE_GLB_B64 = null; return u8.buffer; };                 // libera a string (é grande)
       if (window.FATECXIE_GLB_B64) return Promise.resolve(decode());
       const add = src => new Promise(res => { const sc = document.createElement('script'); sc.src = src; sc.onload = sc.onerror = () => res(!!window.FATECXIE_GLB_B64); document.head.appendChild(sc); });
-      return add('js/models/entidades/fatecxie.glb.js').then(ok => ok || add('js/models/entidades/fatecxie/fatecxie.glb.js')).then(() => decode());
+      return add('assets/models/fatecxie.glb.js').then(() => decode());
     },
     candidates() {
       const m = fc().MODEL, list = [m];
       if (!/\.glb$/i.test(m)) list.push(m + '.glb');
-      ['js/models/entidades/fatecxie.glb', 'js/models/entidades/fatecxie', 'js/models/entidades/fatecxie/fatecxie.glb', 'js/models/entidades/fatecxie/scene.glb', 'js/models/entidades/fatecxie.gltf']
+      ['assets/models/fatecxie.glb']
         .forEach(u => { if (list.indexOf(u) < 0) list.push(u); });
       return list;
     },

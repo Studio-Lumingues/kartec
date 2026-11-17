@@ -287,7 +287,7 @@
     _far(x, y, z) { const c = this.cam; if (!c) return false; const e = c.matrixWorld.elements, dx = x - e[12], dy = y - e[13], dz = z - e[14], d2 = dx * dx + dy * dy + dz * dz;
       return d2 > 12100 || (d2 > 225 && dx * e[8] + dy * e[9] + dz * e[10] > 15); },
     _next(k) { const s = this.S && this.S[k]; if (!s) return null; const p = s.list[s.i]; s.i = (s.i + 1) % s.list.length; return p; },
-    // fumaça (js/smoke.js) ou brilho somado. Mesma assinatura de sempre.
+    // fumaça (js/mundo/smoke.js) ou brilho somado. Mesma assinatura de sempre.
     puff(kind, x, y, z, vx, vy, vz, col, s0, s1, life, op, up) {
       if ((this.rate < 1 && Math.random() > this.rate) || this._far(x, y, z)) return;
       if (kind === 'smoke') { if (window.Smoke) Smoke.puff({ x, y, z, vx, vy, vz, tint: col, size: s0, grow: s1 / Math.max(0.05, s0), life, opacity: Math.min(1, op * 1.6), up: up || 0 }); return; }

@@ -980,7 +980,7 @@
       this.renderer = renderer; ENC = renderer.outputEncoding; SRGB = ENC === THREE.sRGBEncoding; ANISO = (window.TX && TX.aniso) || 4;
       const sc = this.scene = new THREE.Scene();
       this.cam = new THREE.PerspectiveCamera(36, innerWidth / innerHeight, 1, 1800);
-      // CÉU, NUVENS, SOL e LUA: os mesmos shaders da corrida (js/sky.js) + névoa na cor do horizonte (igual à pista)
+      // CÉU, NUVENS, SOL e LUA: os mesmos shaders da corrida (js/mundo/sky.js) + névoa na cor do horizonte (igual à pista)
       sc.background = new THREE.Color(0xcdf3ff); sc.fog = new THREE.Fog(0xcdf3ff, 260, 900);
       this.sky = window.SkyKit ? SkyKit.build(sc, Math.min(1, this.cam.far * 0.85 / 1400)) : null;
       this.dayT = GAR.DAY_START; this.nightF = 0; this.SUNDIR = new THREE.Vector3(0.4, 0.7, 0.3).normalize();

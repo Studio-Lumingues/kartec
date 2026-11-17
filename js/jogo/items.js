@@ -6,7 +6,7 @@
 //  * Cada piloto (você e os bots) segura 1 item por vez. Você usa com a tecla E (ou tocando no ícone do HUD).
 //  * BANANA: cai atrás do kart. Quem pisar dá um giro de 360°, para e demora um pouquinho para voltar a correr.
 //  * DINOSSAURO: turbo. Quem usa ganha um empurrão de velocidade por alguns segundos.
-//  * Modelos: js/models/entidades/banana.glb e dinossauro.glb (carregados uma vez, clonados a cada uso;
+//  * Modelos: assets/models/banana.glb e dinossauro.glb (carregados uma vez, clonados a cada uso;
 //    enquanto não carregam, uma forma simples faz o papel deles).
 //  * Só no jogo offline por enquanto (no online o servidor precisaria sincronizar os itens).
 //
@@ -30,7 +30,7 @@
     // animação do giro: pulinho (m), tempo no ar (s), quique (m), amassada, inclinação para fora, tremidinha, balanço no fim (rad)
     ANIM: { HOP: 0.55, HOP_T: 0.32, BOUNCE: 0.14, SQUASH: 0.2, LEAN: 0.2, WOBBLE: 0.28, SETTLE: 0.3 },
     BLUR: { GHOSTS: 7, OPACITY: 0.5, SHUTTER: 1.3 },   // motion blur do giro: cópias transparentes; opacidade da 1ª; comprimento do rastro (1 = um quadro de movimento)
-    SMOKE: { RATE: 18, SIZE: 0.9, LIFE: 0.85, BURST: 8 },   // fumaça do giro (usa js/smoke.js): nuvens por segundo no giro mais rápido; tamanho (m); duração (s); nuvens do estouro inicial
+    SMOKE: { RATE: 18, SIZE: 0.9, LIFE: 0.85, BURST: 8 },   // fumaça do giro (usa js/mundo/smoke.js): nuvens por segundo no giro mais rápido; tamanho (m); duração (s); nuvens do estouro inicial
     DINO: { SIZE: 2.6, BOOST: 2.2 },            // BOOST: duração do turbo do dinossauro (s)
     // BAZUCA: foguete teleguiado para quem está logo à frente na corrida (como o casco vermelho do Mario Kart).
     //  SPEED: velocidade do foguete (m/s; o kart anda a ~94); FUEL: segundos de combustível — se não alcançar, estoura no ar;
@@ -47,7 +47,7 @@
     ICON_VIEW: { banana: 0.5, dino: -0.9, rocket: -0.6, brick: 0.6, shield: 0 },   // giro (rad) de cada modelo na foto do ícone do HUD
     NAMES: { banana: 'Banana', dino: 'Dinossauro', rocket: 'Bazuca', brick: 'Tijolo', shield: 'Escudo' },
     KINDS: ['banana', 'dino', 'rocket', 'brick', 'shield'],
-    MODELS: { banana: 'js/models/entidades/banana.glb', dino: 'js/models/entidades/dinossauro.glb' }
+    MODELS: { banana: 'assets/models/banana.glb', dino: 'assets/models/dinossauro.glb' }
   };
   const C = ITEMS_CFG;
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -171,9 +171,9 @@
     // a corrida já começou e o modelo chegou agora: entra no grupo de aquecimento e compila na hora (antes de alguém usar)
     const I = window.Items; if (I && I._warm && I._warm.parent) { try { const m = tpl[k].clone(true); m.visible = false; I._warm.add(m); if (window.Game && Game.precompile && Game.scene) Game.precompile(Game.scene); } catch (e) { } } }
 
-  // versão embutida (js/models/entidades/*.glb.js): funciona mesmo abrindo o jogo direto do arquivo (file://),
+  // versão embutida (assets/models/*.glb.js): funciona mesmo abrindo o jogo direto do arquivo (file://),
   // onde o navegador bloqueia a leitura do .glb
-  const EMBED = { banana: 'js/models/entidades/banana.glb.js', dino: 'js/models/entidades/dinossauro.glb.js' };
+  const EMBED = { banana: 'assets/models/banana.glb.js', dino: 'assets/models/dinossauro.glb.js' };
   function b64ToBuf(s) { const bin = atob(s), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
   function loadEmbedded(k, size) {
     const done = () => {
@@ -519,7 +519,7 @@
   function clearGhosts(k) { const G = k._ghosts; if (!G) return; G.list.forEach(g => g.parent && g.parent.remove(g)); G.mats.forEach(m => m.dispose()); k._ghosts = null; }
   const spinning = new Set();
 
-  // ---------- fumaça do giro (js/smoke.js) ----------
+  // ---------- fumaça do giro (js/mundo/smoke.js) ----------
   function fxInit() { }   // a fumaça é iniciada pelo Fx.init (kart.js), junto com o resto das partículas
   function puff(x, y, z, vx, vy, vz, size, life) {
     if (window.Smoke) Smoke.puff({ x, y, z, vx, vy, vz, size, life: life || C.SMOKE.LIFE });

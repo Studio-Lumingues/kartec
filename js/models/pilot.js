@@ -1,5 +1,5 @@
 // =====================================================================================
-// models/pilot.js — pilotos 3D: Menino e Menina (assets/menino.glb e assets/menina.glb)
+// models/pilot.js — pilotos 3D: Menino e Menina (assets/models/menino.glb e assets/models/menina.glb)
 //
 // Os arquivos vêm em pose T e SEM esqueleto. Ao carregar, cada personagem ganha um esqueleto de 18 ossos
 // (+ 2 nas marias-chiquinhas da menina) montado sobre as medidas da própria malha (ombro, cotovelo, punho,

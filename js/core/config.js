@@ -22,11 +22,11 @@ window.CFG = {
   FONT_UI: '"Nunito", "Trebuchet MS", Verdana, sans-serif',
   // desempenho: resolução adaptativa (baixa sozinha se o quadro passar de ~20 ms)
   PERF: { DPR_MAX: 1.5, DPR_MIN: 0.7, SHADOW_MAP: 2048, SHADOW_BOX: 95 },
-  // acabamento da imagem na corrida (js/postfx.js), sempre no estilo cartoon. POSTFX: false desliga tudo.
+  // acabamento da imagem na corrida (js/mundo/postfx.js), sempre no estilo cartoon. POSTFX: false desliga tudo.
   // AO = sombra de contato nos cantos; INK = contorno leve; BLOOM = brilho nas luzes; SAT = saturação (1 = original); CONTRAST; VIGNETTE = cantos da tela
   // SCATTER = luz do sol na névoa (0 desliga); RAYS = raios de sol (0 desliga); SHARPEN = nitidez depois do FXAA (0 desliga)
   // DOF = força da profundidade de campo (0 desliga; 1 = lente abaixo; 2 = o dobro do desfoque)
-  // DOF_LENS = lente virtual da profundidade de campo (js/postfx.js). Desfoque do fundo distante ~ FOCAL_MM² / FSTOP:
+  // DOF_LENS = lente virtual da profundidade de campo (js/mundo/postfx.js). Desfoque do fundo distante ~ FOCAL_MM² / FSTOP:
   //   FSTOP: abertura f/N (menor = mais desfoque; 1.8 forte, 2.8 cinematográfico, 4 suave, 5.6 quase nada)
   //   FOCAL_MM: distância focal da lente virtual (85 = retrato/cinema; não muda o enquadramento, só o desfoque)
   //   SENSOR_MM: altura do sensor (24 = full frame); FOCUS_RANGE: metros nítidos atrás do kart antes de começar a desfocar
@@ -47,7 +47,7 @@ window.CFG = {
   // e separar as asas). WINGS: HZ = batidas por segundo; YAW/ROLL = amplitude (rad); BLUR = rastros do desfoque
   // de movimento (celular usa no máximo 1); SHUTTER = fração do quadro "exposta" no desfoque.
   FAIRY: {
-    MODEL: 'js/models/entidades/fatecxie.glb',
+    MODEL: 'assets/models/fatecxie.glb',
     SCALE: 3.4, POS: [1.2, 2.4, -7], ROT_Y: -Math.PI / 2 + 0.15, GLOW: 0.45,
     LAMPS: [[0.134, -0.166, 0.3339], [0.135, -0.2801, 0.339], [0.134, -0.4082, 0.3374]], LAMP_R: 0.041,
     BODY: { CENTER: [-0.047, 0.178, -0.012], RADIUS: 0.1385 },

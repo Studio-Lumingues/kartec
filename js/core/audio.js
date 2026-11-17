@@ -60,8 +60,8 @@
       const fmt = ogg ? 'ogg' : 'mp3'; this.fmt = fmt;
       const go = () => this.decodeAll();
       if (window.KARTEC_AUDIO) { go(); return; }
-      const s = document.createElement('script'); s.src = 'assets/audio_' + fmt + '.js?v=202610290007'; s.async = true; s.onload = go;
-      s.onerror = () => { console.warn('[som] não foi possível carregar assets/audio_' + fmt + '.js'); }; document.head.appendChild(s);
+      const s = document.createElement('script'); s.src = 'assets/audio/audio_' + fmt + '.js?v=202610290007'; s.async = true; s.onload = go;
+      s.onerror = () => { console.warn('[som] não foi possível carregar assets/audio/audio_' + fmt + '.js'); }; document.head.appendChild(s);
     },
     async decodeAll() {
       const A = this.ctx, src = window.KARTEC_AUDIO || {};
