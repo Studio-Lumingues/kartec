@@ -1324,20 +1324,26 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .seg button.rec { position: relative; }
 .seg button.rec::after { content: "★"; position: absolute; top: -9px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--ink); color: var(--ink); font-size: 12px; line-height: 1; }
 
-/* aviso da 1ª visita, no canto inferior direito do menu */
-#recCard { position: fixed; right: 22px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); z-index: 30; display: flex; align-items: center; gap: 14px; max-width: min(460px, calc(100vw - 32px));
-  padding: 14px 16px; border: var(--line); border-radius: var(--r-lg); background: var(--white); box-shadow: var(--shadow); color: var(--ink); font-family: var(--ui);
-  animation: recIn .55s cubic-bezier(.2, 1.4, .4, 1) both; }
-#recCard.out { animation: recOut .3s ease-in both; }
-#recCard .rcIc { flex: none; width: 56px; height: 56px; display: grid; place-items: center; font-size: 30px; border: 3px solid var(--ink); border-radius: 50%; background: linear-gradient(180deg, #fff6a8, var(--gold)); box-shadow: 0 3px 0 var(--ink); }
-#recCard .rcTxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-#recCard .rcTxt small { font-size: 12px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .4px; }
-#recCard .rcTxt b { font: 400 24px var(--display); line-height: 1.1; }
-#recCard .rcTxt span { font-size: 12px; font-weight: 700; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#recCard .rcBtns { flex: none; display: flex; flex-direction: column; gap: 6px; }
-#recCard button { padding: 7px 14px; border: 3px solid var(--ink); border-radius: 999px; font: 800 14px var(--ui); color: var(--ink); background: var(--mist); box-shadow: 0 3px 0 var(--ink); cursor: inherit; transition: transform .1s; }
-#recCard button:hover { transform: translateY(-2px); }
-#recCard .rcOk { background: linear-gradient(180deg, #ff8fa3 0%, var(--red) 45%, var(--red-deep) 100%); color: var(--white); text-shadow: 0 2px 0 var(--ink); }
-@keyframes recIn { from { opacity: 0; transform: translateY(40px) scale(.9); } to { opacity: 1; transform: none; } }
-@keyframes recOut { to { opacity: 0; transform: translateY(30px) scale(.95); } }
-@media (max-width: 560px) { #recCard { left: 16px; right: 16px; max-width: none; } #recCard .rcIc { width: 44px; height: 44px; font-size: 24px; } }
+/* pergunta da 1ª visita (modal #recModal) */
+.recSheet { text-align: center; padding-top: 26px; }
+.recSheet .recIc { width: 84px; height: 84px; margin: 0 auto 8px; display: grid; place-items: center; font-size: 44px; border: var(--line); border-radius: 50%; background: linear-gradient(180deg, #fff6a8, var(--gold)); box-shadow: 0 5px 0 var(--ink); animation: recBounce 1.8s ease-in-out infinite; }
+.recSheet .recEyebrow { margin: 0; font-size: 13px; font-weight: 900; letter-spacing: .6px; text-transform: uppercase; color: var(--ink-2); }
+.recSheet h2 { margin: 2px 0 8px; font: 400 30px var(--display); line-height: 1.1; }
+.recSheet .recLead { margin: 0 auto 6px; max-width: 400px; font-size: 16px; font-weight: 700; line-height: 1.4; }
+.recSheet .recLead b { font: 400 18px var(--display); color: var(--red-deep); }
+.recSheet .recGpuLine { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 4px 12px; border-radius: 999px; background: var(--mist); border: 2px solid var(--ink); font-size: 12px; font-weight: 800; color: var(--ink-2); max-width: 100%; }
+.recSheet .recGpuLine #recQGpu { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recSheet .recGpuLine .ic { width: 14px; height: 14px; flex: none; }
+.recCompare { display: flex; align-items: stretch; justify-content: center; gap: 10px; margin: 0 0 16px; }
+.recCompare > div { flex: 1; max-width: 170px; padding: 8px 10px; border: 3px solid var(--ink); border-radius: var(--r-md); background: var(--mist); box-shadow: 0 4px 0 var(--ink); display: flex; flex-direction: column; gap: 1px; }
+.recCompare > div.on { background: linear-gradient(180deg, #fff7d6, #ffe58a); }
+.recCompare small { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-2); }
+.recCompare b { font: 400 20px var(--display); }
+.recCompare > span { align-self: center; font: 400 26px var(--display); }
+.recSheet .actions { justify-content: center; flex-wrap: nowrap; }
+.recSheet .cta { flex: 0 1 auto; min-width: 0; font-size: 24px; padding: 10px 24px 12px; }
+.recSheet .ghost { flex: none; }
+.recSheet .recFoot { margin: 12px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-2); }
+@keyframes recBounce { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
+@media (prefers-reduced-motion: reduce) { .recSheet .recIc { animation: none; } }
+@media (max-width: 520px) { .recSheet h2 { font-size: 24px; } .recCompare b { font-size: 17px; } }

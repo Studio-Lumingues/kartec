@@ -29,8 +29,9 @@
 
   // =====================================================================================
   // GRÁFICOS RECOMENDADOS: na 1ª vez que a pessoa abre o jogo, ele olha a máquina e escolhe a predefinição que deve
-  // rodar liso nela. O resultado fica salvo no localStorage (junto das configurações, em "rec") e não roda de novo,
-  // a não ser pelo botão "Detectar de novo" nas configurações.
+  // rodar liso nela. Quando o menu aparece, o jogo PERGUNTA se a pessoa quer usar essa qualidade (recAsk); nada muda
+  // sem o "sim". A detecção e a resposta ficam salvas no localStorage (junto das configurações, em "rec") e a pergunta
+  // não volta, a não ser pelo botão "Detectar de novo" nas configurações.
   //  1) placa de vídeo pelo nome (WEBGL_debug_renderer_info) -> nível conhecido (0 = Massinha ... 4 = Ultra)
   //  2) teste rápido da placa (~0,3 s): um shader pesado numa tela escondida, medindo quanto ele demora
   //  3) limites do aparelho: celular, poucos núcleos ou pouca memória seguram o nível
@@ -38,7 +39,7 @@
   // =====================================================================================
   const TIERS = ['massinha', 'low', 'medium', 'high', 'ultra'];
   const TIER_NAME = { massinha: 'Massinha', low: 'Baixa', medium: 'Média', high: 'Alta', ultra: 'Ultra', auto: 'Automática', custom: 'Personalizada' };
-  const REC_VERSION = 1;
+  const REC_VERSION = 2;   // 2: pergunta antes de aplicar (a 1 aplicava sozinha); quem tinha a 1 é perguntado uma vez
   // nível pelo nome da placa (do mais forte para o mais fraco; a 1ª regra que bater vale)
   const GPU_RULES = [
     [/swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic|mesa offscreen/i, 0],
@@ -116,7 +117,7 @@
       if (inf.screen > 8 && tier === 4) tier = 3;                   // tela 4K: o Ultra (resolução máxima) pesa demais
       tier = Math.max(0, Math.min(4, tier));
       return { v: REC_VERSION, preset: TIERS[tier], tier, gpu: g.gpu, bench: g.bench, nameTier: byName, benchTier: byBench,
-        mobile: inf.mobile, cores: inf.cores, mem: inf.mem, why: why.join(', '), at: new Date().toISOString(), auto: true, shown: false };
+        mobile: inf.mobile, cores: inf.cores, mem: inf.mem, why: why.join(', '), at: new Date().toISOString(), answer: null, auto: false };
     }
   };
   window.HwDetect = HwDetect;
@@ -129,13 +130,11 @@
     load() {
       let saved = null; try { saved = JSON.parse(localStorage.getItem(KEY()) || 'null'); } catch (e) { }
       this.s = { vol: Object.assign({}, DEF.vol, saved && saved.vol), gfx: Object.assign({}, DEF.gfx, saved && saved.gfx), rec: (saved && saved.rec) || null };
-      // 1ª vez (ou recomendação de uma versão antiga): detecta a máquina. Quem nunca mexeu nos gráficos (ou ainda
-      // estava no "Automática" padrão) recebe a recomendação; quem já escolheu uma qualidade continua com a dele.
+      // 1ª vez (ou recomendação de uma versão antiga): detecta a máquina, mas NÃO aplica: a pergunta aparece no menu.
+      // Se a qualidade atual já é a recomendada, não há o que perguntar.
       if (!this.s.rec || this.s.rec.v !== REC_VERSION) {
-        const rec = HwDetect.run(), untouched = !saved || !saved.gfx || saved.gfx.preset === 'auto';
-        rec.auto = untouched;
-        if (untouched) { Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset; }
-        else rec.shown = true;                                       // já tinha escolhido: não mostra o aviso
+        const rec = HwDetect.run();
+        if (this.s.gfx.preset === rec.preset) { rec.answer = 'same'; rec.auto = true; }
         this.s.rec = rec; this.save();
         console.info('[gráficos] recomendado: ' + rec.preset + ' (' + rec.why + ') · placa: ' + (rec.gpu || '?') + ' · teste: ' + rec.bench);
       }
@@ -146,7 +145,7 @@
     gpuName() { const r = this.rec(); return r ? prettyGpu(r.gpu) : ''; },
     // "Detectar de novo" (configurações): roda o teste e aplica a recomendação
     redetect() {
-      const rec = HwDetect.run(); rec.shown = true; this.s.rec = rec;
+      const rec = HwDetect.run(); rec.answer = 'yes'; rec.auto = true; this.s.rec = rec;
       Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset;
       this.save(); this.apply(); this.sync();
       if (window.UI && UI.toast) UI.toast('Recomendado para esta máquina: ' + TIER_NAME[rec.preset], 2600);
@@ -304,7 +303,7 @@
         if (rec) { Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset; rec.auto = true; }
         this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
       $('recAgain').addEventListener('click', () => this.redetect());
-      this.recCard();
+      this.recAsk();
       $('btnSettings').addEventListener('click', () => this.open());
       $('setBtn').addEventListener('click', () => this.open());
 
@@ -324,24 +323,44 @@
       const ps = $('setGfx').querySelector('[data-g="preset"]');
       if (ps) ps.querySelectorAll('button').forEach(b => b.classList.toggle('rec', !!r && b.dataset.v === r.preset));
     },
-    // aviso da 1ª visita: aparece quando o menu principal surge pela primeira vez, com a qualidade já aplicada
-    recCard() {
-      const r = this.rec(); if (!r || r.shown) return;
-      const show = () => {
-        if (document.getElementById('recCard')) return;
-        const el = document.createElement('div'); el.id = 'recCard'; el.setAttribute('role', 'status');
-        el.innerHTML = '<div class="rcIc" aria-hidden="true">' + ['🐢', '🚗', '🏎️', '🚀', '🔥'][r.tier] + '</div>' +
-          '<div class="rcTxt"><small>Ajustado para a sua máquina</small><b>Qualidade ' + TIER_NAME[r.preset] + '</b>' +
-          '<span>' + this.gpuName() + '</span></div>' +
-          '<div class="rcBtns"><button type="button" class="rcOk">Beleza!</button><button type="button" class="rcEdit">Mudar</button></div>';
-        document.body.appendChild(el);
-        const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 350); clearTimeout(t); };
-        const t = setTimeout(close, 12000);
-        el.querySelector('.rcOk').addEventListener('click', close);
-        el.querySelector('.rcEdit').addEventListener('click', () => { close(); this.open(); this.tab('gfx'); });
-        r.shown = true; this.save();
+    // pergunta da 1ª visita: quando o menu principal aparece, "Quer usar os gráficos recomendados?"
+    //  Usar recomendado (ou Enter) -> aplica e salva | Agora não (ou Esc / clicar fora) -> mantém como está e salva
+    // A pergunta só deixa de aparecer depois de uma resposta: se fechar a aba antes, ela volta na próxima vez.
+    recAsk() {
+      const r = this.rec(); if (!r || r.answer) return;
+      const m = $('recModal'); if (!m) return;
+      const ask = () => {
+        if (r.answer) return;
+        if (UI.modal || document.body.dataset.screen !== 'menu') { setTimeout(ask, 800); return; }   // outro menu aberto: espera
+        $('recIc').textContent = ['🐢', '🚗', '🏎️', '🚀', '🔥'][r.tier] || '🏎️';
+        $('recQName').textContent = TIER_NAME[r.preset];
+        $('recQGpu').textContent = this.gpuName();
+        $('recQNow').textContent = TIER_NAME[this.s.gfx.preset] || this.s.gfx.preset;
+        $('recQRec').textContent = TIER_NAME[r.preset];
+        let done = false;
+        const answer = yes => {
+          if (done) return; done = true; removeEventListener('keydown', onKey, true); hid.disconnect();
+          const texBefore = this.s.gfx.texRes;
+          r.answer = yes ? 'yes' : 'no'; r.auto = yes;
+          if (yes) { Object.assign(this.s.gfx, PRESETS[r.preset]); this.s.gfx.preset = r.preset; }
+          this.save();
+          if (yes) { this.apply(); this.sync(); }
+          if (UI.modal === 'recModal') UI.closeModal();
+          if (UI.toast) UI.toast(yes ? 'Gráficos: qualidade ' + TIER_NAME[r.preset] + ' ✓' : 'Tudo bem! Dá para mudar em Configurações › Gráficos', 2600);
+          if (yes && this.s.gfx.texRes !== texBefore && UI.toast) setTimeout(() => UI.toast('As texturas 3D mudam ao recarregar o jogo (F5)', 2600), 2700);
+        };
+        const onKey = e => { if (UI.modal !== 'recModal') return;
+          if (e.code === 'Enter' || e.code === 'NumpadEnter') { e.preventDefault(); e.stopPropagation(); answer(true); }
+          else if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); answer(false); } };
+        addEventListener('keydown', onKey, true);
+        // fechou de outro jeito (clique fora, botão B do controle): conta como "agora não"
+        const hid = new MutationObserver(() => { if (m.hidden || m.classList.contains('closing')) answer(false); });
+        $('recYes').onclick = () => answer(true);
+        $('recNo').onclick = () => answer(false);
+        UI.openModal('recModal');
+        hid.observe(m, { attributes: true, attributeFilter: ['hidden', 'class'] });
       };
-      const check = () => { if (document.body.dataset.screen === 'menu') { mo.disconnect(); setTimeout(show, 900); } };
+      const check = () => { if (document.body.dataset.screen === 'menu') { mo.disconnect(); setTimeout(ask, 500); } };
       const mo = new MutationObserver(check); mo.observe(document.body, { attributes: true, attributeFilter: ['data-screen'] }); check();
     }
   };
