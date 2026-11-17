@@ -2,3 +2,20 @@ node_modules/
 server/node_modules/
 tools/ktx2/_originais/
 tools/ktx2/_originais_alta/
+
+# Variáveis de ambiente
+.env
+.env.*
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Vercel CLI
+.vercel/
