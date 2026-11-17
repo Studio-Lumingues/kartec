@@ -1336,12 +1336,12 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .qScale .bars i.on { opacity: .7; }
 .qScale button.on .bars i.on { opacity: 1; }
 /* estrelinha no nível recomendado */
-.qScale .recStar { display: none; position: absolute; top: -13px; right: -9px; width: 26px; height: 26px; filter: drop-shadow(0 2px 0 var(--b-ink, #000417)); }
-.qScale button.rec .recStar { display: block; }
+.qScale .recTag { display: none; }
+.qScale button.rec .recTag { display: block; }
+.qScale button.rec:not(.on) { background: #fff7d6; }
 .gqDesc { margin: 12px 2px 10px; min-height: 2.6em; font: 700 13.5px/1.35 var(--ui); color: var(--b-ink-2, #4b4f63); }
 .gqDesc b { color: var(--b-ink, #000417); }
 .gqRec { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; background: linear-gradient(180deg, #fff7d6, #ffe89a); border: 2px solid var(--b-ink, #000417); }
-.gqRec .star { flex: none; width: 24px; height: 24px; }
 .gqRecTxt { flex: 1; min-width: 0; font: 700 13px var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gqRecTxt b { color: var(--b-accent, #E8213A); font-weight: 900; }
 .gqRecTxt small { font-size: 12px; color: var(--b-ink-2, #4b4f63); }
@@ -1349,7 +1349,6 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .linkBtn:hover, .linkBtn:focus-visible { color: var(--b-accent, #E8213A); outline: none; }
 /* grupos */
 .gGroup { display: grid; gap: 2px; padding: 10px 14px 6px; border: 2px solid rgba(0, 4, 23, .18); border-radius: 14px; background: rgba(255, 255, 255, .45); }
-.gGroup h4 .gIc { flex: none; width: 22px; height: 22px; }
 .gGroup h4 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font: 900 12px var(--ui); letter-spacing: 1px; text-transform: uppercase; color: var(--b-ink-2, #4b4f63); }
 .gRow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 8px 0; border-top: 1px solid rgba(0, 4, 23, .1); }
 .gGroup h4 + .gRow { border-top: 0; }
@@ -1390,10 +1389,7 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 
 /* pergunta da 1ª visita (modal #recModal): tudo centralizado numa coluna só
    ícone · título · frase · régua com os 5 níveis (recomendado em amarelo, atual marcado) · placa · 2 botões iguais */
-#recModal .sheet.recSheet { width: min(480px, 100%); padding: 30px 28px 22px; text-align: center; display: flex; flex-direction: column; align-items: center; }
-.recSheet .recBadge { width: 74px; height: 74px; margin: -4px 0 12px; display: grid; place-items: center; border: 4px solid var(--b-ink, #000417); border-radius: 22px;
-  background: linear-gradient(180deg, #fff3a6, var(--gold)); box-shadow: 0 6px 0 var(--b-ink, #000417); rotate: -4deg; animation: recBob 2.4s ease-in-out infinite; }
-.recSheet .recBadge .ic, .recSheet .recBadge .ic svg { width: 42px; height: 42px; display: block; }
+#recModal .sheet.recSheet { width: min(480px, 100%); padding: 26px 28px 22px; text-align: center; display: flex; flex-direction: column; align-items: center; }
 .recSheet .recEyebrow { margin: 0 0 4px; font: 900 12px var(--ui); letter-spacing: 1.2px; text-transform: uppercase; color: var(--b-ink-2, #4b4f63); }
 .recSheet h2 { margin: 0 0 8px; font: 400 32px/1.08 var(--display); letter-spacing: .2px; text-wrap: balance; }
 .recSheet .recLead { margin: 0 0 18px; max-width: 360px; font: 700 16px/1.4 var(--ui); color: var(--b-ink, #000417); text-wrap: balance; }
@@ -1410,26 +1406,24 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .recScale li .bars i.on { opacity: .55; }
 .recScale li span { font: 800 12px var(--ui); color: var(--b-ink-2, #4b4f63); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .recScale li.rec { background: linear-gradient(180deg, #fff6b8, var(--gold)); translate: 0 -6px; box-shadow: 0 10px 0 var(--b-ink, #000417); }
+/* etiqueta de texto "recomendado" em cima do nível (régua da pergunta e das configurações) */
+.recTag { position: absolute; top: -11px; left: 50%; translate: -50% 0; padding: 1px 7px; border-radius: 999px; background: var(--b-ink, #000417); color: #fff;
+  font: 900 9.5px var(--ui); font-style: normal; letter-spacing: .4px; text-transform: uppercase; white-space: nowrap; pointer-events: none; }
 .recScale li.rec .bars i.on { opacity: 1; background: var(--b-accent, #E8213A); }
 .recScale li.rec span { color: var(--b-ink, #000417); font-weight: 900; }
-.recScale li .recStar { position: absolute; top: -15px; left: 50%; translate: -50% 0; width: 28px; height: 28px; filter: drop-shadow(0 2px 0 var(--b-ink, #000417)); }
-.recScale li .recStar svg, .qScale .recStar svg, .gqRec .star svg, .gGroup h4 .gIc svg { display: block; width: 100%; height: 100%; }
 .recScale li.now::after { content: "agora"; position: absolute; bottom: -12px; left: 50%; translate: -50% 0; padding: 1px 7px; border-radius: 999px;
   background: var(--b-ink, #000417); color: #fff; font: 900 10px var(--ui); letter-spacing: .4px; text-transform: uppercase; }
 .recScale li.rec.now::after { content: "agora"; }
 /* linha de informação: placa (ou "teste rápido") + qualidade atual quando ela não está na régua */
-.recSheet .recMeta { margin: 8px 0 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.recSheet .recMeta { margin: 14px 0 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
 .recSheet .recMeta span { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 11px; border-radius: 999px; border: 2px solid var(--b-ink, #000417);
   background: rgba(255, 255, 255, .7); font: 800 12px var(--ui); color: var(--b-ink, #000417); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.recSheet .recMeta .ic, .recSheet .recMeta .ic svg { width: 18px; height: 18px; flex: none; display: block; }
 /* botões: mesma largura, mesma altura, centralizados */
 .recSheet .recActions { width: 100%; display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; align-items: stretch; }
 .recSheet .recActions button { min-width: 0; margin: 0; display: flex; align-items: center; justify-content: center; padding: 12px 14px; white-space: nowrap; }
 .recSheet .recActions .ghost { font-size: 17px; }
 .recSheet .recActions .cta { font-size: 18px; padding-right: 24px; padding-left: 16px; }
 .recSheet .recFoot { margin: 16px 0 0; font: 700 12px var(--ui); color: var(--b-ink-2, #4b4f63); }
-@keyframes recBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
-@media (prefers-reduced-motion: reduce) { .recSheet .recBadge { animation: none; } }
 @media (max-width: 520px) {
   #recModal .sheet.recSheet { padding: 24px 16px 18px; }
   .recSheet h2 { font-size: 25px; }

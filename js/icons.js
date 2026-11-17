@@ -38,16 +38,7 @@
     checker: '<path d="M5 21V3.4" stroke="' + K + '" stroke-width="2.2" stroke-linecap="round"/><rect x="5.8" y="4" width="14" height="9.6" rx="1.6" fill="#fff" ' + S + '/><path d="M5.8 4h3.5v3.2H5.8zM12.8 4h3.5v3.2h-3.5zM9.3 7.2h3.5v3.2H9.3zM16.3 7.2h3.5v3.2h-3.5zM5.8 10.4h3.5v3.2H5.8zM12.8 10.4h3.5v3.2h-3.5z" fill="' + K + '"/>',
     // acessórios do piloto
     goggles: '<path d="M2.8 11.6c3-1.4 15.4-1.4 18.4 0" fill="none" stroke="#8a5a3a" stroke-width="2.6" stroke-linecap="round"/><rect x="3.6" y="8.6" width="7.4" height="7" rx="3" fill="#3dd6ff" stroke="#c88f2a" stroke-width="2.2"/><rect x="13" y="8.6" width="7.4" height="7" rx="3" fill="#3dd6ff" stroke="#c88f2a" stroke-width="2.2"/><path d="M11 11.4h2" stroke="#c88f2a" stroke-width="2.2"/>' + shine('M5.4 10.6l1.6-.4') + shine('M14.8 10.6l1.6-.4'),
-    antenna: '<path d="M12 21v-9.6" stroke="' + K + '" stroke-width="2.2" stroke-linecap="round"/><path d="M7.6 21h8.8" stroke="' + K + '" stroke-width="2.2" stroke-linecap="round"/><path d="M12 2.6l1.8 3.6 4 .5-2.9 2.8.7 4L12 11.6l-3.6 1.9.7-4-2.9-2.8 4-.5z" fill="#ffd23f" ' + S + '/>',
-    // configurações > gráficos (grupos e recomendação)
-    camera: '<path d="M8.2 6.4l1.3-2h5l1.3 2h3.4a2.2 2.2 0 0 1 2.2 2.2v8.6a2.2 2.2 0 0 1-2.2 2.2H4.8a2.2 2.2 0 0 1-2.2-2.2V8.6a2.2 2.2 0 0 1 2.2-2.2z" fill="#ff7ae0" ' + S + '/>' +
-      '<circle cx="12" cy="12.8" r="4.2" fill="#3dd6ff" ' + S + '/><circle cx="12" cy="12.8" r="1.6" fill="' + K + '"/><circle cx="18" cy="9.2" r=".9" fill="#fff" ' + S.replace('2"', '1.2"') + '/>' + shine('M10 11.2a2.4 2.4 0 0 1 1.6-.9'),
-    tree: '<path d="M11.2 18.2h1.6v3.2h-1.6z" fill="#b8763e" ' + S + '/>' +
-      '<path d="M12 2.6l4.4 5.6h-2l3.8 4.8h-2.2l3.6 4.6H4.4L8 13H5.8l3.8-4.8h-2z" fill="#2ee6a8" ' + S + '/>' + shine('M10.6 6.4l1.4-1.8'),
-    palette: '<path d="M12 3c-5 0-9 3.6-9 8.2 0 4.2 3.3 7.8 7.6 7.8 1.3 0 1.9-.8 1.9-1.7 0-1.3-1-1.6-1-2.6 0-.9.7-1.5 1.7-1.5h2.3c2.6 0 4.5-1.6 4.5-4C20 5.6 16.6 3 12 3z" fill="#fff3d6" ' + S + '/>' +
-      '<circle cx="7.4" cy="11" r="1.6" fill="#ff4d6d" ' + S.replace('2"', '1.4"') + '/><circle cx="9.6" cy="6.9" r="1.6" fill="#ffd23f" ' + S.replace('2"', '1.4"') + '/>' +
-      '<circle cx="14.4" cy="6.6" r="1.6" fill="#2ee6a8" ' + S.replace('2"', '1.4"') + '/><circle cx="17.2" cy="10" r="1.6" fill="#3dd6ff" ' + S.replace('2"', '1.4"') + '/>',
-    star: '<path d="M12 2.6l2.8 5.8 6.3.8-4.6 4.4 1.2 6.3L12 16.9l-5.7 3 1.2-6.3-4.6-4.4 6.3-.8z" fill="#ffd23f" ' + S + '/>' + shine('M10.4 8.6l1-2')
+    antenna: '<path d="M12 21v-9.6" stroke="' + K + '" stroke-width="2.2" stroke-linecap="round"/><path d="M7.6 21h8.8" stroke="' + K + '" stroke-width="2.2" stroke-linecap="round"/><path d="M12 2.6l1.8 3.6 4 .5-2.9 2.8.7 4L12 11.6l-3.6 1.9.7-4-2.9-2.8 4-.5z" fill="#ffd23f" ' + S + '/>'
   };
   const Icon = {
     names: Object.keys(P),
