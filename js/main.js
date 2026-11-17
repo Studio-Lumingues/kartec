@@ -756,23 +756,29 @@
     finishBanner() {
       this._fbBanner = true;
       if (!document.getElementById('finishBannerCss')) { const st = document.createElement('style'); st.id = 'finishBannerCss';
-        // A palavra é desenhada 4 vezes, uma por cima da outra, cada cópia é uma CAMADA da palavra inteira:
-        //   .o contorno preto grosso + sombra   .x lateral 3D (cópias empilhadas para baixo)
+        // A palavra é desenhada 6 vezes, uma por cima da outra, cada cópia é uma CAMADA da palavra inteira:
+        //   .h borda de metal clara (iluminada em cima) + espessura e sombra   .o contorno preto sólido
+        //   .s reflexo metálico sobre o contorno preto (só o brilho; onde a fonte tem falha aparece o preto de baixo)
+        //   .x lateral 3D (cópias empilhadas para baixo)
         //   .l filete claro em volta da letra   .t face (quadriculado em cima sumindo num tom forte e liso embaixo)
-        // Assim o contorno de uma letra nunca passa por cima da letra vizinha. As 4 cópias usam as mesmas animações e
+        // Assim o contorno de uma letra nunca passa por cima da letra vizinha. As 6 cópias usam as mesmas animações e
         // atrasos, então andam juntas: .c faz a entrada (cai girando 360° no eixo X), .f a flutuação (sobe e desce).
         // O .w inteiro passa por hue-rotate em loop (a cor vai trocando; o preto continua preto).
         const ext = []; for (let k = 1; k <= 9; k++) ext.push('0 ' + (k * 0.012).toFixed(3) + 'em 0 #7a1a00');
         st.textContent = '#finishBanner{position:fixed;left:0;right:0;top:20%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif;--fs:clamp(52px,10.5vw,150px)}' +
-          '#finishBanner .w{display:inline-block;position:relative;animation:fbHue 4s linear infinite, fbOut .45s cubic-bezier(.5,0,1,.5) 2.75s forwards}' +
-          '#finishBanner .row{display:flex;align-items:center;perspective:900px}#finishBanner .row+.row{position:absolute;left:0;top:0;right:0;bottom:0}' +
-          '#finishBanner .c{display:inline-block;font-size:var(--fs);line-height:1;margin:0 .006em;transform:translateY(var(--y)) rotate(var(--r));animation:fbFlip .8s cubic-bezier(.3,1.25,.5,1) both;animation-delay:var(--d)}' +
-          '#finishBanner .f{display:block;animation:fbBob 1.6s ease-in-out infinite;animation-delay:var(--b)}' +
+          '#finishBanner .fbW{display:inline-block;position:relative;animation:fbHue 4s linear infinite, fbOut .45s cubic-bezier(.5,0,1,.5) 2.75s forwards}' +
+          '#finishBanner .fbRow{display:flex;align-items:center;perspective:900px;font-size:var(--fs)}#finishBanner .fbRow+.fbRow{position:absolute;left:0;top:0;right:0;bottom:0}' +
+          '#finishBanner .fbC{display:inline-block;font-size:var(--fs);line-height:1;margin:0 .006em;transform:translateY(var(--y)) rotate(var(--r));animation:fbFlip .8s cubic-bezier(.3,1.25,.5,1) both;animation-delay:var(--d)}' +
+          '#finishBanner .fbF{display:block;animation:fbBob 1.6s ease-in-out infinite;animation-delay:var(--b)}' +
           '#finishBanner b{display:block;font-weight:400}' +
-          '#finishBanner .o{filter:drop-shadow(.012em .012em 0 #141414) drop-shadow(0 .06em 0 #141414) drop-shadow(0 -.05em 0 #141414)}#finishBanner .o b{color:#141414;-webkit-text-stroke:.24em #141414;text-shadow:0 .13em 0 #141414,.04em .15em 0 #141414,0 .2em .12em rgba(0,0,0,.35)}' +
-          '#finishBanner .x b{color:#7a1a00;text-shadow:' + ext.join(',') + '}' +
-          '#finishBanner .l b{color:#ffd27a;-webkit-text-stroke:.06em #ffd27a}' +
-          '#finishBanner .t b{color:transparent;-webkit-background-clip:text;background-clip:text;' +
+          '#finishBanner .fbH{filter:drop-shadow(0 .04em 0 #5a5f66) drop-shadow(0 .025em 0 #141414) drop-shadow(0 .06em .06em rgba(0,0,0,.35))}' +
+          '#finishBanner .fbH b,#finishBanner .fbS b{padding:.25em;margin:-.25em;color:transparent;-webkit-background-clip:text;background-clip:text}' +
+          '#finishBanner .fbH b{-webkit-text-stroke:.4em transparent;background-image:linear-gradient(180deg,#fff 0%,#fff 16%,#e4e8ec 26%,#a3a9b0 48%,#6d727a 76%,#c3c8ce 92%)}' +
+          '#finishBanner .fbO{filter:drop-shadow(0 .025em 0 #141414) drop-shadow(0 -.025em 0 #141414) drop-shadow(.025em 0 0 #141414) drop-shadow(-.025em 0 0 #141414)}#finishBanner .fbO b{color:#141414;-webkit-text-stroke:.24em #141414}' +
+          '#finishBanner .fbS b{-webkit-text-stroke:.2em transparent;background-image:linear-gradient(180deg,rgba(185,190,198,.95) 8%,rgba(95,100,108,.75) 20%,rgba(30,31,34,0) 38%,rgba(30,31,34,0) 68%,rgba(105,110,118,.7) 88%)}' +
+          '#finishBanner .fbX b{color:#7a1a00;text-shadow:' + ext.join(',') + '}' +
+          '#finishBanner .fbL b{color:#ffd27a;-webkit-text-stroke:.06em #ffd27a}' +
+          '#finishBanner .fbT b{color:transparent;-webkit-background-clip:text;background-clip:text;' +
           'background-image:linear-gradient(0deg,#e02800 0%,#e83000 28%,rgba(240,60,0,0) 62%),' +
           'conic-gradient(rgba(200,50,0,.42) 25%,transparent 0 50%,rgba(200,50,0,.42) 0 75%,transparent 0),' +
           'linear-gradient(180deg,#ffc04a 0%,#ff9a24 40%,#ff6a14 70%,#e83000 100%);background-size:100% 100%,.16em .16em,100% 100%}' +
@@ -786,8 +792,8 @@
       // giro e altura de cada letra (dá o ar "desenhado à mão"); a exclamação fica mais inclinada
       const tilt = [[-7, -2], [4, 3], [-3, -3], [5, 2], [-4, -1], [3, 3], [-2, -2], [10, -4]];
       const word = [...'CHEGADA!'].map((ch, i) => { const [r, y] = tilt[i % tilt.length];
-        return '<span class="c" style="--r:' + r + 'deg;--y:' + (y / 100) + 'em;--d:' + (i * 0.07).toFixed(2) + 's;--b:' + (-i * 0.2).toFixed(2) + 's"><span class="f"><b>' + ch + '</b></span></span>'; }).join('');
-      el.innerHTML = '<span class="w">' + ['o', 'x', 'l', 't'].map(c => '<span class="row ' + c + '">' + word + '</span>').join('') + '</span>';
+        return '<span class="fbC" style="--r:' + r + 'deg;--y:' + (y / 100) + 'em;--d:' + (i * 0.07).toFixed(2) + 's;--b:' + (-i * 0.2).toFixed(2) + 's"><span class="fbF"><b>' + ch + '</b></span></span>'; }).join('');
+      el.innerHTML = '<span class="fbW">' + ['fbH', 'fbO', 'fbS', 'fbX', 'fbL', 'fbT'].map(c => '<span class="fbRow ' + c + '">' + word + '</span>').join('') + '</span>';
       document.body.appendChild(el); clearTimeout(this._fbBT); this._fbBT = setTimeout(() => { if (el.parentNode) el.remove(); }, 3400);
     },
     hideFinishBoard() { this._fbBanner = false; this._fbT0 = 0; this._fbSeen = null; const fbn = document.getElementById('finishBanner'); if (fbn) fbn.remove(); if (this._fb) { this._fb.classList.remove('on'); this._fbKey = ''; } document.body.classList.remove('raceDone'); if (camera.view && camera.view.enabled) camera.clearViewOffset(); this.pAuto = null; this.fcam = null; if (this.race) this.race.allT = 0; },
