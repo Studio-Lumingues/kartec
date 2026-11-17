@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@600;800;900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=202611172200">
+<link rel="stylesheet" href="style.css?v=202611172330">
 <style>
   /* abertura do estúdio: fundo preto, logo centralizada (aparece rápido, some em fade out) */
   #boot.studio { background: #000; z-index: 40; }
@@ -331,14 +331,17 @@
 <!-- ======================= Modal: gráficos recomendados (1ª visita; settings.js > recAsk) ======================= -->
 <div id="recModal" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="recTitle">
   <div class="sheet narrow recSheet">
-    <div id="recIc" class="recIc" aria-hidden="true">🏎️</div>
+    <div class="recBadge" aria-hidden="true"><span class="ic" data-ic="monitor"></span></div>
     <p class="recEyebrow">Testamos a sua máquina</p>
     <h2 id="recTitle">Usar os gráficos recomendados?</h2>
-    <p class="recLead">Para o jogo rodar liso no seu computador, recomendamos a qualidade <b id="recQName"></b>.</p>
-    <p class="recGpuLine"><span class="ic" data-ic="gear"></span><span id="recQGpu"></span></p>
-    <div class="recCompare"><div><small>Agora</small><b id="recQNow"></b></div><span aria-hidden="true">→</span><div class="on"><small>Recomendado</small><b id="recQRec"></b></div></div>
-    <div class="actions"><button id="recNo" class="ghost" type="button">Agora não</button><button id="recYes" class="cta" type="button">Usar recomendado</button></div>
-    <p class="recFoot">Você pode mudar quando quiser em Configurações › Gráficos.</p>
+    <p class="recLead">Para o jogo rodar liso aqui, a qualidade ideal é <b id="recQName"></b>.</p>
+    <ol id="recScale" class="recScale" aria-label="Níveis de qualidade"></ol>
+    <p id="recMeta" class="recMeta"></p>
+    <div class="recActions">
+      <button id="recNo" class="ghost" type="button">Agora não</button>
+      <button id="recYes" class="cta" type="button">Usar recomendado</button>
+    </div>
+    <p class="recFoot">Dá para mudar quando quiser em Configurações › Gráficos.</p>
   </div>
 </div>
 
@@ -650,7 +653,7 @@
 <script src="js/opening.js?v=202611010200"></script>   <!-- cutscene de abertura: drift em dupla, salto em câmera lenta e logo KARTEC -->
 <script src="js/ui.js?v=202610311500"></script>
 <script src="js/speedo3d.js?v=202610300000"></script>
-<script src="js/settings.js?v=202611172200"></script>
+<script src="js/settings.js?v=202611172330"></script>
 <script src="js/patchnotes.js?v=202611172200"></script>
 <script src="js/sky.js?v=202611110100"></script>   <!-- céu, sol/lua e nuvens: o MESMO no jogo e no lobby -->
 <script src="js/showroom.js?v=202611110100"></script>   <!-- vitrine 3D: pátio + showroom da Garagem (cenário por código, sem .glb) -->

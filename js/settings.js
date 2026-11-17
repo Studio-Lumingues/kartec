@@ -142,7 +142,8 @@
     },
     rec() { return this.s && this.s.rec; },
     recName() { const r = this.rec(); return r ? TIER_NAME[r.preset] : ''; },
-    gpuName() { const r = this.rec(); return r ? prettyGpu(r.gpu) : ''; },
+    gpuName() { const r = this.rec(); if (!r) return ''; const n = prettyGpu(r.gpu);
+      return /^(brave|webkit|webkit webgl|mozilla|generic|placa de vídeo desconhecida|disabled|unknown)$/i.test(n) || n.length < 3 ? '' : n; },
     // "Detectar de novo" (configurações): roda o teste e aplica a recomendação
     redetect() {
       const rec = HwDetect.run(); rec.answer = 'yes'; rec.auto = true; this.s.rec = rec;
@@ -332,11 +333,17 @@
       const ask = () => {
         if (r.answer) return;
         if (UI.modal || document.body.dataset.screen !== 'menu') { setTimeout(ask, 800); return; }   // outro menu aberto: espera
-        $('recIc').textContent = ['🐢', '🚗', '🏎️', '🚀', '🔥'][r.tier] || '🏎️';
+        const now = this.s.gfx.preset, esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
         $('recQName').textContent = TIER_NAME[r.preset];
-        $('recQGpu').textContent = this.gpuName();
-        $('recQNow').textContent = TIER_NAME[this.s.gfx.preset] || this.s.gfx.preset;
-        $('recQRec').textContent = TIER_NAME[r.preset];
+        // régua: Massinha ... Ultra, barrinhas crescendo; recomendado em amarelo, atual com a etiqueta "agora"
+        $('recScale').innerHTML = TIERS.map((t, i) => '<li class="' + (t === r.preset ? 'rec ' : '') + (t === now ? 'now' : '') + '"' +
+          (t === r.preset ? ' aria-current="true"' : '') + '><b class="bars" aria-hidden="true">' + TIERS.map((_, j) => '<i class="' + (j <= i ? 'on' : '') + '"></i>').join('') +
+          '</b><span>' + TIER_NAME[t] + '</span></li>').join('');
+        // placa (quando o navegador conta qual é) e a qualidade atual quando ela não está na régua (Automática/Personalizada)
+        const gpu = this.gpuName();
+        $('recMeta').innerHTML = '<span><span class="ic" data-ic="monitor"></span>' + esc(gpu || 'Teste rápido de desempenho') + '</span>' +
+          (TIERS.includes(now) ? '' : '<span>Agora: ' + esc(TIER_NAME[now] || now) + '</span>');
+        if (window.Icon && Icon.hydrate) try { Icon.hydrate($('recMeta')); } catch (e) { }
         let done = false;
         const answer = yes => {
           if (done) return; done = true; removeEventListener('keydown', onKey, true); hid.disconnect();

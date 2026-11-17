@@ -1324,26 +1324,51 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 .seg button.rec { position: relative; }
 .seg button.rec::after { content: "★"; position: absolute; top: -9px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--ink); color: var(--ink); font-size: 12px; line-height: 1; }
 
-/* pergunta da 1ª visita (modal #recModal) */
-.recSheet { text-align: center; padding-top: 26px; }
-.recSheet .recIc { width: 84px; height: 84px; margin: 0 auto 8px; display: grid; place-items: center; font-size: 44px; border: var(--line); border-radius: 50%; background: linear-gradient(180deg, #fff6a8, var(--gold)); box-shadow: 0 5px 0 var(--ink); animation: recBounce 1.8s ease-in-out infinite; }
-.recSheet .recEyebrow { margin: 0; font-size: 13px; font-weight: 900; letter-spacing: .6px; text-transform: uppercase; color: var(--ink-2); }
-.recSheet h2 { margin: 2px 0 8px; font: 400 30px var(--display); line-height: 1.1; }
-.recSheet .recLead { margin: 0 auto 6px; max-width: 400px; font-size: 16px; font-weight: 700; line-height: 1.4; }
-.recSheet .recLead b { font: 400 18px var(--display); color: var(--red-deep); }
-.recSheet .recGpuLine { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 4px 12px; border-radius: 999px; background: var(--mist); border: 2px solid var(--ink); font-size: 12px; font-weight: 800; color: var(--ink-2); max-width: 100%; }
-.recSheet .recGpuLine #recQGpu { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.recSheet .recGpuLine .ic { width: 14px; height: 14px; flex: none; }
-.recCompare { display: flex; align-items: stretch; justify-content: center; gap: 10px; margin: 0 0 16px; }
-.recCompare > div { flex: 1; max-width: 170px; padding: 8px 10px; border: 3px solid var(--ink); border-radius: var(--r-md); background: var(--mist); box-shadow: 0 4px 0 var(--ink); display: flex; flex-direction: column; gap: 1px; }
-.recCompare > div.on { background: linear-gradient(180deg, #fff7d6, #ffe58a); }
-.recCompare small { font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-2); }
-.recCompare b { font: 400 20px var(--display); }
-.recCompare > span { align-self: center; font: 400 26px var(--display); }
-.recSheet .actions { justify-content: center; flex-wrap: nowrap; }
-.recSheet .cta { flex: 0 1 auto; min-width: 0; font-size: 24px; padding: 10px 24px 12px; }
-.recSheet .ghost { flex: none; }
-.recSheet .recFoot { margin: 12px 0 0; font-size: 12px; font-weight: 700; color: var(--ink-2); }
-@keyframes recBounce { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
-@media (prefers-reduced-motion: reduce) { .recSheet .recIc { animation: none; } }
-@media (max-width: 520px) { .recSheet h2 { font-size: 24px; } .recCompare b { font-size: 17px; } }
+/* pergunta da 1ª visita (modal #recModal): tudo centralizado numa coluna só
+   ícone · título · frase · régua com os 5 níveis (recomendado em amarelo, atual marcado) · placa · 2 botões iguais */
+#recModal .sheet.recSheet { width: min(480px, 100%); padding: 30px 28px 22px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+.recSheet .recBadge { width: 74px; height: 74px; margin: -4px 0 12px; display: grid; place-items: center; border: 4px solid var(--b-ink, #000417); border-radius: 22px;
+  background: linear-gradient(180deg, #fff3a6, var(--gold)); box-shadow: 0 6px 0 var(--b-ink, #000417); rotate: -4deg; animation: recBob 2.4s ease-in-out infinite; }
+.recSheet .recBadge .ic, .recSheet .recBadge .ic svg { width: 42px; height: 42px; display: block; }
+.recSheet .recEyebrow { margin: 0 0 4px; font: 900 12px var(--ui); letter-spacing: 1.2px; text-transform: uppercase; color: var(--b-ink-2, #4b4f63); }
+.recSheet h2 { margin: 0 0 8px; font: 400 32px/1.08 var(--display); letter-spacing: .2px; text-wrap: balance; }
+.recSheet .recLead { margin: 0 0 18px; max-width: 360px; font: 700 16px/1.4 var(--ui); color: var(--b-ink, #000417); text-wrap: balance; }
+.recSheet .recLead b { font: 400 18px var(--display); color: var(--b-accent, #E8213A); white-space: nowrap; }
+/* régua dos níveis */
+.recScale { list-style: none; margin: 0 0 14px; padding: 0; width: 100%; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+.recScale li { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; padding: 10px 2px 8px; min-width: 0;
+  border: 3px solid var(--b-ink, #000417); border-radius: 12px; background: rgba(255, 255, 255, .55); box-shadow: 0 4px 0 var(--b-ink, #000417); }
+/* "sinal" de força: 5 barrinhas crescendo, acesas até o nível */
+.recScale li .bars { display: flex; align-items: flex-end; gap: 2px; height: 22px; }
+.recScale li .bars i { display: block; width: 5px; border-radius: 2px; background: var(--b-ink, #000417); opacity: .14; }
+.recScale li .bars i:nth-child(1) { height: 6px; } .recScale li .bars i:nth-child(2) { height: 10px; } .recScale li .bars i:nth-child(3) { height: 14px; }
+.recScale li .bars i:nth-child(4) { height: 18px; } .recScale li .bars i:nth-child(5) { height: 22px; }
+.recScale li .bars i.on { opacity: .55; }
+.recScale li span { font: 800 12px var(--ui); color: var(--b-ink-2, #4b4f63); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.recScale li.rec { background: linear-gradient(180deg, #fff6b8, var(--gold)); translate: 0 -6px; box-shadow: 0 10px 0 var(--b-ink, #000417); }
+.recScale li.rec .bars i.on { opacity: 1; background: var(--b-accent, #E8213A); }
+.recScale li.rec span { color: var(--b-ink, #000417); font-weight: 900; }
+.recScale li.rec::before { content: "★"; position: absolute; top: -13px; left: 50%; translate: -50% 0; width: 24px; height: 24px; display: grid; place-items: center;
+  border: 3px solid var(--b-ink, #000417); border-radius: 50%; background: #fff; color: var(--b-accent, #E8213A); font-size: 12px; line-height: 1; }
+.recScale li.now::after { content: "agora"; position: absolute; bottom: -12px; left: 50%; translate: -50% 0; padding: 1px 7px; border-radius: 999px;
+  background: var(--b-ink, #000417); color: #fff; font: 900 10px var(--ui); letter-spacing: .4px; text-transform: uppercase; }
+.recScale li.rec.now::after { content: "agora ✓"; }
+/* linha de informação: placa (ou "teste rápido") + qualidade atual quando ela não está na régua */
+.recSheet .recMeta { margin: 8px 0 20px; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
+.recSheet .recMeta span { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 11px; border-radius: 999px; border: 2px solid var(--b-ink, #000417);
+  background: rgba(255, 255, 255, .7); font: 800 12px var(--ui); color: var(--b-ink, #000417); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.recSheet .recMeta .ic, .recSheet .recMeta .ic svg { width: 16px; height: 16px; flex: none; display: block; }
+/* botões: mesma largura, mesma altura, centralizados */
+.recSheet .recActions { width: 100%; display: grid; grid-template-columns: 1fr 1.35fr; gap: 12px; align-items: stretch; }
+.recSheet .recActions button { min-width: 0; margin: 0; display: flex; align-items: center; justify-content: center; padding: 12px 14px; white-space: nowrap; }
+.recSheet .recActions .ghost { font-size: 17px; }
+.recSheet .recActions .cta { font-size: 18px; padding-right: 24px; padding-left: 16px; }
+.recSheet .recFoot { margin: 16px 0 0; font: 700 12px var(--ui); color: var(--b-ink-2, #4b4f63); }
+@keyframes recBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -5px; } }
+@media (prefers-reduced-motion: reduce) { .recSheet .recBadge { animation: none; } }
+@media (max-width: 520px) {
+  #recModal .sheet.recSheet { padding: 24px 16px 18px; }
+  .recSheet h2 { font-size: 25px; }
+  .recScale { gap: 4px; } .recScale li span { font-size: 10px; }
+  .recSheet .recActions { grid-template-columns: 1fr; } .recSheet .recActions .cta { order: -1; }
+}
