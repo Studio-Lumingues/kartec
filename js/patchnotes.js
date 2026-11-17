@@ -12,8 +12,8 @@
 (function () {
   const NOTES = [
     { at: 'auto', title: 'Gráficos sob medida para a sua máquina', items: [
-      'Na primeira vez que você abre o jogo, ele testa a sua máquina e escolhe a qualidade que roda liso nela',
-      'A escolha fica salva no navegador: nas próximas vezes o jogo já abre do jeito certo',
+      'Na primeira vez que você abre o jogo, ele testa a sua máquina e pergunta se você quer usar a qualidade que roda liso nela',
+      'A resposta fica salva no navegador: a pergunta não aparece de novo',
       'Se a corrida ficar pesada, o jogo baixa a qualidade um nível sozinho e avisa',
       'Em Configurações › Gráficos, a qualidade recomendada ganha uma estrelinha, e dá para detectar de novo'] },
     { at: '2026-10-29T21:15:00-03:00', title: 'Tela principal nova e garagem 3D', items: [
