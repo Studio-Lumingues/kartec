@@ -766,7 +766,7 @@
         // atrasos, então andam juntas: .c faz a entrada (cai girando 360° no eixo X), .f a flutuação (sobe e desce).
         // O .w inteiro passa por hue-rotate em loop (a cor vai trocando; o preto continua preto).
         const ext = []; for (let k = 1; k <= 9; k++) ext.push('0 ' + (k * 0.012).toFixed(3) + 'em 0 #7a1a00');
-        st.textContent = '#finishBanner{position:fixed;left:0;right:0;top:20%;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif;--fs:clamp(52px,10.5vw,150px)}' +
+        st.textContent = '#finishBanner{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:6;pointer-events:none;text-align:center;font-family:"Titan One","Arial Black",sans-serif;--fs:clamp(52px,10.5vw,150px)}' +
           '#finishBanner .fbW{display:inline-block;position:relative;animation:fbHue 4s linear infinite, fbOut .45s cubic-bezier(.5,0,1,.5) 2.75s forwards}' +
           '#finishBanner .fbRow{display:flex;align-items:center;perspective:900px;font-size:var(--fs)}#finishBanner .fbRow+.fbRow{position:absolute;left:0;top:0;right:0;bottom:0}' +
           '#finishBanner .fbC{display:inline-block;font-size:var(--fs);line-height:1;margin:0 .006em;transform:translateY(var(--y)) rotate(var(--r));animation:fbFlip .8s cubic-bezier(.3,1.25,.5,1) both;animation-delay:var(--d)}' +
