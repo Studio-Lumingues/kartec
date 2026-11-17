@@ -571,11 +571,17 @@
 
 <!-- ======================= Pódio ======================= -->
 <section id="podiumUI" hidden>
-  <div class="card">
-    <h2 id="podiumTitle">Você venceu a Copa!</h2>
+  <div class="card pdCard" id="podiumCard">
+    <div class="pdTop">
+      <div class="pdMedal" id="podiumMedal"><b>1</b><small>º</small></div>
+      <div class="pdHeadTxt">
+        <p class="pdEyebrow" id="podiumEyebrow">Resultado da corrida</p>
+        <h2 id="podiumTitle">Vitória!</h2>
+      </div>
+    </div>
     <p id="podiumSub"></p>
-    <div class="table" id="results"></div>
-    <div class="actions">
+    <div class="pdTable" id="results"></div>
+    <div class="actions pdActions">
       <button id="btnAgain" class="cta" type="button">Jogar novamente <kbd>Enter</kbd></button>
       <button id="btnMenu" class="ghost" type="button">Voltar ao menu</button>
     </div>

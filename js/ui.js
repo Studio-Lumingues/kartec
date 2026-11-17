@@ -831,13 +831,32 @@
       tick(); this._rcT = setInterval(tick, 250);
     },
     stopRoundCountdown() { clearInterval(this._rcT); },
+    // placar do pódio: linhas próprias (classes pd*, sem herdar o .row das outras tabelas); entra com a classe .show
+    // no #podiumUI, que o Podium liga quando o 1º colocado sobe
     podium(info) {
-      this.table($('results'), info.head || [info.cup ? 'Corridas' : 'Pista', info.cup ? 'Tempo total' : 'Tempo'], info.rows);
-      const win = info.rows[0];
-      $('podiumTitle').textContent = win.player ? (info.cup ? 'Você venceu a Copa!' : 'Vitória!') : win.name + (info.cup ? ' venceu a Copa' : ' venceu desta vez');
+      const rows = info.rows, win = rows[0], me = rows.findIndex(r => r.player), head = info.head || [info.cup ? 'Corridas' : 'Pista', info.cup ? 'Tempo total' : 'Tempo'];
+      const el = $('results'); el.innerHTML = ''; el.classList.toggle('many', rows.length > 5);
+      const tx = (tag, t, cls) => { const e = document.createElement(tag); if (t !== undefined) e.textContent = t; if (cls) e.className = cls; return e; };
+      const hd = tx('div', undefined, 'pdHeadRow'); hd.append(tx('span', 'Pos.'), tx('span', 'Piloto'), tx('span', head[1])); el.appendChild(hd);
+      rows.forEach((r, i) => {
+        const row = tx('div', undefined, 'pdRow' + (i < 3 ? ' pdP' + (i + 1) : '') + (r.player ? ' pdMe' : ''));
+        row.style.setProperty('--i', i);
+        const pos = tx('span', undefined, 'pdPos'); pos.append(tx('b', String(i + 1)), tx('small', 'º'));
+        const who = tx('span', undefined, 'pdWho'), dot = tx('i'); dot.style.background = r.color || '#fff';
+        const nm = tx('span', r.name, 'pdName'); who.append(dot, nm);
+        if (r.player) who.appendChild(tx('em', 'você', 'pdTag'));
+        if (r.note) who.appendChild(tx('small', r.note, 'pdNote'));
+        row.append(pos, who, tx('span', r.b, 'pdTime')); el.appendChild(row);
+      });
+      const place = me >= 0 ? me : 0, medal = $('podiumMedal');
+      medal.className = 'pdMedal ' + (place < 3 ? 'pdM' + (place + 1) : 'pdMx'); medal.querySelector('b').textContent = String(place + 1);
+      $('podiumCard').classList.toggle('pdWin', !!win.player);
+      $('podiumEyebrow').textContent = info.cup ? (CFG.CUP && CFG.CUP.name ? CFG.CUP.name : 'Copa') + ' · resultado final' : 'Resultado da corrida';
+      $('podiumTitle').textContent = win.player ? (info.cup ? 'Você venceu a Copa!' : 'Vitória!')
+        : me > 0 ? (me < 3 ? 'Pódio! ' : '') + (me + 1) + 'º lugar' : win.name + (info.cup ? ' venceu a Copa' : ' venceu');
       $('podiumSub').textContent = info.sub || (win.player
         ? (info.cup ? 'Menor tempo somado nas três pistas. O troféu de ouro é seu.' : 'Primeiro lugar. O troféu é seu.')
-        : (info.cup ? 'Na Copa vale a soma dos tempos: tente recuperar segundos com o mini-turbo nas curvas longas.' : 'Tente de novo: o drift com mini-turbo ganha muito tempo nas curvas longas.'));
+        : (me > 0 ? win.name + (info.cup ? ' levou a Copa. ' : ' venceu esta. ') : '') + (info.cup ? 'Na Copa vale a soma dos tempos: tente recuperar segundos com o mini-turbo nas curvas longas.' : 'Tente de novo: o drift com mini-turbo ganha muito tempo nas curvas longas.'));
     }
   };
   window.UI = UI;
