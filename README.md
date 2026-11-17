@@ -1,139 +1,482 @@
-# Super Kartec
+<div align="center">
 
-Jogo de kart 3D (Three.js) com modo online. O servidor (`server/server.js`) entrega os arquivos do jogo
-e o WebSocket do online (`/ws`) no mesmo endereço.
+<img src="docs/manual/abertura.jpg" alt="Kartec" width="100%">
 
-## Rodar no seu computador
+# 🏁 MANUAL DO PILOTO 🏁
 
-Requisito: Node.js 18 ou mais novo. Na pasta do projeto:
+### *Super Kartec* — o kart 3D que você joga direto no navegador
 
-```bash
-npm install
-npm start          # http://localhost:8080  (outra porta: PORT=9000 npm start)
-```
+<br>
 
-## Publicar no Render
+<a href="https://kartec.vercel.app"><img src="https://img.shields.io/badge/▶%20%20JOGAR%20AGORA-e8302a?style=for-the-badge&labelColor=1b1d29" alt="Jogar agora" height="42"></a>
 
-1. Suba esta pasta para um repositório no GitHub (a raiz do repositório é esta pasta, onde ficam
-   `index.html`, `package.json` e `render.yaml`).
-2. No Render: **New + > Blueprint**, escolha o repositório e confirme. O `render.yaml` já configura tudo:
-   serviço web Node, região Virginia, plano Free, `npm install` / `npm start` e verificação em `/health`.
-   (Sem Blueprint: **New + > Web Service**, Runtime Node, Build `npm install`, Start `npm start`.)
-3. Abra `https://SEU-SERVICO.onrender.com`. O jogo usa `wss://` sozinho na mesma página.
+<br><br>
 
-Avisos do plano Free do Render:
-* Ele dorme depois de 15 minutos sem tráfego. Quem abrir o jogo depois disso espera cerca de 1 minuto
-  até o servidor acordar. Durante as partidas ele fica acordado (os jogadores mandam dados o tempo todo).
-* O Render pode reiniciar o serviço grátis a qualquer momento. As salas ficam na memória do servidor:
-  num reinício elas acabam e os jogadores voltam ao menu com um aviso.
-* Não há região do Render na América do Sul; Virginia (EUA) é a mais próxima do Brasil.
-  Um plano pago tira a hibernação.
+<img src="https://img.shields.io/badge/jogadores-1%20a%208-ffd23f?style=flat-square&labelColor=1b1d29">
+<img src="https://img.shields.io/badge/online-com%20amigos-19c8e8?style=flat-square&labelColor=1b1d29">
+<img src="https://img.shields.io/badge/idioma-português-2cb84a?style=flat-square&labelColor=1b1d29">
+<img src="https://img.shields.io/badge/plataforma-navegador-8a3ae0?style=flat-square&labelColor=1b1d29">
 
-## Publicar na Oracle Cloud (servidor no Brasil, grátis)
+<sub>Um jogo do <b>Studio Lumingues</b></sub>
 
-1. **Conta**: crie em oracle.com/cloud/free e escolha **São Paulo** como região inicial (não muda depois).
-2. **Máquina**: *Compute > Instances > Create instance*
-   * Imagem **Canonical Ubuntu 24.04**; formato **VM.Standard.E2.1.Micro** (Always Free) ou, se houver
-     vaga, **VM.Standard.A1.Flex** (1 OCPU / 6 GB já sobra).
-   * Rede: crie uma VCN com **sub-rede pública** e marque **atribuir IPv4 público**.
-   * Chave SSH: **Generate a key pair** e baixe a chave privada (`.key`).
-3. **Portas no painel**: *Networking > Virtual cloud networks > sua VCN > Security Lists > Default Security
-   List > Add Ingress Rules*: origem `0.0.0.0/0`, TCP, porta de destino `80`. Repita com `443`.
-4. **Domínio grátis (para HTTPS)**: em duckdns.org, entre com Google/GitHub, crie um subdomínio
-   (ex.: `kartec`) e coloque o **IP público da VM** no campo "current ip". Necessário se o jogo ficar na
-   Vercel; sem domínio o jogo funciona em `http://IP-DA-VM`.
-5. **Enviar e instalar** (no seu computador, PowerShell ou terminal):
-   ```bash
-   scp -i chave.key super-kartec-completo.zip ubuntu@IP-DA-VM:~
-   ssh -i chave.key ubuntu@IP-DA-VM
-   ```
-   Já na VM:
-   ```bash
-   sudo apt-get install -y unzip && unzip -o super-kartec-completo.zip && cd super-kartec
-   sudo bash deploy/oracle-setup.sh
-   ```
-   O script pergunta o domínio (ex.: `kartec.duckdns.org`), o token do DuckDNS (opcional) e o site da
-   Vercel (opcional). Ele instala Node.js e Caddy, cria o serviço `super-kartec` (reinicia sozinho e sobe
-   com a VM), libera 80/443 no firewall da VM e ativa o HTTPS automático.
-6. **Jogar**: `https://kartec.duckdns.org` (ou `http://IP-DA-VM` sem domínio).
-   Com o jogo na Vercel: em `js/config.js`, `ONLINE_SERVER: 'wss://kartec.duckdns.org/ws'`.
+</div>
 
-**Atualizar**: envie o zip novo, descompacte e rode `sudo bash deploy/update.sh` dentro da pasta.
+<br>
 
-**Se algo não abrir**: `curl localhost:8080/health` (servidor), `journalctl -u super-kartec -f` (logs do
-jogo), `sudo systemctl status caddy` (HTTPS). Confira as portas 80/443 na Security List (passo 3).
+> [!NOTE]
+> **Bem-vindo, piloto!** Este manual explica tudo o que você precisa para sair da garagem e subir no lugar mais alto do pódio.
+> Leia com calma, ou pule direto para a parte que quiser no índice abaixo. 🏎️💨
 
-**Para a Oracle não recuperar a VM parada**: contas só gratuitas podem ter VMs ociosas recuperadas;
-convertendo a conta para *Pay As You Go* isso deixa de valer e continua sem custo dentro dos limites
-Always Free. Crie um alerta de orçamento (*Billing > Budgets*, ex.: US$ 1) para ser avisado de qualquer cobrança.
+<br>
 
-## Jogo na Vercel + servidor no Render
+<div align="center">
 
-O jogo é só arquivos estáticos, então pode ficar na Vercel (carrega rápido no Brasil) enquanto o online
-roda no Render. O atraso das corridas continua dependendo de onde o servidor está.
+## 📖 ÍNDICE
 
-1. **Servidor no Render** (passo anterior). Anote o endereço, ex.: `https://super-kartec.onrender.com`.
-   Em *Environment*, defina `ALLOWED_ORIGINS` com o endereço do jogo na Vercel
-   (ex.: `https://meu-jogo.vercel.app`) para só o seu site usar o servidor. Opcional: `SERVE_STATIC=0`
-   faz o Render servir só o online.
-2. **No jogo**, em `js/config.js`, preencha:
-   `ONLINE_SERVER: 'wss://super-kartec.onrender.com/ws',`
-3. **Vercel**: New Project > importe o repositório > Framework Preset **Other**, sem comando de build,
-   diretório de saída `.` (o `vercel.json` já faz isso; o `.vercelignore` deixa o servidor de fora).
+| | | |
+|:---:|:---:|:---:|
+| **01** · [O Jogo](#-01--o-jogo) | **02** · [Controles](#-02--controles) | **03** · [Menu Principal](#-03--menu-principal) |
+| **04** · [Garagem](#-04--garagem) | **05** · [Preparar Corrida](#-05--preparar-corrida) | **06** · [A Pista](#-06--a-pista-circuito-clássico) |
+| **07** · [A Largada](#-07--a-largada) | **08** · [Na Corrida](#-08--na-corrida) | **09** · [Itens](#-09--itens) |
+| **10** · [Técnicas de Pilotagem](#-10--técnicas-de-pilotagem) | **11** · [Chegada e Pódio](#-11--chegada-e-pódio) | **12** · [Modo Online](#-12--modo-online) |
 
-Quando o servidor grátis estiver dormindo, a tela "Online" mostra "Acordando o servidor…" e conecta
-sozinha assim que ele acorda (até ~1 minuto). O jogo também começa a acordá-lo assim que a página abre.
+</div>
 
-## Como jogar online
+<br>
 
-1. Menu > **Online** > escolha seu nome.
-2. **Criar sala**: nome, senha (3 a 32 caracteres), jogadores (2 a 8), pista e voltas.
-3. Os amigos usam **Entrar numa sala**: escolhem a sala (ou digitam o código de 5 letras) e a senha.
-4. Todos marcam **Estou pronto** e o anfitrião clica em **Iniciar corrida**.
+---
 
-Verificação: `/health` responde `{"ok":true,"rooms":N,"players":M}`.
+## 🎮 01 · O JOGO
 
-## Texturas KTX2 (menos memória de vídeo)
+<table>
+<tr>
+<td width="55%">
 
-As texturas dos modelos `.glb` podem ficar em KTX2 (Basis Universal), que continua comprimido dentro da placa de
-vídeo: 4 a 8 vezes menos memória que PNG/JPG. O jogo já sabe ler (`js/vendor/KTX2Loader.js` + `js/ktx2-setup.js`);
-arquivos não convertidos continuam funcionando normalmente.
+**Super Kartec** é um jogo de corrida de kart 3D, colorido e cartunesco, feito para jogar **direto no navegador** — sem instalar nada.
 
-Para converter todos os `.glb` do jogo (Node.js 18 ou mais novo):
+Escolha seu veículo, pinte do seu jeito, encare **7 rivais** na pista e use **drift**, **turbos** e **itens malucos** para cruzar a linha de chegada em primeiro.
 
-```bash
-cd tools/ktx2
-npm install            # só na primeira vez
-npm run converter      # texturas até 2048 px; para economizar mais: npm run converter -- --max 1024
-npm run restaurar      # se quiser voltar aos originais
-```
+Quer desafiar os amigos? Abra uma **sala online** e corra com até **8 pilotos** de verdade.
 
-**Modelo novo ou atualizado:** exporte o `.glb` normal (com PNG/JPG) para a pasta do jogo e rode `npm run converter`
-de novo. Só os arquivos que ainda não estão em KTX2 são convertidos (alguns segundos cada); os outros são pulados.
+</td>
+<td width="45%">
 
-Os originais ficam em `tools/ktx2/_originais/`. Para reconverter tudo a partir deles (por exemplo, com outro tamanho):
-`npm run refazer -- --max 1024`. Normal maps viram UASTC (qualidade alta); o resto vira ETC1S.
+<img src="docs/manual/corrida-disputa.jpg" alt="Corrida">
 
-O piloto (`assets/pilot.glb`) fica de fora de propósito: a troca de cor da roupa/capacete/pele procura cores exatas na
-textura, e a compressão alteraria essas cores nas bordas.
+</td>
+</tr>
+</table>
 
-Para ver o peso de cada modelo (triângulos, vértices e texturas): `npm run inspecionar`.
+<br>
 
-## Modelos 3D pesados: simplificar
+---
 
-Modelos gerados por IA (Tripo, Meshy) costumam vir com centenas de milhares ou milhões de triângulos. Para reduzir:
+## 🕹️ 02 · CONTROLES
 
-```bash
-cd tools/ktx2
-npm run inspecionar                                                   # lista triângulos e texturas de cada .glb
-npm run simplificar -- js/models/entidades/banana.glb --tris 15000 --tex 1024
-npm run converter                                                     # depois, texturas para KTX2
-```
+<div align="center">
 
-O simplificador guarda a versão de alta em `tools/ktx2/_originais_alta/` e sempre parte dela (dá para rodar de novo
-com outro `--tris`). Ele preserva UV, normais e texturas. Confira o modelo no jogo depois: se aparecer defeito, suba
-o `--tris`. Referência: personagem/item de jogo de kart, 10 a 60 mil triângulos.
+| Ação | Teclado | |
+|:---|:---:|:---|
+| 🟢 **Acelerar** | <kbd>W</kbd> ou <kbd>↑</kbd> | |
+| 🔴 **Frear / Ré** | <kbd>S</kbd> ou <kbd>↓</kbd> | |
+| ↔️ **Virar** | <kbd>A</kbd> <kbd>D</kbd> ou <kbd>←</kbd> <kbd>→</kbd> | |
+| 🌀 **Drift** | <kbd>Espaço</kbd> ou <kbd>Shift</kbd> | *segure enquanto vira* |
+| 🎁 **Usar item** | <kbd>E</kbd> | *ou toque no ícone do item* |
+| 🏍️ **Dar grau** | <kbd>Ctrl</kbd> | *só na Motoca, numa reta* |
+| 👀 **Olhar para trás** | <kbd>C</kbd> | *segure* |
+| ⏸️ **Pausa** | <kbd>Esc</kbd> | *reiniciar e sair ficam aqui* |
+| 🔄 **Reiniciar corrida** | <kbd>R</kbd> | |
+| 🌙 **Avançar 3 horas** | <kbd>N</kbd> | *do dia para a noite!* |
+| 🔇 **Som liga/desliga** | <kbd>M</kbd> | |
 
-Valores usados: Fatecxie 60 mil (era 1,9 milhão), dinossauro 30 mil (era 107 mil), banana 15 mil (era 62 mil).
-A Fatecxie ganha, ao simplificar, as partes marcadas (asas, corpo, semáforo) e a cor da pele, que o `js/ui.js` usa.
-Se gerar o `fatecxie.glb` de outro jeito, rode o simplificador nele mesmo assim (pode ser com `--tris` alto).
+</div>
+
+> [!TIP]
+> 🎮 **Tem controle?** Os menus também funcionam no gamepad: <kbd>✛</kbd> navega, <kbd>Start</kbd> confirma e <kbd>B</kbd> volta.
+
+<br>
+
+---
+
+## 🏠 03 · MENU PRINCIPAL
+
+<div align="center">
+<img src="docs/manual/menu.jpg" alt="Menu principal" width="90%">
+</div>
+
+<br>
+
+A sua jornada começa em frente à **oficina Kartec**. Daqui você vai para qualquer lugar:
+
+| Botão | O que faz |
+|:---|:---|
+| 🏁 **Jogar** | Corrida contra os rivais do computador, na hora. Atalho: <kbd>Enter</kbd> |
+| 🌐 **Online** | Corra contra seus amigos em salas de até 8 jogadores |
+| 🔧 **Garagem** | Escolha o veículo, a pintura e o seu piloto |
+| ⚙️ **Configurações** | Volume (geral, motores, efeitos, interface, ambiente), gráficos e contador de FPS |
+| 📰 **Patch notes** | Tudo o que mudou em cada atualização — o selo **Novo** avisa quando tem novidade |
+| 🎮 **Como jogar** | Um resumo rápido dos controles |
+
+<br>
+
+---
+
+## 🔧 04 · GARAGEM
+
+Ao entrar na garagem, o portão se abre e a câmera mostra o seu veículo em cima da plataforma giratória.
+Use as setas <kbd>‹</kbd> <kbd>›</kbd> para trocar de veículo.
+
+### 🚗 Os veículos
+
+<table>
+<tr>
+<td width="50%" align="center">
+
+<img src="docs/manual/garagem-kartec-gt.jpg" alt="Kartec GT">
+
+### Kartec GT
+*Kart clássico de chassi tubular.*
+
+⚖️ **Equilibrado e fácil de pilotar** — a escolha perfeita para quem está começando.
+
+</td>
+<td width="50%" align="center">
+
+<img src="docs/manual/garagem-motoca.jpg" alt="Motoca">
+
+### Motoca
+*Moto futurista de carenagem lisa.*
+
+🏍️ **Deita nas curvas e empina!** Segure <kbd>Ctrl</kbd> numa reta para dar grau: fica **6% mais rápida**, mas vira menos e não derrapa.
+
+</td>
+</tr>
+</table>
+
+### 🎨 Personalize
+
+<table>
+<tr>
+<td width="50%">
+
+<img src="docs/manual/garagem-piloto.jpg" alt="Piloto">
+
+</td>
+<td width="50%">
+
+**🖌️ Pintura** — 10 cores para a lataria:
+
+🔴 Vermelho · 🔵 Azul · 🟢 Verde · 🟡 Amarelo · 🟣 Roxo · 🟠 Laranja · 🩷 Rosa · ⚫ Preto · ⚪ Branco · 🩵 Ciano
+
+**🧑 Piloto** — escolha entre **Menino** e **Menina** e combine a cor do **macacão**, do **capacete** e o **tom de pele**.
+
+*Dica: arraste para girar o piloto e role o mouse para aproximar.*
+
+**✨ Adesivos** — <sub>`EM BREVE`</sub>
+
+</td>
+</tr>
+</table>
+
+<br>
+
+---
+
+## 📋 05 · PREPARAR CORRIDA
+
+<div align="center">
+<img src="docs/manual/preparar-corrida.jpg" alt="Preparar corrida" width="90%">
+</div>
+
+<br>
+
+Antes de cada corrida você escolhe as regras:
+
+- 🗺️ **Pista** — onde vai ser a disputa.
+- 🏆 **Modo** — **Corrida única** (uma pista, sem pressa). A **Copa Kartec** chega em breve!
+- 🔁 **Voltas** — de **1 a 5**.
+- 🤖 **Rival** — a dificuldade dos adversários:
+
+| 😊 Fácil | 😐 Normal | 😈 Difícil |
+|:---:|:---:|:---:|
+| Ótimo para aprender | O desafio padrão | Para pilotos de verdade |
+
+<br>
+
+---
+
+## 🗺️ 06 · A PISTA: CIRCUITO CLÁSSICO
+
+<div align="center">
+<img src="docs/manual/pista-caixas.jpg" alt="Circuito Clássico" width="90%">
+
+<i>Onze curvas para segurar o drift, subidas, descidas e cristas, rio com duas pontes e cachoeira.</i>
+</div>
+
+<br>
+
+### 📍 Mapa do circuito
+
+<div align="center">
+<img src="docs/manual/mapa-circuito-classico.svg" alt="Mapa do Circuito Clássico" width="95%">
+</div>
+
+<br>
+
+<table>
+<tr>
+<td align="center" width="20%"><h3>📏</h3><b>~3,7 km</b><br><sub>por volta</sub></td>
+<td align="center" width="20%"><h3>↪️</h3><b>11 curvas</b><br><sub>2 grampos e 1 dupla</sub></td>
+<td align="center" width="20%"><h3>⚡</h3><b>7 turbos</b><br><sub>plataformas coloridas</sub></td>
+<td align="center" width="20%"><h3>🛫</h3><b>3 rampas</b><br><sub>de salto</sub></td>
+<td align="center" width="20%"><h3>🤫</h3><b>3 atalhos</b><br><sub>de terra batida</sub></td>
+</tr>
+</table>
+
+### ⛰️ Sobe e desce
+
+<div align="center">
+<img src="docs/manual/relevo-circuito-classico.svg" alt="Relevo do circuito" width="95%">
+</div>
+
+<br>
+
+> [!TIP]
+> 🤫 **Segredo dos atalhos:** em três curvas existe um caminho de **terra batida** cortando por dentro. Na terra o kart fica um pouco mais lento, mas o caminho é tão mais curto que você ainda ganha cerca de **1 segundo**. Os bots não conhecem os atalhos — aproveite!
+
+<br>
+
+---
+
+## 🧚 07 · A LARGADA
+
+<div align="center">
+<img src="docs/manual/largada-fatecxie.jpg" alt="Largada com a Fatecxie" width="90%">
+</div>
+
+<br>
+
+Antes de cada corrida, a câmera mostra a pista e o grid com os **8 pilotos**. Aí aparece a **Fatecxie**, a fadinha que segura o semáforo da largada. 🚦
+
+**3... 2... 1... VAI!**
+
+> [!IMPORTANT]
+> 🚀 **LARGADA TURBO:** acelere **logo depois do "1"**. Se apertar cedo demais (antes do "2"), você perde o impulso!
+
+### 🤖 Seus rivais
+
+<div align="center">
+
+| | Piloto | | Piloto |
+|:---:|:---|:---:|:---|
+| 🤖 | **Bot Turbo** | 🧪 | **Nina Nitro** |
+| ⚡ | **Lia Faísca** | 💨 | **Beto Bala** |
+| 🌀 | **Zeca Drift** | 🍃 | **Duda Vento** |
+| 🛞 | **Tito Pneu** | | |
+
+</div>
+
+<br>
+
+---
+
+## 🏎️ 08 · NA CORRIDA
+
+<div align="center">
+<img src="docs/manual/corrida-item.jpg" alt="Tela de corrida" width="90%">
+</div>
+
+<br>
+
+### 📺 Entendendo a tela
+
+| Onde | O que mostra |
+|:---|:---|
+| ↖️ **Canto superior esquerdo** | 🏁 Volta atual e o seu **item** guardado no saquinho |
+| ⬆️ **Topo** | ⏱️ Cronômetro da corrida |
+| ↗️ **Canto superior direito** | 🗺️ Minimapa com você e os rivais |
+| ↙️ **Canto inferior esquerdo** | 🏆 Sua posição (1º a 8º) |
+| ↘️ **Canto inferior direito** | 🏎️ Velocímetro 3D — até **135 km/h** normal e **203 km/h** no turbo! |
+
+### 🛣️ O que você encontra na pista
+
+<table>
+<tr>
+<td width="50%" align="center">
+<img src="docs/manual/pista-caixas.jpg" alt="Caixas de item">
+<b>🎁 Caixas de item</b><br>
+<sub>Ficam em fileiras atravessando a pista. Passe por cima para pegar um item! Elas voltam alguns segundos depois.</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/manual/corrida-plataforma-turbo.jpg" alt="Plataforma de turbo">
+<b>⚡ Plataformas de turbo</b><br>
+<sub>Os pisos coloridos e brilhantes dão um empurrão instantâneo de velocidade.</sub>
+</td>
+</tr>
+<tr>
+<td width="50%" align="center">
+<img src="docs/manual/corrida-rampa.jpg" alt="Rampa de salto">
+<b>🛫 Rampas de salto</b><br>
+<sub>No ar, aperte o <b>drift</b> para fazer uma <b>manobra</b> — e ganhe turbo ao pousar!</sub>
+</td>
+<td width="50%" align="center">
+<img src="docs/manual/corrida-disputa.jpg" alt="Disputa">
+<b>💥 Batidas de lado</b><br>
+<sub>Encostou de lado num rival? Os karts se empurram. Use isso a seu favor!</sub>
+</td>
+</tr>
+</table>
+
+> [!NOTE]
+> 🌅 **O tempo passa durante a corrida!** O dia vira tarde e a tarde vira noite. Aperte <kbd>N</kbd> para pular 3 horas e correr sob as luzes dos postes. 🌙
+
+<br>
+
+---
+
+## 🎁 09 · ITENS
+
+Passou por uma caixa? Uma roleta gira e o item aparece no saquinho do canto da tela. Use com <kbd>E</kbd>. Você só pode guardar **um item por vez**.
+
+<div align="center">
+
+<table>
+<tr>
+<td align="center" width="20%"><img src="docs/manual/item-banana.png" width="120"><br><h3>🍌 Banana</h3></td>
+<td align="center" width="20%"><img src="docs/manual/item-dino.png" width="120"><br><h3>🦖 Dinossauro</h3></td>
+<td align="center" width="20%"><img src="docs/manual/item-rocket.png" width="120"><br><h3>🚀 Bazuca</h3></td>
+<td align="center" width="20%"><img src="docs/manual/item-brick.png" width="120"><br><h3>🧱 Tijolo</h3></td>
+<td align="center" width="20%"><img src="docs/manual/item-shield.png" width="120"><br><h3>🫧 Escudo</h3></td>
+</tr>
+<tr>
+<td valign="top"><sub>Cai <b>atrás</b> do seu kart. Quem pisar <b>rodopia</b>, perde quase toda a velocidade e demora para voltar a correr.</sub></td>
+<td valign="top"><sub><b>Turbo!</b> Dá um empurrão de velocidade por alguns segundos.</sub></td>
+<td valign="top"><sub>Foguete <b>teleguiado</b> que persegue quem está logo à sua frente e faz o kart <b>capotar</b>.</sub></td>
+<td valign="top"><sub>Arremessado em quem está <b>logo à frente</b>. Só funciona se o rival estiver perto!</sub></td>
+<td valign="top"><sub>Bolha de vidro <b>arco-íris</b> que aguenta <b>um ataque</b> (banana, tijolo ou foguete). Dura 10 s e pisca antes de acabar.</sub></td>
+</tr>
+</table>
+
+<br>
+
+<img src="docs/manual/item-escudo-em-uso.jpg" alt="Escudo em uso" width="80%">
+
+<sub><i>O Escudo protegendo o piloto na pista.</i></sub>
+
+</div>
+
+> [!WARNING]
+> 🚀 **Bazuca vindo aí!** Quando um foguete está atrás de você, o jogo avisa. Ligue o **Escudo** se tiver um — ou reze! 🙏
+
+<br>
+
+---
+
+## 🌀 10 · TÉCNICAS DE PILOTAGEM
+
+<table>
+<tr>
+<td width="50%" valign="top">
+
+### 🔥 Drift e Mini-turbo
+Segure <kbd>Espaço</kbd> **enquanto vira** com <kbd>A</kbd>/<kbd>D</kbd>. Sem virar, o drift não liga!
+
+- Virando **para dentro**, o arco fecha.
+- Virando **para fora**, o arco abre.
+- Solte com **faísca** para ganhar o **mini-turbo**.
+
+A **barra de turbo** ao lado do piloto enche em **3 níveis** — quanto mais cheia, mais forte e mais longo o turbo. No 3º nível você chega a **203 km/h** e as cores do velocímetro começam a girar! 🌈
+
+</td>
+<td width="50%" valign="top">
+
+### 🚀 Largada turbo
+Acelere logo depois do **"1"** na contagem.
+
+### 💨 Vácuo
+Fique **colado atrás** de um rival por um segundo e ganhe um empurrão para ultrapassar.
+
+### 🛫 Manobra no ar
+Pulou numa rampa? Aperte o **drift** no ar e ganhe turbo ao pousar.
+
+### 🏍️ Grau (só Motoca)
+Segure <kbd>Ctrl</kbd> numa reta: **+6% de velocidade**, mas sem drift.
+
+### 👀 Olhar para trás
+Segure <kbd>C</kbd> para ver quem está chegando.
+
+</td>
+</tr>
+</table>
+
+> [!TIP]
+> 🏆 **O segredo dos campeões:** um mini-turbo bem feito em cada uma das **curvas longas** ganha muito tempo. Logo depois de um mini-turbo, a próxima carga demora um pouco mais — escolha bem onde gastar!
+
+<br>
+
+---
+
+## 🏆 11 · CHEGADA E PÓDIO
+
+<table>
+<tr>
+<td width="50%">
+<img src="docs/manual/chegada.jpg" alt="Chegada">
+<p align="center"><b>CHEGADA!</b><br><sub>O placar mostra a posição e o tempo de cada piloto conforme eles cruzam a linha.</sub></p>
+</td>
+<td width="50%">
+<img src="docs/manual/podio.jpg" alt="Pódio">
+<p align="center"><b>PÓDIO!</b><br><sub>Os 3 melhores sobem no pódio com troféu e festa. Depois é só jogar de novo!</sub></p>
+</td>
+</tr>
+</table>
+
+<br>
+
+---
+
+## 🌐 12 · MODO ONLINE
+
+<div align="center">
+<img src="docs/manual/online.jpg" alt="Jogar online" width="90%">
+</div>
+
+<br>
+
+Corra com seus amigos, cada um no seu computador!
+
+| Passo | |
+|:---:|:---|
+| **1** | No menu, clique em **🌐 Online** e escolha seu nome de piloto |
+| **2** | **Criar sala:** dê um nome, escolha a pista, as voltas e quantos jogadores (2 a 8). A senha é opcional! |
+| **3** | Seus amigos clicam em **Entrar numa sala** e procuram a sala pelo nome |
+| **4** | Todo mundo marca **Estou pronto** e quem criou a sala clica em **Iniciar corrida** 🏁 |
+
+> [!NOTE]
+> 🔌 **Caiu a internet ou fechou a aba sem querer?** Calma! Você tem **15 segundos** para voltar e continua na mesma corrida.
+>
+> 😴 Se ninguém jogou por um tempo, o servidor pode estar "dormindo". A tela mostra *"Acordando o servidor…"* e conecta sozinha em até 1 minuto.
+
+<br>
+
+---
+
+<div align="center">
+
+## 🏁 PRONTO PARA CORRER?
+
+<a href="https://kartec.vercel.app"><img src="https://img.shields.io/badge/▶%20%20ENTRAR%20NA%20PISTA-e8302a?style=for-the-badge&labelColor=1b1d29" alt="Jogar agora" height="42"></a>
+
+<br><br>
+
+**Boa corrida, piloto!** 🏆
+
+<br>
+
+<sub>Feito com ❤️ pelo <b>Studio Lumingues</b></sub>
+
+<br>
+
+<sub>👨‍💻 Para desenvolvedores: como rodar no computador, publicar o servidor e otimizar os modelos 3D está no <a href="docs/TECNICO.md">guia técnico</a>.</sub>
+
+</div>
