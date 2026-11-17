@@ -5,7 +5,8 @@
   "description": "Super Kartec: jogo de kart 3D com modo online (servidor + arquivos do jogo no mesmo serviço)",
   "main": "server/server.js",
   "scripts": {
-    "start": "node server/server.js"
+    "start": "node server/server.js",
+    "dev": "node --watch server/server.js"
   },
   "engines": {
     "node": ">=18"
