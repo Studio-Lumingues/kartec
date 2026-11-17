@@ -39,6 +39,15 @@
   // =====================================================================================
   const TIERS = ['massinha', 'low', 'medium', 'high', 'ultra'];
   const TIER_NAME = { massinha: 'Massinha', low: 'Baixa', medium: 'Média', high: 'Alta', ultra: 'Ultra', auto: 'Automática', custom: 'Personalizada' };
+  const PRESET_DESC = {
+    massinha: 'o mais leve possível, para PC ou celular bem fraco. Cores lisas e visão curta.',
+    low: 'leve e liso em notebooks simples. Sem sombras, menos árvores.',
+    medium: 'o equilíbrio entre bonito e rápido. Sombras leves e efeitos simples.',
+    high: 'sombras e efeitos completos, reflexo na água e cenário cheio.',
+    ultra: 'tudo no máximo: resolução total e sombras finíssimas. Para placas fortes.',
+    auto: 'efeitos completos e a resolução se ajusta sozinha para manter o jogo liso.',
+    custom: 'você mexeu nos ajustes avançados. Escolha um nível acima para voltar ao padrão.'
+  };
   const REC_VERSION = 2;   // 2: pergunta antes de aplicar (a 1 aplicava sozinha); quem tinha a 1 é perguntado uma vez
   // nível pelo nome da placa (do mais forte para o mais fraco; a 1ª regra que bater vale)
   const GPU_RULES = [
@@ -265,26 +274,46 @@
       if (!this.s) this.load(); this.apply();
       const vol = [['master', 'Volume geral'], ['engine', 'Motores'], ['sfx', 'Efeitos (batidas, derrapagem, turbo)'], ['ui', 'Interface e avisos'], ['amb', 'Ambiente e torcida']];
       $('setVol').innerHTML = vol.map(([k, t]) => '<label class="slider"><span>' + t + '</span><input type="range" min="0" max="100" step="1" data-vol="' + k + '"><output></output></label>').join('');
-      const opt = (id, label, items, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '">' + items.map(([v, t]) => '<button type="button" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>';
-      const tog = (id, label, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '"><button type="button" data-v="1">Ligado</button><button type="button" data-v="0">Desligado</button></div></div>';
+      // ---------- aba Gráficos ----------
+      // 1) Qualidade: régua com os 5 níveis (+ Automática) e uma frase dizendo o que o nível faz
+      // 2) Na tela: chaves liga/desliga do dia a dia
+      // 3) Ajustes avançados (fechado): opções finas agrupadas por assunto. Mexer em qualquer uma vira "Personalizada"
+      const opt = (id, label, items, hint) => '<div class="gRow"><div class="gLbl"><b>' + label + '</b>' + (hint ? '<small>' + hint + '</small>' : '') + '</div>' +
+        '<div class="pick" data-g="' + id + '" role="radiogroup" aria-label="' + label + '">' + items.map(([v, t]) => '<button type="button" data-v="' + v + '" role="radio">' + t + '</button>').join('') + '</div></div>';
+      const tog = (id, label, hint) => '<div class="gRow"><div class="gLbl"><b>' + label + '</b>' + (hint ? '<small>' + hint + '</small>' : '') + '</div>' +
+        '<button type="button" class="sw" data-g="' + id + '" role="switch" aria-label="' + label + '"><i></i></button></div>';
+      const group = (title, icon, rows) => '<section class="gGroup"><h4><span aria-hidden="true">' + icon + '</span>' + title + '</h4>' + rows + '</section>';
+      const level = (t, i) => '<button type="button" data-v="' + t + '" role="radio"><b class="bars" aria-hidden="true">' +
+        TIERS.map((_, j) => '<i class="' + (j <= i ? 'on' : '') + '"></i>').join('') + '</b><span>' + TIER_NAME[t] + '</span></button>';
+      let advOpen = false; try { advOpen = localStorage.getItem(CFG.STORAGE + ':advOpen') === '1'; } catch (e) { }
       $('setGfx').innerHTML =
-        '<div class="recRow"><div class="recTxt"><b>Recomendado para esta máquina: <em id="recName"></em></b><small id="recGpu"></small></div>' +
-          '<button type="button" id="recAgain" class="ghost">Detectar de novo</button></div>' +
-        opt('preset', 'Qualidade', [['auto', 'Automática'], ['massinha', 'Massinha'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra'], ['custom', 'Personalizada']],
-          'Massinha: o mais leve possível, para PC ou celular fraco. Automática ajusta a resolução sozinha') +
-        opt('res', 'Resolução', [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%'], ['1.5', '150%'], ['2', 'Máxima']], 'O que mais pesa: menor = mais FPS e menos memória') +
-        opt('fpsCap', 'Limite de FPS', [['30', '30'], ['60', '60'], ['0', 'Livre']], 'Limitar esquenta menos e gasta menos bateria') +
-        opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']]) +
-        opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Completo: sombra de contato, brilho e raios de sol. Simples: só cor e antisserrilhado') +
-        opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo total']], 'O reflexo redesenha a cena: desligar ganha muito FPS perto do rio') +
-        tog('dof', 'Desfoque de distância', 'O que está longe do kart fica levemente desfocado. Só com o pós-efeito Completo') +
-        opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Montanhas, terreno, névoa da cachoeira e enfeites. Vale na próxima corrida') +
-        opt('textures', 'Texturas', [['flat', 'Massinha (cor lisa)'], ['full', 'Detalhadas']], 'Vale na próxima corrida') +
-        opt('texRes', 'Resolução das texturas 3D', [['512', '512'], ['1024', '1024'], ['2048', '2048'], ['max', 'Original']], 'Piloto, karts, garagem e fadinha. O que mais gasta memória de vídeo. Vale ao recarregar o jogo (F5)') +
-        opt('scenery', 'Cenário', [['min', 'Mínimo'], ['low', 'Leve'], ['medium', 'Médio'], ['high', 'Completo'], ['ultra', 'Ultra']], 'Árvores e enfeites até o horizonte. Vale na próxima corrida') +
-        opt('particles', 'Partículas', [['min', 'Mínimas'], ['low', 'Poucas'], ['normal', 'Normais']]) +
-        opt('view', 'Distância de visão', [['veryNear', 'Muito curta'], ['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
-        tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS');
+        '<section class="gQual">' +
+          '<div class="gqTop"><h3>Qualidade</h3><div class="pick chips" data-g="preset" role="radiogroup" aria-label="Modo"><button type="button" data-v="auto" role="radio">Automática</button></div></div>' +
+          '<div class="qScale" data-g="preset" role="radiogroup" aria-label="Qualidade">' + TIERS.map(level).join('') + '</div>' +
+          '<p id="gqDesc" class="gqDesc"></p>' +
+          '<div class="gqRec"><span class="star" aria-hidden="true">★</span><span class="gqRecTxt">Recomendado para esta máquina: <b id="recName"></b><small id="recGpu"></small></span>' +
+            '<button type="button" id="recAgain" class="linkBtn">Detectar de novo</button></div>' +
+        '</section>' +
+        group('Na tela', '🎥', tog('speedFx', 'Linhas de velocidade') + tog('shake', 'Tremor da câmera') + tog('fps', 'Mostrar FPS')) +
+        '<details class="gAdv"' + (advOpen ? ' open' : '') + '><summary><span>Ajustes avançados</span><small>Para quem quer mexer em cada detalhe</small><i class="chev" aria-hidden="true"></i></summary>' +
+          group('Desempenho', '⚡',
+            opt('res', 'Resolução', [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%'], ['1.5', '150%'], ['2', 'Máx.']], 'O que mais pesa: menor = mais FPS') +
+            opt('fpsCap', 'Limite de FPS', [['30', '30'], ['60', '60'], ['0', 'Livre']], 'Limitar esquenta menos e poupa bateria')) +
+          group('Luz e efeitos', '☀️',
+            opt('shadows', 'Sombras', [['off', 'Sem'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra']]) +
+            opt('postfx', 'Pós-efeito', [['off', 'Sem'], ['simple', 'Simples'], ['full', 'Completo']], 'Brilho, raios de sol e sombra de contato') +
+            tog('dof', 'Desfoque de distância', 'Só com o pós-efeito Completo') +
+            opt('water', 'Água', [['off', 'Simples'], ['low', 'Média'], ['high', 'Reflexo']], 'O reflexo pesa perto do rio')) +
+          group('Mundo', '🌲',
+            opt('detail', 'Detalhe do mapa', [['low', 'Baixo'], ['medium', 'Médio'], ['high', 'Alto']], 'Vale na próxima corrida') +
+            opt('scenery', 'Cenário', [['min', 'Mínimo'], ['low', 'Leve'], ['medium', 'Médio'], ['high', 'Cheio'], ['ultra', 'Ultra']], 'Árvores até o horizonte · próxima corrida') +
+            opt('view', 'Distância de visão', [['veryNear', 'Mín.'], ['near', 'Curta'], ['medium', 'Média'], ['far', 'Longa']]) +
+            opt('particles', 'Partículas', [['min', 'Mínimas'], ['low', 'Poucas'], ['normal', 'Normais']], 'Fumaça, poeira e faíscas')) +
+          group('Texturas', '🎨',
+            opt('textures', 'Texturas', [['flat', 'Cor lisa'], ['full', 'Detalhadas']], 'Cor lisa é o mais leve · próxima corrida') +
+            opt('texRes', 'Qualidade dos modelos 3D', [['512', '512'], ['1024', '1K'], ['2048', '2K'], ['max', 'Original']], 'Memória de vídeo · vale ao recarregar (F5)')) +
+        '</details>';
+      $('setGfx').querySelector('.gAdv').addEventListener('toggle', e => { try { localStorage.setItem(CFG.STORAGE + ':advOpen', e.target.open ? '1' : '0'); } catch (er) { } });
       // abas
       $('setTabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => this.tab(b.dataset.v)));
       // volumes (arrastar = ouvir na hora)
@@ -292,13 +321,17 @@
         inp.style.setProperty('--p', inp.value + '%'); Sfx.setVolumes(this.s.vol); this.save(); }));
       $('setVol').querySelectorAll('input').forEach(inp => inp.addEventListener('change', () => { if (inp.dataset.vol === 'ui' || inp.dataset.vol === 'master') Sfx.ui('ui-click_002', 0.5); else if (inp.dataset.vol === 'sfx') Sfx.bump(4); }));
       // gráficos
-      $('setGfx').querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-        const id = seg.dataset.g, v = b.dataset.v, g = this.s.gfx;
-        const oldTex = g.texRes;
-        if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; this.userTouched(); }
-        else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (GFX_KEYS.includes(id)) { g.preset = 'custom'; this.userTouched(); } }
-        this.save(); this.apply(); this.sync();
-        if (g.texRes !== oldTex && window.UI && UI.toast) UI.toast('Resolução das texturas: vale ao recarregar o jogo (F5)', 2600); })));
+      $('setGfx').querySelectorAll('[data-g]').forEach(el => {
+        const set = v => {
+          const id = el.dataset.g, g = this.s.gfx, oldTex = g.texRes;
+          if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; this.userTouched(); }
+          else { g[id] = v; if (GFX_KEYS.includes(id)) { g.preset = 'custom'; this.userTouched(); } }
+          this.save(); this.apply(); this.sync();
+          if (g.texRes !== oldTex && window.UI && UI.toast) UI.toast('Qualidade dos modelos 3D: vale ao recarregar o jogo (F5)', 2600);
+        };
+        if (el.classList.contains('sw')) el.addEventListener('click', () => set(!this.s.gfx[el.dataset.g]));
+        else el.querySelectorAll('button').forEach(b => b.addEventListener('click', () => set(b.dataset.v)));
+      });
       // restaurar padrão = volumes padrão + a qualidade recomendada para esta máquina (a detecção continua salva)
       $('setReset').addEventListener('click', () => { const rec = this.s.rec; this.s = JSON.parse(JSON.stringify(DEF)); this.s.rec = rec;
         if (rec) { Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset; rec.auto = true; }
@@ -315,14 +348,15 @@
     open(opts) { if (window.Sfx) Sfx.unlock(); this.sync(); UI.openModal('settingsModal', opts); },
     sync() {
       $('setVol').querySelectorAll('input').forEach(inp => { inp.value = this.s.vol[inp.dataset.vol]; inp.nextElementSibling.textContent = inp.value + '%'; inp.style.setProperty('--p', inp.value + '%'); });
-      $('setGfx').querySelectorAll('.seg').forEach(seg => { const id = seg.dataset.g, cur = this.s.gfx[id], val = typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);
-        seg.querySelectorAll('button').forEach(b => { const on = b.dataset.v === val; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); });
-      // recomendação: nome, placa e estrelinha no botão da qualidade recomendada
-      const r = this.rec(), rn = $('recName'), rg = $('recGpu');
+      $('setGfx').querySelectorAll('[data-g]').forEach(el => { const id = el.dataset.g, cur = this.s.gfx[id];
+        if (el.classList.contains('sw')) { el.classList.toggle('on', !!cur); el.setAttribute('aria-checked', !!cur); return; }
+        const val = String(cur); el.querySelectorAll('button').forEach(b => { const on = b.dataset.v === val; b.classList.toggle('on', on); b.setAttribute('aria-checked', on); }); });
+      // frase do nível escolhido + recomendação (estrelinha no nível recomendado)
+      const r = this.rec(), p = this.s.gfx.preset, rn = $('recName'), rg = $('recGpu'), d = $('gqDesc');
+      if (d) d.innerHTML = (p === 'custom' ? '<b>Personalizada:</b> ' : '<b>' + (TIER_NAME[p] || p) + ':</b> ') + (PRESET_DESC[p] || '');
       if (rn) rn.textContent = r ? TIER_NAME[r.preset] : '—';
-      if (rg) rg.textContent = r ? this.gpuName() + (r.lowered ? ' · ajustada durante a corrida' : '') : '';
-      const ps = $('setGfx').querySelector('[data-g="preset"]');
-      if (ps) ps.querySelectorAll('button').forEach(b => b.classList.toggle('rec', !!r && b.dataset.v === r.preset));
+      if (rg) { const gn = r ? this.gpuName() : ''; rg.textContent = gn ? ' · ' + gn + (r.lowered ? ' (ajustada na corrida)' : '') : ''; }
+      $('setGfx').querySelectorAll('.qScale button').forEach(b => b.classList.toggle('rec', !!r && b.dataset.v === r.preset));
     },
     // pergunta da 1ª visita: quando o menu principal aparece, "Quer usar os gráficos recomendados?"
     //  Usar recomendado (ou Enter) -> aplica e salva | Agora não (ou Esc / clicar fora) -> mantém como está e salva
