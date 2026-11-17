@@ -27,12 +27,151 @@
   // opções que fazem a predefinição virar "Personalizada" quando mexidas
   const GFX_KEYS = ['res', 'shadows', 'outlines', 'scenery', 'particles', 'view', 'postfx', 'water', 'detail', 'textures', 'fpsCap', 'texRes', 'dof'];
 
+  // =====================================================================================
+  // GRÁFICOS RECOMENDADOS: na 1ª vez que a pessoa abre o jogo, ele olha a máquina e escolhe a predefinição que deve
+  // rodar liso nela. O resultado fica salvo no localStorage (junto das configurações, em "rec") e não roda de novo,
+  // a não ser pelo botão "Detectar de novo" nas configurações.
+  //  1) placa de vídeo pelo nome (WEBGL_debug_renderer_info) -> nível conhecido (0 = Massinha ... 4 = Ultra)
+  //  2) teste rápido da placa (~0,3 s): um shader pesado numa tela escondida, medindo quanto ele demora
+  //  3) limites do aparelho: celular, poucos núcleos ou pouca memória seguram o nível
+  // Na corrida, se a recomendação não der conta (FPS baixo por ~20 s), o jogo desce UM nível sozinho (perfTick).
+  // =====================================================================================
+  const TIERS = ['massinha', 'low', 'medium', 'high', 'ultra'];
+  const TIER_NAME = { massinha: 'Massinha', low: 'Baixa', medium: 'Média', high: 'Alta', ultra: 'Ultra', auto: 'Automática', custom: 'Personalizada' };
+  const REC_VERSION = 1;
+  // nível pelo nome da placa (do mais forte para o mais fraco; a 1ª regra que bater vale)
+  const GPU_RULES = [
+    [/swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic|mesa offscreen/i, 0],
+    [/rtx\s*(30[6-9]0|40[5-9]0|50\d0)|rx\s*(6[7-9]\d0|7[7-9]\d0|9\d{3})|apple m\d\s*(pro|max|ultra)|radeon\s*pro\s*w/i, 4],
+    [/rtx|gtx\s*(10[6-8]0|16[5-6]0|9[78]0|titan)|rx\s*(5[6-7]\d0|6[5-6]\d0|7[6]\d0|vega\s*(56|64))|apple m\d|arc\s*a[57]|radeon\s*(780m|890m)/i, 3],
+    [/gtx|rx\s*[456]\d0|rx\s*5[35]00|radeon.*(vega|680m|660m)|iris\s*xe|arc|mx\s*\d{3}|apple gpu|adreno.*(7[3-9]\d|8\d\d)|mali-g7[1-9]|mali-g[6-9]\d\d|immortalis|xclipse/i, 2],
+    [/intel|uhd|hd graphics|radeon\s*(r[2-7]|hd)|adreno|mali|powervr|apple a\d|tegra|videocore/i, 1]
+  ];
+  const HwDetect = {
+    info() {
+      const n = navigator, ua = n.userAgent || '';
+      const mobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && n.maxTouchPoints > 1);
+      return { mobile, cores: n.hardwareConcurrency || 0, mem: n.deviceMemory || 0,
+        screen: Math.round((screen.width || 0) * (screen.height || 0) * Math.pow(devicePixelRatio || 1, 2) / 1e4) / 100 };   // megapixels de verdade
+    },
+    // abre um WebGL escondido: nome da placa + teste de desempenho. Sempre devolve algo (nunca derruba o jogo)
+    gpu() {
+      const out = { gpu: '', bench: 0, webgl: false };
+      let cv, gl;
+      try {
+        cv = document.createElement('canvas'); cv.width = 768; cv.height = 432;
+        gl = cv.getContext('webgl', { antialias: false, depth: false, powerPreference: 'high-performance', failIfMajorPerformanceCaveat: false });
+        if (!gl) return out;
+        out.webgl = true;
+        const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+        out.gpu = String((dbg && gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) || gl.getParameter(gl.RENDERER) || '');
+        // shader de teste: 40 voltas de trigonometria por pixel (parecido com o custo de luz/névoa/pós-efeito do jogo)
+        const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+        const pr = gl.createProgram();
+        gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}'));
+        gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, 'precision highp float;uniform float t;void main(){vec2 p=gl_FragCoord.xy*.013;float a=t;' +
+          'for(int i=0;i<40;i++){p=vec2(p.x*cos(a)-p.y*sin(a),p.x*sin(a)+p.y*cos(a))+vec2(sin(p.y+t),cos(p.x));a+=sin(p.x*p.y)*.37;}' +
+          'gl_FragColor=vec4(fract(a),fract(p),1.);}'));
+        gl.linkProgram(pr);
+        if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) return out;
+        gl.useProgram(pr);
+        const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+        const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+        const ut = gl.getUniformLocation(pr, 't'), px = new Uint8Array(4);
+        const draw = i => { gl.uniform1f(ut, i * 0.1); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+        draw(0); draw(1);                                           // aquecimento (compilação de verdade acontece aqui)
+        const times = [], t0 = performance.now();
+        for (let i = 2; i < 30; i++) {                              // até 28 quadros ou ~300 ms (placa fraca para cedo)
+          const a = performance.now(); draw(i); times.push(performance.now() - a);
+          if (performance.now() - t0 > 300) break;
+        }
+        times.sort((x, y) => x - y);
+        const med = times[Math.floor(times.length / 2)] || 1e3;
+        out.bench = Math.round(cv.width * cv.height * 40 / Math.max(0.05, med) / 1e3);   // "pontos" = milhares de voltas por ms
+      } catch (e) { console.warn('[gráficos] teste da placa falhou:', e); }
+      finally { try { const lc = gl && gl.getExtension('WEBGL_lose_context'); if (lc) lc.loseContext(); } catch (e) { } }
+      return out;
+    },
+    // nível do teste: quanto mais pontos, mais forte. Medido: SwiftShader (CPU de 12 núcleos) ~900; RTX 3060 ~44000.
+    // Pela proporção de TFLOPS: Intel UHD 620 ~1500, Iris Xe ~7000, GTX 1650 ~10000, RTX 4090 ~250000.
+    benchTier(p) { return p <= 0 ? -1 : p < 600 ? 0 : p < 2500 ? 1 : p < 8000 ? 2 : p < 25000 ? 3 : 4; },
+    nameTier(gpu) { for (const [re, t] of GPU_RULES) if (re.test(gpu)) return t; return -1; },
+    run() {
+      const inf = this.info(), g = this.gpu(), why = [];
+      let tier;
+      const byName = this.nameTier(g.gpu), byBench = this.benchTier(g.bench);
+      if (!g.webgl) { tier = 0; why.push('sem WebGL'); }
+      else if (byName === 0) { tier = 0; why.push('placa de vídeo por software'); }
+      else if (byName >= 0 && byBench >= 0) { tier = Math.min(byName, byBench + 1); why.push('placa + teste'); }   // o teste segura nomes "fortes" em modo economia
+      else if (byName >= 0) { tier = byName; why.push('placa'); }
+      else if (byBench >= 0) { tier = byBench; why.push('teste'); }
+      else { tier = 2; why.push('padrão'); }
+      // limites do aparelho
+      if (inf.mobile) { tier = Math.min(tier, inf.mem && inf.mem <= 3 ? 1 : 2); why.push('celular/tablet'); }
+      if (inf.cores && inf.cores <= 2) { tier = Math.min(tier, 1); why.push(inf.cores + ' núcleos'); }
+      else if (inf.cores && inf.cores <= 4) tier = Math.min(tier, 3);
+      if (inf.mem && inf.mem <= 2) { tier = Math.min(tier, 1); why.push(inf.mem + ' GB de memória'); }
+      else if (inf.mem && inf.mem <= 4) tier = Math.min(tier, 2);
+      if (inf.screen > 8 && tier === 4) tier = 3;                   // tela 4K: o Ultra (resolução máxima) pesa demais
+      tier = Math.max(0, Math.min(4, tier));
+      return { v: REC_VERSION, preset: TIERS[tier], tier, gpu: g.gpu, bench: g.bench, nameTier: byName, benchTier: byBench,
+        mobile: inf.mobile, cores: inf.cores, mem: inf.mem, why: why.join(', '), at: new Date().toISOString(), auto: true, shown: false };
+    }
+  };
+  window.HwDetect = HwDetect;
+  // nome curto e legível da placa para mostrar ao jogador ("ANGLE (NVIDIA, NVIDIA GeForce GTX 1650 Direct3D11 ...)" -> "NVIDIA GeForce GTX 1650")
+  const prettyGpu = s => { s = String(s || ''); const m = /ANGLE \([^,]*,\s*([^,(]+?)(?:\s+\(0x[0-9a-f]+\))?\s*(?:Direct3D|OpenGL|Vulkan|Metal|,|\))/i.exec(s);
+    return (m ? m[1] : s).replace(/\s*\/PCIe\/SSE2|\s*\(TM\)|\s*\(R\)/gi, '').trim().slice(0, 60) || 'placa de vídeo desconhecida'; };
+
   const Settings = {
     s: null,
     load() {
       let saved = null; try { saved = JSON.parse(localStorage.getItem(KEY()) || 'null'); } catch (e) { }
-      this.s = { vol: Object.assign({}, DEF.vol, saved && saved.vol), gfx: Object.assign({}, DEF.gfx, saved && saved.gfx) };
+      this.s = { vol: Object.assign({}, DEF.vol, saved && saved.vol), gfx: Object.assign({}, DEF.gfx, saved && saved.gfx), rec: (saved && saved.rec) || null };
+      // 1ª vez (ou recomendação de uma versão antiga): detecta a máquina. Quem nunca mexeu nos gráficos (ou ainda
+      // estava no "Automática" padrão) recebe a recomendação; quem já escolheu uma qualidade continua com a dele.
+      if (!this.s.rec || this.s.rec.v !== REC_VERSION) {
+        const rec = HwDetect.run(), untouched = !saved || !saved.gfx || saved.gfx.preset === 'auto';
+        rec.auto = untouched;
+        if (untouched) { Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset; }
+        else rec.shown = true;                                       // já tinha escolhido: não mostra o aviso
+        this.s.rec = rec; this.save();
+        console.info('[gráficos] recomendado: ' + rec.preset + ' (' + rec.why + ') · placa: ' + (rec.gpu || '?') + ' · teste: ' + rec.bench);
+      }
       return this.s;
+    },
+    rec() { return this.s && this.s.rec; },
+    recName() { const r = this.rec(); return r ? TIER_NAME[r.preset] : ''; },
+    gpuName() { const r = this.rec(); return r ? prettyGpu(r.gpu) : ''; },
+    // "Detectar de novo" (configurações): roda o teste e aplica a recomendação
+    redetect() {
+      const rec = HwDetect.run(); rec.shown = true; this.s.rec = rec;
+      Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset;
+      this.save(); this.apply(); this.sync();
+      if (window.UI && UI.toast) UI.toast('Recomendado para esta máquina: ' + TIER_NAME[rec.preset], 2600);
+    },
+    // a pessoa mexeu nos gráficos: a recomendação deixa de ser ajustada sozinha
+    userTouched() { if (this.s.rec && this.s.rec.auto) { this.s.rec.auto = false; } },
+    // ---------- rede de segurança na corrida ----------
+    // Chamado a cada quadro pelo laço do jogo. Só age se a qualidade atual é a recomendada automaticamente (a pessoa
+    // não mexeu). Janelas de 10 s de corrida: duas seguidas abaixo de ~42 FPS -> desce um nível, salva e avisa.
+    perfTick(raw, racing) {
+      const r = this.s && this.s.rec, g = this.s && this.s.gfx;
+      if (!r || !r.auto || !racing || document.hidden || raw <= 0 || raw > 0.25 || g.preset !== r.preset) { if (!racing) this._pf = null; return; }
+      const p = this._pf || (this._pf = { acc: 0, n: 0, bad: 0, skip: 1 });
+      p.acc += raw; p.n++;
+      if (p.acc < 10) return;
+      const fps = p.n / p.acc; p.acc = 0; p.n = 0;
+      if (p.skip > 0) { p.skip--; return; }                          // ignora os primeiros 10 s (compilação, largada)
+      const cap = this.fpsCap(), want = cap ? Math.min(cap, 60) * 0.7 : 42;
+      p.bad = fps < want ? p.bad + 1 : 0;
+      if (p.bad < 2) return;
+      const i = TIERS.indexOf(r.preset); if (i <= 0) { r.auto = false; this.save(); return; }
+      const next = TIERS[i - 1]; r.preset = next; r.lowered = (r.lowered || 0) + 1; p.bad = 0; p.skip = 1;
+      Object.assign(g, PRESETS[next]); g.preset = next; this.save(); this.apply(); this.sync && $('setGfx') && $('setGfx').innerHTML && this.sync();
+      console.info('[gráficos] ' + fps.toFixed(0) + ' FPS: baixando para ' + next);
+      if (window.UI && UI.toast) UI.toast('Gráficos ajustados para ' + TIER_NAME[next] + ' para rodar mais liso', 3200);
     },
     save() { try { localStorage.setItem(KEY(), JSON.stringify(this.s)); } catch (e) { } },
     get g() { return this.s.gfx; },
@@ -123,12 +262,14 @@
     },
     // ---------- interface ----------
     init() {
-      this.load(); this.apply();
+      if (!this.s) this.load(); this.apply();
       const vol = [['master', 'Volume geral'], ['engine', 'Motores'], ['sfx', 'Efeitos (batidas, derrapagem, turbo)'], ['ui', 'Interface e avisos'], ['amb', 'Ambiente e torcida']];
       $('setVol').innerHTML = vol.map(([k, t]) => '<label class="slider"><span>' + t + '</span><input type="range" min="0" max="100" step="1" data-vol="' + k + '"><output></output></label>').join('');
       const opt = (id, label, items, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '">' + items.map(([v, t]) => '<button type="button" data-v="' + v + '">' + t + '</button>').join('') + '</div></div>';
       const tog = (id, label, hint) => '<div class="setRow"><span>' + label + (hint ? '<small>' + hint + '</small>' : '') + '</span><div class="seg mini" data-g="' + id + '"><button type="button" data-v="1">Ligado</button><button type="button" data-v="0">Desligado</button></div></div>';
       $('setGfx').innerHTML =
+        '<div class="recRow"><div class="recTxt"><b>Recomendado para esta máquina: <em id="recName"></em></b><small id="recGpu"></small></div>' +
+          '<button type="button" id="recAgain" class="ghost">Detectar de novo</button></div>' +
         opt('preset', 'Qualidade', [['auto', 'Automática'], ['massinha', 'Massinha'], ['low', 'Baixa'], ['medium', 'Média'], ['high', 'Alta'], ['ultra', 'Ultra'], ['custom', 'Personalizada']],
           'Massinha: o mais leve possível, para PC ou celular fraco. Automática ajusta a resolução sozinha') +
         opt('res', 'Resolução', [['auto', 'Auto'], ['0.5', '50%'], ['0.75', '75%'], ['1', '100%'], ['1.5', '150%'], ['2', 'Máxima']], 'O que mais pesa: menor = mais FPS e menos memória') +
@@ -154,11 +295,16 @@
       $('setGfx').querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
         const id = seg.dataset.g, v = b.dataset.v, g = this.s.gfx;
         const oldTex = g.texRes;
-        if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; }
-        else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (GFX_KEYS.includes(id)) g.preset = 'custom'; }
+        if (id === 'preset') { if (v !== 'custom') Object.assign(g, PRESETS[v]); g.preset = v; this.userTouched(); }
+        else { g[id] = (v === '1' ? true : v === '0' ? false : v); if (GFX_KEYS.includes(id)) { g.preset = 'custom'; this.userTouched(); } }
         this.save(); this.apply(); this.sync();
         if (g.texRes !== oldTex && window.UI && UI.toast) UI.toast('Resolução das texturas: vale ao recarregar o jogo (F5)', 2600); })));
-      $('setReset').addEventListener('click', () => { this.s = JSON.parse(JSON.stringify(DEF)); this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
+      // restaurar padrão = volumes padrão + a qualidade recomendada para esta máquina (a detecção continua salva)
+      $('setReset').addEventListener('click', () => { const rec = this.s.rec; this.s = JSON.parse(JSON.stringify(DEF)); this.s.rec = rec;
+        if (rec) { Object.assign(this.s.gfx, PRESETS[rec.preset]); this.s.gfx.preset = rec.preset; rec.auto = true; }
+        this.save(); this.apply(); this.sync(); UI.toast('Configurações padrão restauradas', 1500); });
+      $('recAgain').addEventListener('click', () => this.redetect());
+      this.recCard();
       $('btnSettings').addEventListener('click', () => this.open());
       $('setBtn').addEventListener('click', () => this.open());
 
@@ -171,6 +317,32 @@
       $('setVol').querySelectorAll('input').forEach(inp => { inp.value = this.s.vol[inp.dataset.vol]; inp.nextElementSibling.textContent = inp.value + '%'; inp.style.setProperty('--p', inp.value + '%'); });
       $('setGfx').querySelectorAll('.seg').forEach(seg => { const id = seg.dataset.g, cur = this.s.gfx[id], val = typeof cur === 'boolean' ? (cur ? '1' : '0') : String(cur);
         seg.querySelectorAll('button').forEach(b => { const on = b.dataset.v === val; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); });
+      // recomendação: nome, placa e estrelinha no botão da qualidade recomendada
+      const r = this.rec(), rn = $('recName'), rg = $('recGpu');
+      if (rn) rn.textContent = r ? TIER_NAME[r.preset] : '—';
+      if (rg) rg.textContent = r ? this.gpuName() + (r.lowered ? ' · ajustada durante a corrida' : '') : '';
+      const ps = $('setGfx').querySelector('[data-g="preset"]');
+      if (ps) ps.querySelectorAll('button').forEach(b => b.classList.toggle('rec', !!r && b.dataset.v === r.preset));
+    },
+    // aviso da 1ª visita: aparece quando o menu principal surge pela primeira vez, com a qualidade já aplicada
+    recCard() {
+      const r = this.rec(); if (!r || r.shown) return;
+      const show = () => {
+        if (document.getElementById('recCard')) return;
+        const el = document.createElement('div'); el.id = 'recCard'; el.setAttribute('role', 'status');
+        el.innerHTML = '<div class="rcIc" aria-hidden="true">' + ['🐢', '🚗', '🏎️', '🚀', '🔥'][r.tier] + '</div>' +
+          '<div class="rcTxt"><small>Ajustado para a sua máquina</small><b>Qualidade ' + TIER_NAME[r.preset] + '</b>' +
+          '<span>' + this.gpuName() + '</span></div>' +
+          '<div class="rcBtns"><button type="button" class="rcOk">Beleza!</button><button type="button" class="rcEdit">Mudar</button></div>';
+        document.body.appendChild(el);
+        const close = () => { el.classList.add('out'); setTimeout(() => el.remove(), 350); clearTimeout(t); };
+        const t = setTimeout(close, 12000);
+        el.querySelector('.rcOk').addEventListener('click', close);
+        el.querySelector('.rcEdit').addEventListener('click', () => { close(); this.open(); this.tab('gfx'); });
+        r.shown = true; this.save();
+      };
+      const check = () => { if (document.body.dataset.screen === 'menu') { mo.disconnect(); setTimeout(show, 900); } };
+      const mo = new MutationObserver(check); mo.observe(document.body, { attributes: true, attributeFilter: ['data-screen'] }); check();
     }
   };
   window.Settings = Settings;
@@ -181,7 +353,8 @@
   // vezes for preciso, num canvas. Funciona com qualquer .glb sem converter arquivo. Vale para o que carregar depois de mudar.
   (function capGltfTextures() {
     if (!window.THREE || !THREE.GLTFLoader) return;
-    const capNow = () => { let v = Settings.s && Settings.s.gfx.texRes;
+    const capNow = () => { if (!Settings.s && window.CFG) try { Settings.load(); } catch (e) { }   // 1ª visita: a recomendação já vale para as texturas
+      let v = Settings.s && Settings.s.gfx.texRes;
       if (!v) { try { const sv = JSON.parse(localStorage.getItem(KEY()) || 'null'); v = sv && sv.gfx && (sv.gfx.texRes || (PRESETS[sv.gfx.preset] || {}).texRes); } catch (e) { } }
       v = v || PRESETS.auto.texRes; return v === 'max' ? Infinity : (+v || 2048); };
     const orig = THREE.GLTFLoader.prototype.parse;

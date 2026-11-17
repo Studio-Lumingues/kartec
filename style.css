@@ -1311,3 +1311,33 @@ body:has(> .modal:not([hidden])) #menu .utilDock { opacity: 0; pointer-events: n
 
 /* aba Piloto: o personagem fica em destaque (as setas trocam Menino / Menina; os pontinhos dos veículos somem) */
 #garage.pilotView .gDots { visibility: hidden; }
+
+/* ======================= gráficos recomendados (settings.js) ======================= */
+/* linha no topo da aba Gráficos */
+.recRow { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 12px; border: 3px solid var(--ink); border-radius: var(--r-md); background: linear-gradient(180deg, #fff7d6, #ffe58a); box-shadow: 0 4px 0 var(--ink); }
+.recTxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.recTxt b { font-weight: 900; font-size: 15px; }
+.recTxt em { font: 400 17px var(--display); font-style: normal; color: var(--red-deep); }
+.recTxt small { font-size: 12px; font-weight: 700; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recRow .ghost { flex: none; padding: 8px 14px; font-size: 13px; }
+/* estrelinha no botão da qualidade recomendada */
+.seg button.rec { position: relative; }
+.seg button.rec::after { content: "★"; position: absolute; top: -9px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--gold); border: 2px solid var(--ink); color: var(--ink); font-size: 12px; line-height: 1; }
+
+/* aviso da 1ª visita, no canto inferior direito do menu */
+#recCard { position: fixed; right: 22px; bottom: calc(22px + env(safe-area-inset-bottom, 0px)); z-index: 30; display: flex; align-items: center; gap: 14px; max-width: min(460px, calc(100vw - 32px));
+  padding: 14px 16px; border: var(--line); border-radius: var(--r-lg); background: var(--white); box-shadow: var(--shadow); color: var(--ink); font-family: var(--ui);
+  animation: recIn .55s cubic-bezier(.2, 1.4, .4, 1) both; }
+#recCard.out { animation: recOut .3s ease-in both; }
+#recCard .rcIc { flex: none; width: 56px; height: 56px; display: grid; place-items: center; font-size: 30px; border: 3px solid var(--ink); border-radius: 50%; background: linear-gradient(180deg, #fff6a8, var(--gold)); box-shadow: 0 3px 0 var(--ink); }
+#recCard .rcTxt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+#recCard .rcTxt small { font-size: 12px; font-weight: 800; color: var(--ink-2); text-transform: uppercase; letter-spacing: .4px; }
+#recCard .rcTxt b { font: 400 24px var(--display); line-height: 1.1; }
+#recCard .rcTxt span { font-size: 12px; font-weight: 700; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#recCard .rcBtns { flex: none; display: flex; flex-direction: column; gap: 6px; }
+#recCard button { padding: 7px 14px; border: 3px solid var(--ink); border-radius: 999px; font: 800 14px var(--ui); color: var(--ink); background: var(--mist); box-shadow: 0 3px 0 var(--ink); cursor: inherit; transition: transform .1s; }
+#recCard button:hover { transform: translateY(-2px); }
+#recCard .rcOk { background: linear-gradient(180deg, #ff8fa3 0%, var(--red) 45%, var(--red-deep) 100%); color: var(--white); text-shadow: 0 2px 0 var(--ink); }
+@keyframes recIn { from { opacity: 0; transform: translateY(40px) scale(.9); } to { opacity: 1; transform: none; } }
+@keyframes recOut { to { opacity: 0; transform: translateY(30px) scale(.95); } }
+@media (max-width: 560px) { #recCard { left: 16px; right: 16px; max-width: none; } #recCard .rcIc { width: 44px; height: 44px; font-size: 24px; } }
