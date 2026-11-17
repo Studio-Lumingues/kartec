@@ -9,8 +9,8 @@
 // =====================================================================================
 (function () {
   const VER = '202611091700';
-  const FILES = { kart: 'assets/kart.glb', motoca: 'assets/motoca.glb', menino: 'assets/menino.glb', menina: 'assets/menina.glb' };
-  const embedSrc = name => 'assets/' + name + '_glb.js?v=' + VER;
+  const FILES = { kart: 'assets/models/kart.glb', motoca: 'assets/models/motoca.glb', menino: 'assets/models/menino.glb', menina: 'assets/models/menina.glb' };
+  const embedSrc = name => 'assets/models/' + name + '_glb.js?v=' + VER;
   const cache = {}, pending = {};
 
   function b64ToBuffer(b64) { const bin = atob(b64), n = bin.length, u = new Uint8Array(n); for (let i = 0; i < n; i++) u[i] = bin.charCodeAt(i); return u.buffer; }

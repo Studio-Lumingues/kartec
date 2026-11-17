@@ -150,9 +150,9 @@
       let bands;
       {
         const m = vc();
-        const PINES = !!window.Pines;   // só pinheiros (js/pines.js): sem as árvores de bolas nem as florestas de cones
+        const PINES = !!window.Pines;   // só pinheiros (js/mundo/pines.js): sem as árvores de bolas nem as florestas de cones
         if (!PINES) kind('tree', GEOS.tree(), m, { geoLo: GEOS.treeLo(), sMin: 0.9, sMax: 1.6, r: 3, tint: () => new THREE.Color().setHSL(0.2 + rnd() * 0.2, 0.45, 0.78 + rnd() * 0.17) });
-        // pinheiros: 4 modelos detalhados (js/pines.js) numa malha só, com material próprio (seletor de modelo + vento suave)
+        // pinheiros: 4 modelos detalhados (js/mundo/pines.js) numa malha só, com material próprio (seletor de modelo + vento suave)
         if (PINES) { const pm = Pines.material(new THREE.MeshLambertMaterial({ color: 0xffffff, vertexColors: true }), { amp: 0.02, h0: 3.0, freq: 0.9 });
           // perto: um bloco por modelo (split) -> cada árvore só processa os vértices do próprio modelo; longe: os 4 juntos (leve)
           kind('pine', Pines.geometry('hi'), pm, { geoLo: Pines.geometry('lo'), sMin: 0.95, sMax: 1.45, r: 5, variants: v => Pines.variantAt(v.x, v.z), split: v => Pines.single('hi', v) });
@@ -265,7 +265,7 @@
         },
         // showcase (cutscene): todas as árvores do mapa projetam sombra (não só as perto da pista); off devolve
         cinema(on) { for (const c of chunks) c.im.castShadow = on ? c.canCast : c.cast; t = 0; },
-        dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || ((k.id === 'bush' || k.id === 'leaves' || k.id === 'leavesNear') && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/pines.js; arbusto: window.Bush)
+        dispose() { Object.values(kinds).forEach(k => { if ((k.variants && k.id !== 'litter') || ((k.id === 'bush' || k.id === 'leaves' || k.id === 'leavesNear') && window.Bush)) return;   // geometrias compartilhadas (pinheiros: js/mundo/pines.js; arbusto: window.Bush)
           k.geo.dispose(); if (k.geoLo) k.geoLo.dispose(); }); }
       };
     }

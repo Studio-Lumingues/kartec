@@ -553,7 +553,7 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       // cada ondulação em faixas duras quando a câmera chegava perto
       const m = new PHONG_ORIG({ vertexColors: true, shininess: 4, specular: 0x060606 });   // quase sem brilho: rocha é fosca (o brilho dava cara de massinha)
       m.userData.unique = true; m.userData.noToon = true; m.customProgramCacheKey = () => 'mountain-proc-v5' + (LO ? '-lite' : '');
-      if (!mountainMat.logged) { mountainMat.logged = true; console.info(m.isMeshToonMaterial ? '[montanhas] ainda em toon (o Toon.during converteu depois): mande o js/toon.js' : '[montanhas] iluminação suave (fora do toon)'); }
+      if (!mountainMat.logged) { mountainMat.logged = true; console.info(m.isMeshToonMaterial ? '[montanhas] ainda em toon (o Toon.during converteu depois): mande o js/mundo/toon.js' : '[montanhas] iluminação suave (fora do toon)'); }
       m.onBeforeCompile = sh => {
         sh.vertexShader = 'varying vec3 vMW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n vMW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
         sh.fragmentShader = `varying vec3 vMW;
@@ -685,9 +685,9 @@ console.info('%c[tracks.js] versão mar-5 (atalhos sem os pauzinhos)', 'color:#0
       list.forEach((o, i) => { d.position.set(o.x, o.y || 0, o.z); d.rotation.set(0, o.r, 0); d.scale.setScalar(o.s); d.updateMatrix(); im.setMatrixAt(i, d.matrix); tr.blockers.push({ x: o.x, y: (o.y || 0) + bh[0] * o.s, z: o.z, r: bh[1] * o.s }); });
       im.instanceMatrix.needsUpdate = true; im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; return add(im);
     }
-    // pinheiros detalhados (js/pines.js): 4 modelos numa malha só, cada árvore escolhe o seu pela posição.
+    // pinheiros detalhados (js/mundo/pines.js): 4 modelos numa malha só, cada árvore escolhe o seu pela posição.
     // 1 chamada de desenho para todos (+ a sombra, que respeita o modelo de cada árvore). k = escala extra.
-    // pinheiros detalhados (js/pines.js) da beira da pista, bosques e morro:
+    // pinheiros detalhados (js/mundo/pines.js) da beira da pista, bosques e morro:
     //  * menos árvores e maiores: fica ~45% da lista (sorteio estável pela posição);
     //  * blocos de 800 m com esfera própria: o que está fora da câmera não é desenhado (nem na sombra);
     //  * bloco perto da câmera (< 250 m): um InstancedMesh por modelo (só os vértices do próprio modelo);

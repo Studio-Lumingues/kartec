@@ -19,7 +19,7 @@
 //   2. reduz as texturas maiores que --max (mantendo potência de 2)
 //   3. normal maps -> UASTC (qualidade alta, compressão Zstandard); cor -> ETC1S sRGB; resto (ORM etc.) -> ETC1S linear
 //   4. salva no mesmo lugar, mantendo a compressão de malha (meshopt) se o arquivo já usava
-// No jogo, js/vendor/KTX2Loader.js + js/ktx2-setup.js fazem o GLTFLoader ler essas texturas.
+// No jogo, js/vendor/KTX2Loader.js + js/core/ktx2-setup.js fazem o GLTFLoader ler essas texturas.
 // =====================================================================================
 import fs from 'fs';
 import path from 'path';

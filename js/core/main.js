@@ -31,7 +31,7 @@
   KartMats.initEnv(renderer);                     // reflexo de estúdio para a pintura e os cromados
   const CAMC = Object.assign({ FOV: 53, DIST: 13.5, HEIGHT: 6.5, TILT: 3 }, CFG.CAMERA || {});   // câmera "lente tele" (config.js)
   const camera = new THREE.PerspectiveCamera(CAMC.FOV, innerWidth / innerHeight, 0.5, CFG.CAMERA_FAR || 2300);   // plano próximo curto: kart colado na câmera não é "cortado"
-  // acabamento da imagem da corrida (contorno de tinta, brilho, cor, FXAA): js/postfx.js; CFG.GFX ajusta; modo leve desliga
+  // acabamento da imagem da corrida (contorno de tinta, brilho, cor, FXAA): js/mundo/postfx.js; CFG.GFX ajusta; modo leve desliga
   const G0 = CFG.GFX || {};
   const postFX = window.PostFX && G0.POSTFX !== false ? PostFX.create(renderer, { ao: G0.AO, ink: G0.INK, bloom: G0.BLOOM, sat: G0.SAT, con: G0.CONTRAST, vig: G0.VIGNETTE, scatter: G0.SCATTER, rays: G0.RAYS, sharpen: G0.SHARPEN, dof: G0.DOF, dofLens: G0.DOF_LENS }) : null;
 
@@ -147,9 +147,9 @@
       this.bars.forEach(b => { b.visible = this.k > 0.001; b.scale.set(hw * 2.2, bh, 1); b.position.set(0, b.userData.sg * (hh - bh / 2 + (1 - e) * bh * 1.05), -d); });
     }
   };
-  // velocímetro 3D (js/speedo3d.js): objeto 3D preso no canto inferior direito, desenhado por cima da corrida
+  // velocímetro 3D (js/interface/speedo3d.js): objeto 3D preso no canto inferior direito, desenhado por cima da corrida
   let speedo3d = null;
-  try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 203, camera }); else console.warn('[velocímetro 3D] js/speedo3d.js não carregou'); }
+  try { if (window.Speedo3D) speedo3d = Speedo3D.create(renderer, { el: '#speedo3d', unit: 'km/h', max: 203, camera }); else console.warn('[velocímetro 3D] js/interface/speedo3d.js não carregou'); }
   catch (e) { console.error('[velocímetro 3D]', e); }
   // ---------------- minimapa: sem painel/moldura, sem grama e sem água ----------------
   // O ui.js desenha o minimapa com um painel (quadrado arredondado + moldura) e o miolo verde. Depois de cada
@@ -269,7 +269,7 @@
   // ================================ AMBIENTE ================================
   const dnC = h => new THREE.Color(h);
   // paleta de céu "de festa": dia azul-piscina, entardecer rosa/laranja, noite roxa (nunca preta)
-  const DN = SkyKit.DN, dnMix = SkyKit.dnMix;   // paleta do céu (js/sky.js): igual no jogo e no lobby
+  const DN = SkyKit.DN, dnMix = SkyKit.dnMix;   // paleta do céu (js/mundo/sky.js): igual no jogo e no lobby
   const _c1 = new THREE.Color(), _c2 = new THREE.Color(), _c3 = new THREE.Color(), _c4 = new THREE.Color(), TUN_LIGHT = new THREE.Color(0xffe6bf);
 
   const _sL = new THREE.Vector3(), _sF = new THREE.Vector3(), _sC = new THREE.Vector3(), _sR = new THREE.Vector3(), _sU = new THREE.Vector3();
@@ -311,7 +311,7 @@
       // céu em shader (antes: gradiente pintado num canvas 4x256, com faixas visíveis e sem reagir ao sol).
       // Mesmas cores e mesmas alturas do gradiente antigo, só que contínuo por pixel; perto do sol o céu clareia e esquenta
       // (dispersão), com um halo largo no horizonte. O postfx.js aplica a MESMA conta na névoa, então o horizonte casa.
-      // céu, estrelas, sol/lua, cordilheira e nuvens: js/sky.js (o MESMO céu é usado no lobby/garagem)
+      // céu, estrelas, sol/lua, cordilheira e nuvens: js/mundo/sky.js (o MESMO céu é usado no lobby/garagem)
       Object.assign(this, SkyKit.build(scene, SK));
       this.paintT = 0; this.occ = []; this.flOcc = 1; this.flT = 0; this.flVis = 0;
     },

@@ -1,7 +1,7 @@
 // =====================================================================================
 // models/karts.js — modelos de kart (registro expansível) + montagem completa
 //
-// buildKartModel(spec, opts) monta: veículo 3D (assets/kart.glb ou assets/motoca.glb) + pintura
+// buildKartModel(spec, opts) monta: veículo 3D (assets/models/kart.glb ou assets/models/motoca.glb) + pintura
 // + rodas + volante animado (kart) / guidão (moto) + piloto sentado. spec = {
 //   model: 'gt' (kart) | 'moto' (Motoca)   <- únicos modelos disponíveis,
 //   color (corBase),
