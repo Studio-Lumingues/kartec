@@ -24,7 +24,7 @@
     CAM_FOV: 24,             // Garagem: abertura da lente (menor = mais fechada)
     CAM_DIST: 20,            // Garagem: distância inicial da câmera ao veículo (mais afastada: visão menos poluída)
     ZOOM_MIN: 8.5, ZOOM_MAX: 23.5,   // limites do zoom (roda do mouse / pinça): não entra no veículo nem atravessa a parede da frente
-    PILOT_DIST: 19, PILOT_SCALE: 3.0,   // PILOT_SCALE = altura do personagem em pé (unidades; o kart tem ~4)
+    PILOT_DIST: 19, PILOT_SCALE: 2.4,   // PILOT_SCALE = altura do personagem em pé (unidades; o kart tem ~4)
     PILOT_LOOK_Y: 1.05, PILOT_CAM_H: 2.6,   // aba Piloto: personagem em pé no prato giratório
     SWAY: 1.4,               // menu: a câmera passeia devagar de um lado para o outro (amplitude em unidades; 0 desliga)
     DAY_START: 0.3, DAY_SECONDS: 240,  // ciclo dia/noite do lobby (mesmo ritmo da corrida: 4 min por dia)
@@ -925,8 +925,9 @@
       gl_FragColor = linearToOutputTexel(vec4(sky, 1.0)); }`;   // o PMREM grava em RGBE/float: precisa da codificação de saída
 
   // ---------------------------------------------------------------- PILOTO EM DESTAQUE (aba Piloto da Garagem)
-  // O mesmo personagem 3D do kart (Pilot.create), fora do veículo, em pé no prato giratório: uma mão na cintura, punho
-  // erguido, peso numa perna. Respira, olha em volta e (Menina) as marias-chiquinhas balançam com o giro.
+  // O mesmo personagem 3D do kart (Pilot.create), fora do veículo, em pé no prato giratório, postura relaxada: braços
+  // soltos ao lado do corpo, pernas retas. Respira, balança os braços de leve, olha em volta e (Menina) as
+  // marias-chiquinhas balançam com o giro.
   const _hq = new THREE.Quaternion(), _hq2 = new THREE.Quaternion(), _hq3 = new THREE.Quaternion(), _hv = new THREE.Vector3(), _AZ = new THREE.Vector3(0, 0, 1);
   class HeroPilot {
     constructor(spec) {
@@ -951,16 +952,17 @@
     }
     step(dt) {
       if (!this.ok) return; const r = this.rig, B = r.bones, t = (this.t += dt), br = Math.sin(t * 1.7);
-      B.hips.position.y = r.bind.hips.y; B.hips.rotation.set(0, 0.05, 0.04);
-      B.spine.rotation.set(-0.03 + 0.012 * br, -0.05, -0.03); B.chest.rotation.set(-0.06 + 0.018 * br, -0.08, -0.02);
-      B.head.rotation.set(-0.05 + 0.025 * Math.sin(t * 0.7), 0.16 + 0.14 * Math.sin(t * 0.43), 0.05);
+      B.hips.position.y = r.bind.hips.y; B.hips.rotation.set(0, 0, 0);
+      B.spine.rotation.set(0.012 * br, 0, 0); B.chest.rotation.set(0.018 * br, 0, 0);
+      B.head.rotation.set(-0.04 + 0.025 * Math.sin(t * 0.7), 0.14 * Math.sin(t * 0.43), 0);
       const L = (n, x, y, z) => { if (B[n]) B[n].rotation.set(x, y, z); };
-      L('thigh_L', 0.02, 0, 0.1); L('shin_L', 0.02, 0, 0); L('foot_L', -0.03, 0, -0.06);           // perna de apoio
-      L('thigh_R', -0.2, 0.12, -0.11); L('shin_R', 0.32, 0, 0); L('foot_R', -0.14, 0, 0.08);       // perna solta, joelho dobrado
+      L('thigh_L', 0, 0, 0.03); L('shin_L', 0, 0, 0); L('foot_L', 0, 0, -0.03);                    // pernas retas, pés um pouco abertos
+      L('thigh_R', 0, 0, -0.03); L('shin_R', 0, 0, 0); L('foot_R', 0, 0, 0.03);
       this.root.updateMatrixWorld(true);
-      // +x = esquerda do personagem, +z = frente
-      this.arm('_L', new THREE.Vector3(0.5, -0.82, -0.24), new THREE.Vector3(-0.66, -0.36, 0.62), 1.2);                       // mão na cintura
-      this.arm('_R', new THREE.Vector3(-0.78, 0.32 + 0.03 * br, 0.3), new THREE.Vector3(-0.16, 0.95, 0.2 + 0.03 * br), 1.45);   // punho erguido
+      // +x = esquerda do personagem, +z = frente; braços soltos, afastados do corpo o suficiente para não entrar no quadril
+      const sw = 0.03 * Math.sin(t * 1.1);
+      this.arm('_L', new THREE.Vector3(0.3, -1, 0.02 + sw), new THREE.Vector3(0.18, -1, 0.1 + sw), 0.9);
+      this.arm('_R', new THREE.Vector3(-0.3, -1, 0.02 - sw), new THREE.Vector3(-0.18, -1, 0.1 - sw), 0.9);
       if (r.tpl && r.tpl.pigs && r.pigStep) r.pigStep(Math.min(dt, 1 / 30));
       // pés no chão do prato: ajusta a altura pela posição real dos tornozelos
       const fa = B.foot_L, fb = B.foot_R; if (fa && fb && this.root.parent) {

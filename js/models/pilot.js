@@ -157,7 +157,7 @@
     '  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uSuit, uHelmet, head) * sr, wR);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * sk, wK);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.95, 0.97) * mix(1.0, clamp(v / 0.95, 0.55, 1.0), 0.25), glove);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.205, 0.235) * mix(1.0, clamp(v / 0.6, 0.55, 1.0), 0.3), pants);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.36, 0.37, 0.40) * mix(1.0, clamp(v / 0.75, 0.55, 1.0), 0.3), pants);',
     // olhos e cílios: escuro uniforme (o brilho vem da luz); some o risco branco da lateral do relevo
     '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.018, 0.013, 0.014), smoothstep(0.6, 0.9, vEye)); }'
   ].join('\n');
@@ -431,7 +431,7 @@
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
       this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
       const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY }, uMask: { value: tpl.mask } };
-      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb13', hook: sh => {
+      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb14', hook: sh => {
         Object.assign(sh.uniforms, u);
         sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nattribute vec3 aPart;\nvarying vec3 vPart;\nattribute float aEye;\nvarying float vEye;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther; vPart = aPart; vEye = aEye;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
