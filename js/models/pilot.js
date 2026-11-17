@@ -310,7 +310,10 @@
       const cu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, cv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3;
       let L = lum(cu, cv) * 2, sk = clsAt(cu, cv) >= 2 ? 2 : 0;
       for (const i of [a, b, c]) { const pu = cu + (U[i * 2] - cu) * 0.5, pv = cv + (U[i * 2 + 1] - cv) * 0.5; L += lum(pu, pv); if (clsAt(pu, pv) >= 2) sk++; }
-      kind[t] = L / 5 < 0.2 ? 1 : sk >= 3 ? 2 : 0; }
+      let rd = clsAt(cu, cv) === 1 ? 2 : 0; for (const i of [a, b, c]) if (clsAt(cu + (U[i * 2] - cu) * 0.5, cv + (U[i * 2 + 1] - cv) * 0.5) === 1) rd++;
+      kind[t] = L / 5 < 0.2 ? 1 : sk >= 3 ? 2 : rd >= 3 ? 3 : 0; }
+    // pode receber pintura de olho: só na cabeça e nunca no vermelho (capacete/macacão)
+    const ok = u => kind[u] !== 3 && cen[u * 3 + 1] >= headY;
     const byW = Array.from({ length: nw }, () => []); for (let t = 0; t < nt; t++) for (let j = 0; j < 3; j++) byW[wl[I[t * 3 + j]]].push(t);
     const nbrs = t => { const r = new Set(); for (let j = 0; j < 3; j++) for (const u of byW[wl[I[t * 3 + j]]]) if (u !== t) r.add(u); return r; };
     // manchas escuras ligadas
@@ -328,6 +331,9 @@
       if (skA < (skA + otA) * 0.45) return;   // olho: ~0,56 (a parede clara do relevo não conta como pele); viseira: ~0,03
       const nl = Math.hypot(n[0], n[1], n[2]) || 1; n[0] /= nl; n[1] /= nl; n[2] /= nl;
       if (A < faceA * 0.0004) return;                                                   // pontinho solto: não é olho nem cílio
+      { const c0 = [0, 0, 0]; list.forEach(t => { for (let d = 0; d < 3; d++) c0[d] += cen[t * 3 + d] / list.length; });
+        let r0 = 0; list.forEach(t => { r0 = Math.max(r0, Math.hypot(cen[t * 3] - c0[0], cen[t * 3 + 1] - c0[1], cen[t * 3 + 2] - c0[2])); });
+        if (r0 * r0 * Math.PI > faceA * 0.35) return; }                                  // espalhada (encostou na viseira): não é olho
       list.forEach(t => face[t] = 1);
       // o crescimento abaixo é limitado por DISTÂNCIA (não por anéis): na malha original (gráfico Baixo/Massinha) os
       // triângulos são grandes e "3 anéis" já cobria meio rosto
@@ -336,11 +342,11 @@
       const dTo = u => { let m = 1e9; const x = cen[u * 3], y = cen[u * 3 + 1], z = cen[u * 3 + 2];   // distância até a mancha
         for (let i = 0; i < list.length; i += Math.max(1, list.length >> 7)) { const t = list[i]; m = Math.min(m, Math.hypot(x - cen[t * 3], y - cen[t * 3 + 1], z - cen[t * 3 + 2])); } return m; };
       // cílio (mancha bem menor que um olho, <1% do rosto; olho ~6%): peça fina; marca o que está a até 6 mm dela
-      if (A < faceA * 0.01) { let rg = list.slice(); for (let k = 0; k < 8 && rg.length; k++) { const nx = []; rg.forEach(t => nbrs(t).forEach(u => { if (!face[u] && dTo(u) < 0.006) { face[u] = 1; nx.push(u); } })); rg = nx; } }
+      if (A < faceA * 0.01) { let rg = list.slice(); for (let k = 0; k < 8 && rg.length; k++) { const nx = []; rg.forEach(t => nbrs(t).forEach(u => { if (!face[u] && ok(u) && dTo(u) < 0.006) { face[u] = 1; nx.push(u); } })); rg = nx; } }
       // cresce pela parede do relevo (faces íngremes em relação à frente do olho), até 6 anéis
       let ring = list.slice();
       for (let k = 0; k < 6 && ring.length; k++) { const nx = [];
-        ring.forEach(t => nbrs(t).forEach(u => { if (face[u]) return; const dt = nrm[u * 3] * n[0] + nrm[u * 3 + 1] * n[1] + nrm[u * 3 + 2] * n[2];
+        ring.forEach(t => nbrs(t).forEach(u => { if (face[u] || !ok(u)) return; const dt = nrm[u * 3] * n[0] + nrm[u * 3 + 1] * n[1] + nrm[u * 3 + 2] * n[2];
           if (dt < 0.82 && Math.hypot(cen[u * 3] - cc[0], cen[u * 3 + 1] - cc[1], cen[u * 3 + 2] - cc[2]) < Rr * 1.3) { face[u] = 1; nx.push(u); } }));
         ring = nx; }
     });
@@ -361,7 +367,7 @@
           const cc = [0, 0, 0]; list.forEach(t => { for (let d = 0; d < 3; d++) cc[d] += cen[t * 3 + d] / list.length; });
           let Rr = 0, hMax = 0; list.forEach(t => { Rr = Math.max(Rr, Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2])); hMax = Math.max(hMax, off(t)); });
           const lim = Math.max(0.0025, hMax * 0.35);
-          for (let t = 0; t < nt; t++) if (!face[t] && cen[t * 3 + 1] >= headY && Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2]) < Rr * 1.8 && off(t) > lim) face[t] = 1; });
+          for (let t = 0; t < nt; t++) if (!face[t] && ok(t) && Math.hypot(cen[t * 3] - cc[0], cen[t * 3 + 1] - cc[1], cen[t * 3 + 2] - cc[2]) < Rr * 1.8 && off(t) > lim) face[t] = 1; });
       } }
     // pontas claras dos cílios (e furinhos no olho): ilhas PEQUENAS, de qualquer cor, cercadas (>= 50% da borda) por
     // olho/cílio marcado viram olho/cílio — preenchimento de buraco
@@ -370,7 +376,11 @@
         for (let q = 0; q < list.length && list.length < 4000; q++) for (const u of nbrs(list[q])) if (!face[u] && sc[u] < 0 && cen[u * 3 + 1] >= headY) { sc[u] = t; list.push(u); }
         let A = 0; list.forEach(u => A += area[u]); if (A > faceA * 0.02 || list.length >= 4000) continue;
         let inB = 0, outB = 0; list.forEach(x => nbrs(x).forEach(u => { if (sc[u] === t) return; if (face[u]) inB++; else outB++; }));
-        if (inB >= (inB + outB) * 0.5) list.forEach(x => face[x] = 1); } }
+        if (inB >= (inB + outB) * 0.5) list.forEach(x => { if (ok(x)) face[x] = 1; }); } }
+    // TRAVA: olhos + paredes + cílios ocupam ~25-40% da pele do rosto. Se a marca passou de 60%, a detecção errou nesta textura:
+    // desliga a pintura de olho inteira (fica a textura original) em vez de manchar o personagem
+    { let mA = 0; for (let t = 0; t < nt; t++) if (face[t]) mA += area[t];
+      if (mA > faceA * 0.6) { console.warn('[piloto] olhos: marca grande demais (' + (mA / faceA * 100).toFixed(0) + '% do rosto), pintura de olho desligada'); return out; } }
     // por vértice: fração (por área) das faces em volta que são olho; na borda com o rosto fica ~0,5 e o shader só pinta
     // de ~0,6 para cima: a cor não vaza meio triângulo para dentro do rosto (era a franja serrilhada em volta do olho)
     const fA = new Float32Array(nw), tA = new Float32Array(nw);
