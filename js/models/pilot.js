@@ -71,7 +71,10 @@
     // cabeça: a borda de baixo do capacete começa ~1 cm ABAIXO do pivô do pescoço (y 0,03 no menino, 0,04 na menina) e o
     // tronco termina logo abaixo disso. A transição antiga (pivô -0,005 a +0,03) deixava a borda do capacete metade presa
     // ao peito: na moto, com a cabeça erguida 0,6 rad em relação ao peito, a frente do capacete esticava para baixo.
-    const Hd = sstep(lm.head[1] - 0.012, lm.head[1] + 0.002, y), T = Math.max(0, 1 - A - Lg);
+    // A ponta da frente da borda (o "queixo" do capacete do menino, y ~0,035) desce mais que o resto: o que está à frente
+    // do tronco (x > pivô + 0,125; o zíper do macacão não passa de +0,11) e perto do pescoço vai inteiro com a cabeça.
+    const chin = sstep(lm.head[0] + 0.118, lm.head[0] + 0.128, x) * sstep(lm.head[1] - 0.035, lm.head[1] - 0.025, y);
+    const Hd = Math.max(sstep(lm.head[1] - 0.012, lm.head[1] + 0.002, y), chin), T = Math.max(0, 1 - A - Lg);
     put('hips', T * wH * (1 - Hd)); put('spine', T * wS * (1 - Hd)); put('chest', T * wC * (1 - Hd)); put('head', T * Hd);
     if (A > 0) { const e1 = sstep(lm.el[2] - 0.025, lm.el[2] + 0.025, az), e2 = sstep(wz - 0.012, wz + 0.018, az), e3 = sstep(lm.kn[2] - 0.01, lm.kn[2] + 0.012, az);
       put('upperarm', A * (1 - e1)); put('forearm', A * e1 * (1 - e2)); put('hand', A * e2 * (1 - e3)); put('fingers', A * e3); }
