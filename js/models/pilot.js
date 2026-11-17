@@ -87,7 +87,7 @@
   // (corpo) ou do capacete (acima do pescoço, medido na pose de origem) e o tom de pele vira a pele escolhida;
   // o brilho do texel é mantido, então dobras e sombras pintadas continuam lá. vKeep = 1 no cabelo.
   const HSV = 'vec3 kHsv(vec3 c) { vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0); vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g)); vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r)); float d = q.x - min(q.w, q.y); return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + 1.0e-10)), d / (q.x + 1.0e-10), q.x); }';
-  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; uniform sampler2D uMask; varying vec3 vBind; varying float vKeep; varying float vSkin; varying vec3 vVM; varying vec3 vOther;'].join('\n');
+  const RECOLOR_FS = ['uniform vec3 uSuit; uniform vec3 uHelmet; uniform vec3 uSkin; uniform float uHeadY; uniform sampler2D uMask; varying vec3 vBind; varying float vKeep; varying float vSkin; varying vec3 vVM; varying vec3 vOther; varying vec3 vPart;'].join('\n');
   // Troca de cor pela MÁSCARA (feita uma vez por personagem, ver cleanTexture): R = vermelho (macacão/capacete, com os
   // reflexos pintados), G = tom de pele, B = brilho claro e quente (vira pele só dentro do rosto). A máscara é filtrada (bilinear) e passa por um limiar suave:
   // as bordas entre cores ficam lisas como desenho vetorial, em vez dos dentes e respingos cinza de antes.
@@ -98,14 +98,29 @@
     'if (vKeep < 0.5) { vec3 mk = texture2D(uMask, vUv).rgb; float core = smoothstep(0.75, 1.0, vVM.z);',
     '  float texCol = smoothstep(0.32, 0.68, mk.r);',
     '  mk.r = mix(vVM.x, mk.r, core); mk.g = max(mk.g, mk.b * vSkin);',   // perto das bordas do vermelho: cor por vértice (pele: textura)
+    // miolo do macacão/capacete (toda a malha em volta é vermelha): estampas, costuras e respingos brancos da textura viram
+    // macacão. Miolo do rosto/mãos: pontinhos vermelhos viram pele (olhos e cílios, que são escuros, continuam)
+    '  float coreR = core * vVM.x, coreK = core * vVM.y * vSkin, anyC = step(0.5, mk.r + mk.g + mk.b);',
+    '  mk.r = max(mk.r, coreR) * (1.0 - coreK); mk.g = max(mk.g, coreK * anyC);',
+    // luvas e mangas pelo ESQUELETO: o que segue a mão é luva branca, o que segue o braço é manga (cor do macacão).
+    // O punho vira uma linha lisa (faixa de peso do osso) em vez dos recortes brancos que a textura subia pela manga
+    '  float glove = smoothstep(0.35, 0.65, vPart.x), sleeve = smoothstep(0.35, 0.65, vPart.y) * (1.0 - glove), pants = smoothstep(0.35, 0.65, vPart.z);',
+    '  mk.r = max(mk.r, sleeve) * (1.0 - glove) * (1.0 - pants); mk.g *= (1.0 - glove) * (1.0 - sleeve) * (1.0 - pants);',
+    // tronco (fora de cabeça, luvas, mangas e calça): respingo BRANCO da textura vira macacão; detalhe escuro (cinto, zíper) fica
+    '  float torso = (1.0 - glove) * (1.0 - sleeve) * (1.0 - pants) * (1.0 - smoothstep(uHeadY - 0.012, uHeadY + 0.002, vBind.y)) * (1.0 - vSkin);',
+    '  mk.r = max(mk.r, mk.b * torso);',
     '  float wK0 = smoothstep(0.32, 0.68, mk.g), wR = smoothstep(0.32, 0.68, mk.r);',
     '  float wK = wK0 * vSkin; wR = max(wR * (1.0 - wK), wK0 * (1.0 - vSkin));',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, vOther, texCol * (1.0 - max(wR, wK)) * (1.0 - core));',   // dente de cor fora do lugar
     '  float v = max(texelColor.r, max(texelColor.g, texelColor.b));',
     '  float head = smoothstep(uHeadY - 0.005, uHeadY + 0.025, vBind.y);',
-    '  float sr = mix(1.0, clamp(v / 0.9, 0.0, 1.0), 0.32), sk = mix(1.0, clamp(v / 0.95, 0.0, 1.0), 0.22);',
+    // quanto do sombreado PINTADO na textura fica (o resto do volume vem da luz do jogo): menos = cor limpa, sem o
+    // quadriculado e as manchas da textura da IA
+    '  float sr = mix(1.0, clamp(v / 0.9, 0.0, 1.0), 0.14), sk = mix(1.0, clamp(v / 0.95, 0.0, 1.0), 0.12);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, mix(uSuit, uHelmet, head) * sr, wR);',
-    '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * sk, wK); }'
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, uSkin * sk, wK);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.95, 0.95, 0.97) * mix(1.0, clamp(v / 0.95, 0.55, 1.0), 0.25), glove);',
+    '  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.2, 0.205, 0.235) * mix(1.0, clamp(v / 0.6, 0.55, 1.0), 0.3), pants); }'
   ].join('\n');
 
   // ---------- máscara de cores (uma vez por personagem) ----------
@@ -200,14 +215,35 @@
     for (let i = 0; i < nv; i++) { const key = Math.round(P[i * 3] * 1e5) + ',' + Math.round(P[i * 3 + 1] * 1e5) + ',' + Math.round(P[i * 3 + 2] * 1e5);
       let w = m.get(key); if (w === undefined) { w = k++; m.set(key, w); } weld[i] = w; }
     const red = new Float32Array(k), skn = new Float32Array(k), tot = new Float32Array(k), first = new Int8Array(k).fill(-1), mixd = new Uint8Array(k), oc = new Float32Array(k * 4);
+    const nt = I.length / 3, tcl = new Int8Array(nt);                                    // classe de cada triângulo (0 outro, 1 vermelho, 2 pele/brilho)
     for (let t = 0; t < I.length; t += 3) {
       const a = I[t], b = I[t + 1], c = I[t + 2], cu = (U[a * 2] + U[b * 2] + U[c * 2]) / 3, cv = (U[a * 2 + 1] + U[b * 2 + 1] + U[c * 2 + 1]) / 3, n = [0, 0, 0, 0];
       const smp = (u, v, wgt) => { const q = px(u, v), cl = cls[q]; n[cl] += wgt;
         if (cl === 0) for (const i of [a, b, c]) { const o = weld[i] * 4; oc[o] += rgb[q * 4] * wgt; oc[o + 1] += rgb[q * 4 + 1] * wgt; oc[o + 2] += rgb[q * 4 + 2] * wgt; oc[o + 3] += wgt; } };
       smp(cu, cv, 2); [a, b, c].forEach(i => smp(cu + (U[i * 2] - cu) * 0.5, cv + (U[i * 2 + 1] - cv) * 0.5, 1));
-      let cl = 0; for (let j = 1; j < 4; j++) if (n[j] > n[cl]) cl = j; const r = cl === 1 ? 1 : 0, s = cl >= 2 ? 1 : 0, code = r ? 1 : s ? 2 : 0;
-      for (const i of [a, b, c]) { const w = weld[i]; red[w] += r; skn[w] += s; tot[w]++; if (first[w] < 0) first[w] = code; else if (first[w] !== code) mixd[w] = 1; }
+      let cl = 0; for (let j = 1; j < 4; j++) if (n[j] > n[cl]) cl = j; tcl[t / 3] = cl === 1 ? 1 : cl >= 2 ? 2 : 0;
     }
+    // ILHAS: a textura da IA tem triângulos soltos pintados da cor errada (mancha branca na manga e no quadril, ponto
+    // vermelho no rosto). Regiões ligadas da mesma cor com menos de 0,5% da área e poucos triângulos, cercadas de outra
+    // cor, passam a ser dessa cor. Regiões de verdade (luvas, botas, olhos, viseira) têm >= 0,85% da área; detalhe com
+    // muita malha (zíper) fica.
+    { const area = new Float32Array(nt); let totA = 0;
+      for (let t = 0; t < nt; t++) { const a = I[t * 3] * 3, b = I[t * 3 + 1] * 3, c = I[t * 3 + 2] * 3, ux = P[b] - P[a], uy = P[b + 1] - P[a + 1], uz = P[b + 2] - P[a + 2], vx = P[c] - P[a], vy = P[c + 1] - P[a + 1], vz = P[c + 2] - P[a + 2];
+        area[t] = Math.hypot(uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx) / 2; totA += area[t]; }
+      const byW = Array.from({ length: k }, () => []); for (let t = 0; t < nt; t++) for (let j = 0; j < 3; j++) byW[weld[I[t * 3 + j]]].push(t);
+      for (let pass = 0; pass < 2; pass++) {
+        const par = new Int32Array(nt); for (let t = 0; t < nt; t++) par[t] = t; const find = x => { while (par[x] !== x) x = par[x] = par[par[x]]; return x; };
+        byW.forEach(ts => { for (let i = 1; i < ts.length; i++) if (tcl[ts[i]] === tcl[ts[0]]) { const r0 = find(ts[0]), r1 = find(ts[i]); if (r0 !== r1) par[r1] = r0; } });
+        const ca = new Float32Array(nt), cn = new Int32Array(nt); for (let t = 0; t < nt; t++) { const r = find(t); ca[r] += area[t]; cn[r]++; }
+        const nb = new Map();   // raiz da ilha pequena -> contagem das cores vizinhas
+        for (let t = 0; t < nt; t++) { const r = find(t); if (ca[r] >= totA * 0.005 || cn[r] > 60) continue;
+          for (let j = 0; j < 3; j++) for (const u of byW[weld[I[t * 3 + j]]]) if (find(u) !== r) { const v = nb.get(r) || [0, 0, 0]; v[tcl[u]] += area[u]; nb.set(r, v); } }
+        let changed = 0;
+        for (let t = 0; t < nt; t++) { const v = nb.get(find(t)); if (!v) continue; let best = 0; for (let j = 1; j < 3; j++) if (v[j] > v[best]) best = j;
+          if (best !== tcl[t] && v[best] > 0) { tcl[t] = best; changed++; } }
+        if (!changed) break; } }
+    for (let t = 0; t < nt; t++) { const code = tcl[t], r = code === 1 ? 1 : 0, s = code === 2 ? 1 : 0;
+      for (let j = 0; j < 3; j++) { const w = weld[I[t * 3 + j]]; red[w] += r; skn[w] += s; tot[w]++; if (first[w] < 0) first[w] = code; else if (first[w] !== code) mixd[w] = 1; } }
     for (let i = 0; i < nv; i++) { const w = weld[i], T = tot[w] || 1; out[i * 3] = red[w] / T >= 0.5 ? 1 : 0; out[i * 3 + 1] = skn[w] / T >= 0.5 ? 1 : 0; out[i * 3 + 2] = mixd[w] ? 0 : 1;
       const o = w * 4; if (oc[o + 3] > 0) for (let j = 0; j < 3; j++) oth[i * 3 + j] = oc[o + j] / oc[o + 3] / 255; }
     return { vm: out, other: oth };
@@ -272,9 +308,9 @@
       this.bones = {}; this.root.traverse(o => { if (o.isBone) this.bones[o.name] = o; if (o.isSkinnedMesh) this.mesh = o; });
       this.bind = tpl.bind; this.len = tpl.len; this.dir = tpl.dir;
       const u = this.u = { uSuit: { value: new THREE.Color() }, uHelmet: { value: new THREE.Color() }, uSkin: { value: new THREE.Color() }, uHeadY: { value: tpl.headY }, uMask: { value: tpl.mask } };
-      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb5', hook: sh => {
+      const mat = this.mat = Toon.mat(Object.assign({ map: tpl.map, skinning: true }, Toon.gradientSoft ? { gradientMap: Toon.gradientSoft() } : {}), { gloss: 0.3, rim: 0.3, sat: 0, key: 'pilot-glb8', hook: sh => {
         Object.assign(sh.uniforms, u);
-        sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther;');
+        sh.vertexShader = 'attribute float aKeep;\nattribute float aSkin;\nattribute vec3 aVM;\nattribute vec3 aOther;\nattribute vec3 aPart;\nvarying vec3 vPart;\nvarying vec3 vOther;\nvarying vec3 vBind;\nvarying float vKeep;\nvarying float vSkin;\nvarying vec3 vVM;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position; vKeep = aKeep; vSkin = aSkin; vVM = aVM; vOther = aOther; vPart = aPart;');
         sh.fragmentShader = RECOLOR_FS + '\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n' + RECOLOR_BODY);
       } });
       this.mesh.material = mat; this.mesh.castShadow = true; this.mesh.frustumCulled = false;
@@ -441,6 +477,7 @@
     // junta tudo numa malha só, com índices de osso / pesos / "não recolorir"
     let nv = 0, ni = 0; parts.forEach(p => { nv += p.b.P.length / 3; ni += p.b.I.length; });
     const P = new Float32Array(nv * 3), N = new Float32Array(nv * 3), U = new Float32Array(nv * 2), I = new Uint32Array(ni), SI = new Uint16Array(nv * 4), SW = new Float32Array(nv * 4), KP = new Float32Array(nv);
+    const PT = new Float32Array(nv * 3);   // [luva, manga, calça]: quanto o vértice segue a mão / o braço / a coxa e a canela (pesos dos ossos)
     const boneCount = BONES.length + (parts.length > 1 ? 4 : 0);
     let ov = 0, oi = 0;
     parts.forEach(p => {
@@ -453,12 +490,13 @@
         const x = P[j * 3 + 2], y = P[j * 3 + 1], z = -P[j * 3];                             // volta para o espaço do .glb
         const ws = vertexWeights(x, y, z, lm).sort((a, b) => b[1] - a[1]).slice(0, 4), tot = ws.reduce((s, w) => s + w[1], 0) || 1;
         if (!ws.length) { SI[j * 4] = BI.chest; SW[j * 4] = 1; continue; }
-        ws.forEach((w, k) => { SI[j * 4 + k] = w[0]; SW[j * 4 + k] = w[1] / tot; }); }
+        ws.forEach((w, k) => { SI[j * 4 + k] = w[0]; SW[j * 4 + k] = w[1] / tot;
+          const bn = BONES[w[0]][0]; if (/^(hand|fingers)_/.test(bn)) PT[j * 3] += w[1] / tot; else if (/^(upperarm|forearm)_/.test(bn)) PT[j * 3 + 1] += w[1] / tot; else if (/^(thigh|shin)_/.test(bn)) PT[j * 3 + 2] += w[1] / tot; }); }
       ov += n; oi += p.b.I.length;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(P, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(N, 3)); geo.setAttribute('uv', new THREE.BufferAttribute(U, 2));
-    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geo.setAttribute('aKeep', new THREE.BufferAttribute(KP, 1));
+    geo.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4)); geo.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4)); geo.setAttribute('aKeep', new THREE.BufferAttribute(KP, 1)); geo.setAttribute('aPart', new THREE.BufferAttribute(PT, 3));
     const CM = cleanTexture(map, U, I), mask = CM && CM.tex;                                // textura sem vazamento nas costuras + máscara de cores
     const VMK = vertexMasks(P, U, I, nv, CM);
     geo.setAttribute('aVM', new THREE.BufferAttribute(VMK.vm, 3)); geo.setAttribute('aOther', new THREE.BufferAttribute(VMK.other, 3));
