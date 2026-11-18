@@ -447,8 +447,9 @@
     let headL = null;
     const front = lensPos.length ? lensPos[0].z + 0.3 : 3.7, lightY = lensPos.length ? lensPos[0].y : 1.0;
     if (opts.lights) { // alcance curto + decaimento forte: sem clarão nas paredes do túnel
-      headL = new THREE.SpotLight(0xfff0c8, 0, 48, 0.5, 0.65, 2); headL.position.set(0, lightY + 0.1, front); group.add(headL);
-      const t = new THREE.Object3D(); t.position.set(0, 0, 22); group.add(t); headL.target = t; }
+      // farol que ILUMINA de verdade: cone largo (0,62 rad) mirando o asfalto à frente, alcance longo e queda suave
+      headL = new THREE.SpotLight(0xfff0c8, 0, 75, 0.62, 0.55, 1.2); headL.position.set(0, lightY + 0.15, front); group.add(headL);
+      const t = new THREE.Object3D(); t.position.set(0, 0, 24); group.add(t); headL.target = t; }
     const headGlows = lensPos.map(l => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: 0xfff2c0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); p.position.set(l.x, l.y, l.z + 0.2); p.scale.setScalar(1.6); group.add(p); return p; });
     // ---------- FARÓIS NO ESTILO MARIO KART ----------
     // Três camadas baratas (sem luz de verdade, valem para todos os karts):
@@ -486,7 +487,7 @@
 
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
-      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [], lamps, setLamps,
+      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [], lamps, setLamps, lampFront: new THREE.Vector3(0, lightY + 0.15, front),
       // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
       setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.25) * 0.7 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); emberSprites.forEach(e => { e.material.opacity = Math.max(0, h - 0.15) * 0.85 * (0.85 + 0.15 * Math.sin((t || 0) * 23)); e.visible = h > 0.02; }); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),

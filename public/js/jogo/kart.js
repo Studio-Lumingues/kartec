@@ -896,7 +896,7 @@
     setNight(nf) {
       if (Math.abs(nf - (this._nf === undefined ? -1 : this._nf)) < 0.01) return; this._nf = nf;
       this.m.setNight(nf);
-      if (this.m.headL) this.m.headL.intensity = 1.1 * nf; this.m.headGlows.forEach(g => g.material.opacity = 0.95 * nf);
+      if (this.m.headL) this.m.headL.intensity = (Game.physLights ? 260 : 3.4) * nf; this.m.headGlows.forEach(g => g.material.opacity = 0.95 * nf);
       if (this.m.setLamps) this.m.setLamps(nf);   // risco de lens flare, feixe e mancha de luz no asfalto
       this.m.headLens.forEach(l => l.material.color.setRGB(0.85 + 0.15 * nf, 0.82 + 0.18 * nf, 0.69 + 0.31 * nf));
     }

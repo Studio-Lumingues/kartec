@@ -499,6 +499,7 @@
       this.wrongT = 0;
       if (this.lite) this.setLite(true);
       if (window.Items && Items.warm) try { Items.warm(this.karts); } catch (e) { console.warn('[itens] aquecer', e); }   // modelos dos itens entram na pré-compilação
+      this.buildKartLamps(scene);   // luzes de verdade dos faróis dos rivais (antes da pré-compilação: o nº de luzes não muda depois)
       this.precompile(scene);
       // vitrine e pódio não aparecem durante a corrida: saem da GPU (voltam sozinhos quando forem desenhados de novo)
       try { const n = hibernate(window.Showroom && Showroom.scene, scene) + hibernate(window.Podium && Podium.scene, scene);
@@ -826,6 +827,35 @@
         UI.transition(() => this.toPodium(rows, true, false)); return;
       }
       this.cup.round++; UI.transition(() => this.startRace(CFG.CUP.order[this.cup.round]));
+    },
+    // ---------- FARÓIS DOS RIVAIS QUE ILUMINAM ----------
+    // Um SpotLight por rival custaria caro (cada luz pesa em todo material da cena). Aqui há um conjunto FIXO de luzes
+    // (Massinha 0, Baixa 1, Média 2, Alta+ 3) que é passado, a cada 0,25 s, para os rivais acesos mais perto da câmera.
+    // A luz acende/apaga suave ao trocar de dono. O nº de luzes nunca muda durante a corrida: nada recompila.
+    buildKartLamps(scene) {
+      this.physLights = !!renderer.physicallyCorrectLights;
+      const pr = window.Settings && Settings.s ? Settings.s.gfx.preset : 'auto', N = { massinha: 0, low: 1, medium: 2 }[pr] ?? 3;
+      this.kLamps = [];
+      for (let i = 0; i < N; i++) { const L = new THREE.SpotLight(0xfff0c8, 0, 60, 0.6, 0.55, 1.2); L.castShadow = false; L.userData.dynamic = true; L.target.userData.dynamic = true;
+        scene.add(L, L.target); this.kLamps.push({ L, k: null, a: 0 }); }
+      this.kLampT = 0;
+    },
+    stepKartLamps(dt) {
+      const P = this.kLamps; if (!P || !P.length || !this.rivals) return;
+      const cam = window.Fx && Fx.cam, v = this._klV || (this._klV = new THREE.Vector3()), tg = this._klT || (this._klT = new THREE.Vector3());
+      if ((this.kLampT -= dt) <= 0 && cam) { this.kLampT = 0.25;
+        const cp = cam.position, want = this.rivals.filter(k => k.m && k.m.lampFront && (k._nf || 0) > 0.02 && k.m.group.visible)
+          .map(k => [k, (k.pos.x - cp.x) ** 2 + (k.pos.z - cp.z) ** 2]).filter(a => a[1] < 140 * 140).sort((a, b) => a[1] - b[1]).slice(0, P.length).map(a => a[0]);
+        P.forEach(p => { if (p.k && !want.includes(p.k)) p.k = p.a > 0.02 ? p.k : null; p.leaving = !!p.k && !want.includes(p.k); });
+        want.filter(k => !P.some(p => p.k === k)).forEach(k => { const f = P.find(p => !p.k); if (f) { f.k = k; f.a = 0; f.leaving = false; } }); }
+      const base = this.physLights ? 220 : 2.8;
+      P.forEach(p => { const k = p.k;
+        p.a = Math.max(0, Math.min(1, p.a + (p.leaving || !k ? -dt * 4 : dt * 3)));
+        if (!k) { p.L.intensity = 0; return; }
+        if (p.leaving && p.a <= 0) { p.k = null; p.L.intensity = 0; return; }
+        const g = k.m.group; v.copy(k.m.lampFront); g.localToWorld(v); p.L.position.copy(v);
+        tg.set(0, 0, 22); g.localToWorld(tg); p.L.target.position.copy(tg); p.L.target.updateMatrixWorld();
+        p.L.intensity = base * (k._nf || 0) * p.a; });
     },
     // tira o modelo do kart da cena da corrida e zera as poses (o pódio passa a ser o dono dele)
     handOff(k) {
@@ -1562,6 +1592,7 @@
           else if (Game.lite && fastWin >= 3 && dpr >= Math.min(maxD, 1.0)) { Game.setLite(false); liteOffAt = now; fastWin = 0; }
         } } }
     Game.rawDt = raw; safe('jogo', () => Game.update(dt));
+    if (Game.scene && Game.kLamps) safe('faróis', () => Game.stepKartLamps(dt));
     if (window.Settings) safe('desempenho', () => Settings.perfTick(raw, Game.state === 'race' && !Game.paused));
     if (Game.player && Game.scene && (!isFinite(Game.player.speed) || !isFinite(Game.player.pos.x))) Game.player.respawn();
     if (Game.bot && Game.scene && (!isFinite(Game.bot.speed) || !isFinite(Game.bot.pos.x))) Game.bot.respawn();
