@@ -76,7 +76,7 @@
   // feixe: aditivo; esmaece ao longo do cone (vZ: 0 na lâmpada, 1 na ponta) e na silhueta (dot(N,V) perto de 0)
   function beamMat() {
     return new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
-      uniforms: { uI: { value: 0 }, uC: { value: new THREE.Color(0xfff0cc) }, uL: { value: 10 } },
+      uniforms: { uI: { value: 0 }, uC: { value: new THREE.Color(0xfff0cc) }, uL: { value: 7 } },
       vertexShader: 'varying float vZ; varying vec3 vN; varying vec3 vV; uniform float uL;' +
         'void main(){ vZ = clamp(position.z / uL, 0.0, 1.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'varying float vZ; varying vec3 vN; varying vec3 vV; uniform float uI; uniform vec3 uC;' +
@@ -448,8 +448,10 @@
     const front = lensPos.length ? lensPos[0].z + 0.3 : 3.7, lightY = lensPos.length ? lensPos[0].y : 1.0;
     if (opts.lights) { // alcance curto + decaimento forte: sem clarão nas paredes do túnel
       // farol que ILUMINA de verdade: cone largo (0,62 rad) mirando o asfalto à frente, alcance longo e queda suave
-      headL = new THREE.SpotLight(0xfff0c8, 0, 75, 0.62, 0.55, 1.2); headL.position.set(0, lightY + 0.15, front); group.add(headL);
-      const t = new THREE.Object3D(); t.position.set(0, 0, 24); group.add(t); headL.target = t; }
+      // A fonte de luz fica INVISÍVEL, ~5 m acima e um pouco à frente do farol, mirando o asfalto: saindo da altura real
+      // do farol (~1 m) a luz batia quase deitada na pista e quase não iluminava (o asfalto recebe luz pelo ângulo).
+      headL = new THREE.SpotLight(0xfff0c8, 0, 60, 0.75, 0.6, 1.1); headL.position.set(0, 6.0, front + 1.5); group.add(headL);
+      const t = new THREE.Object3D(); t.position.set(0, 0, front + 16); group.add(t); headL.target = t; }
     const headGlows = lensPos.map(l => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: 0xfff2c0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); p.position.set(l.x, l.y, l.z + 0.2); p.scale.setScalar(1.6); group.add(p); return p; });
     // ---------- FARÓIS NO ESTILO MARIO KART ----------
     // Três camadas baratas (sem luz de verdade, valem para todos os karts):
@@ -463,8 +465,8 @@
       const LT = lampTex();
       lensPos.forEach(l => {
         const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: LT.streak, color: 0xfff6dc, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0, fog: false }));
-        f.position.set(l.x, l.y, l.z + 0.25); f.scale.set(5.2, 0.5, 1); f.userData.dynamic = true; group.add(f); lamps.flares.push(f);
-        const BL = 10, br = 2.0, bm = new THREE.Mesh(LT.cone(BL, br), beamMat()); bm.position.set(l.x, l.y, l.z + 0.05);
+        f.position.set(l.x, l.y, l.z + 0.25); f.scale.set(3.2, 0.3, 1); f.userData.dynamic = true; group.add(f); lamps.flares.push(f);
+        const BL = 7, br = 1.4, bm = new THREE.Mesh(LT.cone(BL, br), beamMat()); bm.position.set(l.x, l.y, l.z + 0.05);
         bm.rotation.x = 0.05; bm.userData.dynamic = true; bm.userData.noOutline = true; bm.userData.noShadow = true; bm.renderOrder = 3; bm.frustumCulled = false; group.add(bm); lamps.beams.push(bm);
       });
       const pm = new THREE.MeshBasicMaterial({ map: LT.pool, color: 0xfff1d0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
@@ -472,8 +474,8 @@
       pool.userData.dynamic = true; pool.userData.noOutline = true; pool.userData.noShadow = true; pool.renderOrder = 1; group.add(pool); lamps.pool = pool;
     }
     // intensidade 0..1 (Kart.setNight; o pódio/garagem zeram)
-    const setLamps = nf => { lamps.flares.forEach(f => f.material.opacity = 0.85 * nf); lamps.beams.forEach(b => b.material.uniforms.uI.value = nf);
-      if (lamps.pool) lamps.pool.material.opacity = 0.7 * nf; };
+    const setLamps = nf => { lamps.flares.forEach(f => f.material.opacity = 0.45 * nf); lamps.beams.forEach(b => b.material.uniforms.uI.value = 0.3 * nf);
+      if (lamps.pool) lamps.pool.material.opacity = 0.16 * nf; };   // discretas: quem ilumina é a luz de verdade
     group.scale.setScalar(0.8);
     group.traverse(o => { if (o.isMesh && !o.material.isMeshBasicMaterial) { o.castShadow = !o.userData.noShadow; o.receiveShadow = false; } });
     // sem contorno de desenho animado: o veículo é desenhado como no modelo original (o piloto mantém o dele)
@@ -487,7 +489,7 @@
 
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
-      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [], lamps, setLamps, lampFront: new THREE.Vector3(0, lightY + 0.15, front),
+      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [], lamps, setLamps, lampFront: new THREE.Vector3(0, 6.0, front + 1.5), lampAim: new THREE.Vector3(0, 0, front + 16),
       // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
       setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.25) * 0.7 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); emberSprites.forEach(e => { e.material.opacity = Math.max(0, h - 0.15) * 0.85 * (0.85 + 0.15 * Math.sin((t || 0) * 23)); e.visible = h > 0.02; }); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),

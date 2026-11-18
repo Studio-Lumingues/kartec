@@ -836,7 +836,7 @@
       this.physLights = !!renderer.physicallyCorrectLights;
       const pr = window.Settings && Settings.s ? Settings.s.gfx.preset : 'auto', N = { massinha: 0, low: 1, medium: 2 }[pr] ?? 3;
       this.kLamps = [];
-      for (let i = 0; i < N; i++) { const L = new THREE.SpotLight(0xfff0c8, 0, 60, 0.6, 0.55, 1.2); L.castShadow = false; L.userData.dynamic = true; L.target.userData.dynamic = true;
+      for (let i = 0; i < N; i++) { const L = new THREE.SpotLight(0xfff0c8, 0, 55, 0.7, 0.6, 1.1); L.castShadow = false; L.userData.dynamic = true; L.target.userData.dynamic = true;
         scene.add(L, L.target); this.kLamps.push({ L, k: null, a: 0 }); }
       this.kLampT = 0;
     },
@@ -848,13 +848,13 @@
           .map(k => [k, (k.pos.x - cp.x) ** 2 + (k.pos.z - cp.z) ** 2]).filter(a => a[1] < 140 * 140).sort((a, b) => a[1] - b[1]).slice(0, P.length).map(a => a[0]);
         P.forEach(p => { if (p.k && !want.includes(p.k)) p.k = p.a > 0.02 ? p.k : null; p.leaving = !!p.k && !want.includes(p.k); });
         want.filter(k => !P.some(p => p.k === k)).forEach(k => { const f = P.find(p => !p.k); if (f) { f.k = k; f.a = 0; f.leaving = false; } }); }
-      const base = this.physLights ? 220 : 2.8;
+      const base = this.physLights ? 260 : 3.2;
       P.forEach(p => { const k = p.k;
         p.a = Math.max(0, Math.min(1, p.a + (p.leaving || !k ? -dt * 4 : dt * 3)));
         if (!k) { p.L.intensity = 0; return; }
         if (p.leaving && p.a <= 0) { p.k = null; p.L.intensity = 0; return; }
         const g = k.m.group; v.copy(k.m.lampFront); g.localToWorld(v); p.L.position.copy(v);
-        tg.set(0, 0, 22); g.localToWorld(tg); p.L.target.position.copy(tg); p.L.target.updateMatrixWorld();
+        tg.copy(k.m.lampAim || tg.set(0, 0, 18)); g.localToWorld(tg); p.L.target.position.copy(tg); p.L.target.updateMatrixWorld();
         p.L.intensity = base * (k._nf || 0) * p.a; });
     },
     // tira o modelo do kart da cena da corrida e zera as poses (o pódio passa a ser o dono dele)
