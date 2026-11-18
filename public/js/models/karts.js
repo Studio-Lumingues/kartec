@@ -51,6 +51,40 @@
     '  float kv = hv.z / uRefV; float sh = min(kv, 1.0); vec3 hi = vec3(max(kv - 1.0, 0.0) * 0.5);',
     '  diffuseColor.rgb = mix(diffuseColor.rgb, uPaint * sh + hi, wP); }'
   ].join('\n');
+  // ---------- texturas e material dos faróis (criados uma vez, compartilhados) ----------
+  let _lampTex = null;
+  function lampTex() {
+    if (_lampTex) return _lampTex;
+    const cv = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+    // risco de lens flare: linha horizontal fina, mais forte no meio
+    const a = cv(256, 32), ga = a.getContext('2d'), gx = ga.createLinearGradient(0, 0, 256, 0);
+    gx.addColorStop(0, 'rgba(255,255,255,0)'); gx.addColorStop(0.42, 'rgba(255,255,255,.55)'); gx.addColorStop(0.5, 'rgba(255,255,255,1)'); gx.addColorStop(0.58, 'rgba(255,255,255,.55)'); gx.addColorStop(1, 'rgba(255,255,255,0)');
+    ga.fillStyle = gx; ga.fillRect(0, 0, 256, 32);
+    ga.globalCompositeOperation = 'destination-in'; const gy = ga.createLinearGradient(0, 0, 0, 32); gy.addColorStop(0, 'rgba(0,0,0,0)'); gy.addColorStop(0.5, 'rgba(0,0,0,1)'); gy.addColorStop(1, 'rgba(0,0,0,0)'); ga.fillStyle = gy; ga.fillRect(0, 0, 256, 32);
+    // mancha no chão: oval alongada, mais forte perto do kart, borda bem macia (v=0 é o lado do kart)
+    const b = cv(128, 256), gb = b.getContext('2d');
+    gb.save(); gb.translate(64, 96); gb.scale(1, 2.2); const rg = gb.createRadialGradient(0, 0, 0, 0, 0, 62);
+    rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(0.35, 'rgba(255,255,255,.7)'); rg.addColorStop(0.7, 'rgba(255,255,255,.22)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    gb.fillStyle = rg; gb.beginPath(); gb.arc(0, 0, 62, 0, 6.2832); gb.fill(); gb.restore();
+    const T = c => { const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t; };
+    // cone do feixe: ápice na lâmpada, abre para +z
+    const cones = {};
+    _lampTex = { streak: T(a), pool: T(b), cone(L, r) { const k = L + ':' + r; if (cones[k]) return cones[k];
+      const g = new THREE.ConeGeometry(r, L, 24, 6, true); g.translate(0, -L / 2, 0); g.rotateX(-Math.PI / 2); return (cones[k] = g); } };
+    return _lampTex;
+  }
+  // feixe: aditivo; esmaece ao longo do cone (vZ: 0 na lâmpada, 1 na ponta) e na silhueta (dot(N,V) perto de 0)
+  function beamMat() {
+    return new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+      uniforms: { uI: { value: 0 }, uC: { value: new THREE.Color(0xfff0cc) }, uL: { value: 10 } },
+      vertexShader: 'varying float vZ; varying vec3 vN; varying vec3 vV; uniform float uL;' +
+        'void main(){ vZ = clamp(position.z / uL, 0.0, 1.0); vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }',
+      fragmentShader: 'varying float vZ; varying vec3 vN; varying vec3 vV; uniform float uI; uniform vec3 uC;' +
+        'void main(){ float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.6);' +
+        ' float len = pow(1.0 - vZ, 1.7) * smoothstep(0.0, 0.06, vZ);' +
+        ' gl_FragColor = vec4(uC * (0.22 * uI * edge * len), 1.0); }' });
+  }
+
   function paintMat(map, u) {
     const m = Toon.mat({ color: 0xffffff, map }, { gloss: 0.45, rim: 0.3, sat: 0, key: 'veh-paint', hook: sh => {
       Object.assign(sh.uniforms, u);
@@ -416,6 +450,29 @@
       headL = new THREE.SpotLight(0xfff0c8, 0, 48, 0.5, 0.65, 2); headL.position.set(0, lightY + 0.1, front); group.add(headL);
       const t = new THREE.Object3D(); t.position.set(0, 0, 22); group.add(t); headL.target = t; }
     const headGlows = lensPos.map(l => { const p = new THREE.Sprite(new THREE.SpriteMaterial({ map: Fx.glowTex(), color: 0xfff2c0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0 })); p.position.set(l.x, l.y, l.z + 0.2); p.scale.setScalar(1.6); group.add(p); return p; });
+    // ---------- FARÓIS NO ESTILO MARIO KART ----------
+    // Três camadas baratas (sem luz de verdade, valem para todos os karts):
+    //  1) lâmpada: o brilho redondo de antes + um RISCO horizontal de lens flare (o "brilho de câmera" dos jogos da Nintendo);
+    //  2) FEIXE visível: um cone aberto, aditivo, que esmaece no comprimento e nas bordas da silhueta (a técnica clássica
+    //     de "light beam" com cone + falloff) — parece luz atravessando o ar da noite;
+    //  3) MANCHA DE LUZ no asfalto à frente (decalque aditivo alongado): é o que faz a pista "acender" na frente do kart.
+    // O jogador continua com o SpotLight (ilumina o cenário de verdade). Tudo começa apagado; Kart.setNight acende.
+    const lamps = { flares: [], beams: [], pool: null };
+    if (lensPos.length) {
+      const LT = lampTex();
+      lensPos.forEach(l => {
+        const f = new THREE.Sprite(new THREE.SpriteMaterial({ map: LT.streak, color: 0xfff6dc, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0, fog: false }));
+        f.position.set(l.x, l.y, l.z + 0.25); f.scale.set(5.2, 0.5, 1); f.userData.dynamic = true; group.add(f); lamps.flares.push(f);
+        const BL = 10, br = 2.0, bm = new THREE.Mesh(LT.cone(BL, br), beamMat()); bm.position.set(l.x, l.y, l.z + 0.05);
+        bm.rotation.x = 0.05; bm.userData.dynamic = true; bm.userData.noOutline = true; bm.userData.noShadow = true; bm.renderOrder = 3; bm.frustumCulled = false; group.add(bm); lamps.beams.push(bm);
+      });
+      const pm = new THREE.MeshBasicMaterial({ map: LT.pool, color: 0xfff1d0, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false, opacity: 0, fog: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      const pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), pm); pool.rotation.x = -Math.PI / 2; pool.scale.set(7.5, 15, 1); pool.position.set(0, 0.06, front + 7.2);
+      pool.userData.dynamic = true; pool.userData.noOutline = true; pool.userData.noShadow = true; pool.renderOrder = 1; group.add(pool); lamps.pool = pool;
+    }
+    // intensidade 0..1 (Kart.setNight; o pódio/garagem zeram)
+    const setLamps = nf => { lamps.flares.forEach(f => f.material.opacity = 0.85 * nf); lamps.beams.forEach(b => b.material.uniforms.uI.value = nf);
+      if (lamps.pool) lamps.pool.material.opacity = 0.7 * nf; };
     group.scale.setScalar(0.8);
     group.traverse(o => { if (o.isMesh && !o.material.isMeshBasicMaterial) { o.castShadow = !o.userData.noShadow; o.receiveShadow = false; } });
     // sem contorno de desenho animado: o veículo é desenhado como no modelo original (o piloto mantém o dele)
@@ -429,7 +486,7 @@
 
     const m = {
       group, pivot, body, blob, headL, headGlows, spec, pilot, def,
-      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [],
+      fw, rolls, flames, headLens: lensPos.map(l => l.lens), neons: [], lamps, setLamps,
       // calor do escapamento (0..1): cor de metal superaquecido + brilho na ponta
       setHeat(h, t) { heatU.uHeat.value = h; heatU.uT.value = t || 0; heatGlowM.opacity = Math.max(0, h - 0.25) * 0.7 * (0.9 + 0.1 * Math.sin((t || 0) * 19)); emberSprites.forEach(e => { e.material.opacity = Math.max(0, h - 0.15) * 0.85 * (0.85 + 0.15 * Math.sin((t || 0) * 23)); e.visible = h > 0.02; }); fireU.uT.value = t || 0; heatParts.forEach(p => { p.visible = h > 0.01; }); },
       rear: tpl.rear, lean: tpl.lean, moto: tpl.moto, steerRig, hands, mats: { paint: paint || matFor(tpl.bodyParts[0]) }, paint: paint || matFor(tpl.bodyParts[0]),
@@ -483,7 +540,7 @@
     group.scale.setScalar(0.8);
     let pilot = null;
     if (opts.pilot !== false && window.Pilot) { pilot = Pilot.create(spec); pilot.attach(body, { seat: V(0, 1.9, -0.6), scale: 1.6, hands, feet }); pilot.update(0, {}); }
-    return { group, pivot, body, blob, headL: null, headGlows: [], spec, pilot, def, fw, rolls, flames: [], headLens: [], neons: [],
+    return { group, pivot, body, blob, headL: null, headGlows: [], spec, pilot, def, fw, rolls, flames: [], headLens: [], neons: [], lamps: { flares: [], beams: [], pool: null }, setLamps() { },
       rear: { x: moto ? 0.45 : 1.6, z: -1.8 }, lean: moto ? 0.42 : -0.12, moto, steerRig: null, mats: { paint }, paint,
       setColor(hex) { paint.color.set(hex); spec.color = hex; },
       setPilot(s) { Object.assign(spec, s, { accessory: 'none' }); if (pilot) pilot.setColors(spec); },

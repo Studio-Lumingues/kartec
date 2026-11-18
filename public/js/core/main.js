@@ -833,7 +833,7 @@
       if (m.group.parent) m.group.parent.remove(m.group); m.group.visible = true;
       m.group.position.set(0, 0, 0); m.group.rotation.set(0, 0, 0); m.pivot.position.set(0, 0, 0); m.pivot.rotation.set(0, 0, 0);
       m.body.position.set(0, 0, 0); m.body.rotation.set(0, 0, 0); m.body.scale.set(1, 1, 1);
-      m.flames.forEach(f => f.visible = false); m.headGlows.forEach(g => g.material.opacity = 0); m.setNight(0);
+      m.flames.forEach(f => f.visible = false); m.headGlows.forEach(g => g.material.opacity = 0); m.setNight(0); if (m.setLamps) m.setLamps(0);
       if (m.headL) { m.headL.intensity = 0; if (m.headL.parent) m.headL.parent.remove(m.headL); if (m.headL.target && m.headL.target.parent) m.headL.target.parent.remove(m.headL.target); m.headL = null; }
       if (k._outl) k._outl.forEach(o => o.visible = !this.lite);
       return m;

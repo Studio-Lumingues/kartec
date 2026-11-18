@@ -827,6 +827,7 @@
     // fumaça nos pneus, poeira na grama/areia e rastro do boost
     tireFx(dt) {
       this.smokeCD -= dt; this.trailCD -= dt;
+      if (this.m.lamps && this.m.lamps.pool) this.m.lamps.pool.visible = !this.air;   // no pulo a mancha de luz não fica flutuando
       const sp = Math.abs(this.speed), dark = 1 - 0.6 * (window.Env ? Env.nightF : 0), g = this.m.group;
       const shade = h => { const c = new THREE.Color(h); c.multiplyScalar(dark); return c.getHex(); };
       let mode = null;
@@ -896,6 +897,7 @@
       if (Math.abs(nf - (this._nf === undefined ? -1 : this._nf)) < 0.01) return; this._nf = nf;
       this.m.setNight(nf);
       if (this.m.headL) this.m.headL.intensity = 1.1 * nf; this.m.headGlows.forEach(g => g.material.opacity = 0.95 * nf);
+      if (this.m.setLamps) this.m.setLamps(nf);   // risco de lens flare, feixe e mancha de luz no asfalto
       this.m.headLens.forEach(l => l.material.color.setRGB(0.85 + 0.15 * nf, 0.82 + 0.18 * nf, 0.69 + 0.31 * nf));
     }
 
