@@ -580,7 +580,7 @@
     st.textContent =
       '#itemSlot{z-index:2;--k:1;--w:calc(140px * var(--k));--hh:calc(36px * var(--k));--bh:calc(132px * var(--k));--ic:calc(124px * var(--k));position:relative;width:var(--w);height:calc(var(--hh) + var(--bh) - 6px * var(--k));flex:none;pointer-events:auto;cursor:pointer;user-select:none;-webkit-user-select:none;display:none}' +
       '#itemSlot.on{display:block}' +
-      '#itemSlot .sw{position:absolute;inset:0}' +   // recebe a mesma transformação da placa da volta
+      '#itemSlot .isSw{position:absolute;inset:0;width:auto;height:auto;padding:0;border:0;border-radius:0;background:none;box-shadow:none}' +   // recebe a mesma transformação da placa da volta (nome próprio: .sw é o interruptor das configurações)
       '#itemSlot .pk{position:absolute;inset:0;transform-origin:50% calc(8px * var(--k))}' +   // o pacote (balança pelo furo)
       '#itemSlot.pop .pk{animation:bagSwing 1.1s cubic-bezier(.3,.6,.4,1)}' +
       '@keyframes bagSwing{0%{rotate:0deg;scale:.94}12%{rotate:7deg;scale:1.04}30%{rotate:-5deg;scale:1}50%{rotate:3deg}70%{rotate:-1.5deg}100%{rotate:0deg}}' +
@@ -665,7 +665,7 @@
       '@media (prefers-reduced-motion:reduce){#itemSlot .glow,#itemSlot.pop .pk,#itemSlot.tear .pk{animation:none}}';
     document.head.appendChild(st);
     slot = document.createElement('div'); slot.id = 'itemSlot'; slot.setAttribute('role', 'img'); slot.setAttribute('aria-label', 'Item atual (tecla E)');
-    slot.innerHTML = '<div class="sw"><div class="pk"><div class="glow"></div>' +
+    slot.innerHTML = '<div class="isSw"><div class="pk"><div class="glow"></div>' +
       '<div class="bag"><div class="dots"></div>' +
         '<div class="reel"><div class="isCard"></div><div class="isCard"></div></div>' +
         '<div class="isIc"><div class="tl"><i class="rim"></i><i class="holo"></i><i class="art"></i><i class="foil"></i><i class="gl"></i><b class="spk"></b><b class="spk"></b><b class="spk"></b></div></div>' +

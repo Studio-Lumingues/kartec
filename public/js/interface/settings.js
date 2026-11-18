@@ -48,12 +48,13 @@
     auto: 'efeitos completos e a resolução se ajusta sozinha para manter o jogo liso.',
     custom: 'você mexeu nos ajustes avançados. Escolha um nível acima para voltar ao padrão.'
   };
-  const REC_VERSION = 2;   // 2: pergunta antes de aplicar (a 1 aplicava sozinha); quem tinha a 1 é perguntado uma vez
+  const REC_VERSION = 3;   // 3: recomendação mira 60 FPS (teste na resolução da tela, sem folga de nível); todos são detectados de novo uma vez
   // nível pelo nome da placa (do mais forte para o mais fraco; a 1ª regra que bater vale)
   const GPU_RULES = [
     [/swiftshader|llvmpipe|softpipe|software|basic render|microsoft basic|mesa offscreen/i, 0],
+    [/rtx\s*(20[5-9]0|30[45]0|40[45]0)|mx\s*\d{3}/i, 2],   // RTX de entrada (2050/3050/4050, quase sempre de notebook): Média
     [/rtx\s*(30[6-9]0|40[5-9]0|50\d0)|rx\s*(6[7-9]\d0|7[7-9]\d0|9\d{3})|apple m\d\s*(pro|max|ultra)|radeon\s*pro\s*w/i, 4],
-    [/rtx|gtx\s*(10[6-8]0|16[5-6]0|9[78]0|titan)|rx\s*(5[6-7]\d0|6[5-6]\d0|7[6]\d0|vega\s*(56|64))|apple m\d|arc\s*a[57]|radeon\s*(780m|890m)/i, 3],
+    [/rtx|gtx\s*(10[78]0|16[6]0|9[8]0|titan)|rx\s*(5[6-7]\d0|6[5-6]\d0|7[6]\d0|vega\s*(56|64))|apple m\d|arc\s*a[57]|radeon\s*(780m|890m)/i, 3],
     [/gtx|rx\s*[456]\d0|rx\s*5[35]00|radeon.*(vega|680m|660m)|iris\s*xe|arc|mx\s*\d{3}|apple gpu|adreno.*(7[3-9]\d|8\d\d)|mali-g7[1-9]|mali-g[6-9]\d\d|immortalis|xclipse/i, 2],
     [/intel|uhd|hd graphics|radeon\s*(r[2-7]|hd)|adreno|mali|powervr|apple a\d|tegra|videocore/i, 1]
   ];
@@ -110,10 +111,13 @@
     run() {
       const inf = this.info(), g = this.gpu(), why = [];
       let tier;
-      const byName = this.nameTier(g.gpu), byBench = this.benchTier(g.bench);
+      // o teste roda num quadro pequeno (0,33 MP); o jogo desenha a tela inteira. Telas maiores que Full HD dividem a nota
+      // na proporção dos pixels (a resolução é o que mais pesa)
+      const scr = Math.min(8.3, Math.max(2.07, inf.screen || 2.07)), bench = g.bench * 2.07 / scr;
+      const byName = this.nameTier(g.gpu), byBench = this.benchTier(bench);
       if (!g.webgl) { tier = 0; why.push('sem WebGL'); }
       else if (byName === 0) { tier = 0; why.push('placa de vídeo por software'); }
-      else if (byName >= 0 && byBench >= 0) { tier = Math.min(byName, byBench + 1); why.push('placa + teste'); }   // o teste segura nomes "fortes" em modo economia
+      else if (byName >= 0 && byBench >= 0) { tier = Math.min(byName, byBench); why.push('placa + teste'); }   // vale o MAIS FRACO dos dois (meta: 60 FPS)
       else if (byName >= 0) { tier = byName; why.push('placa'); }
       else if (byBench >= 0) { tier = byBench; why.push('teste'); }
       else { tier = 2; why.push('padrão'); }
@@ -164,16 +168,16 @@
     userTouched() { if (this.s.rec && this.s.rec.auto) { this.s.rec.auto = false; } },
     // ---------- rede de segurança na corrida ----------
     // Chamado a cada quadro pelo laço do jogo. Só age se a qualidade atual é a recomendada automaticamente (a pessoa
-    // não mexeu). Janelas de 10 s de corrida: duas seguidas abaixo de ~42 FPS -> desce um nível, salva e avisa.
+    // não mexeu). Meta: 60 FPS. Janelas de 5 s de corrida: duas seguidas abaixo de ~54 FPS -> desce um nível, salva e avisa.
     perfTick(raw, racing) {
       const r = this.s && this.s.rec, g = this.s && this.s.gfx;
       if (!r || !r.auto || !racing || document.hidden || raw <= 0 || raw > 0.25 || g.preset !== r.preset) { if (!racing) this._pf = null; return; }
       const p = this._pf || (this._pf = { acc: 0, n: 0, bad: 0, skip: 1 });
       p.acc += raw; p.n++;
-      if (p.acc < 10) return;
+      if (p.acc < 5) return;
       const fps = p.n / p.acc; p.acc = 0; p.n = 0;
-      if (p.skip > 0) { p.skip--; return; }                          // ignora os primeiros 10 s (compilação, largada)
-      const cap = this.fpsCap(), want = cap ? Math.min(cap, 60) * 0.7 : 42;
+      if (p.skip > 0) { p.skip--; return; }                          // ignora os primeiros 5 s (compilação, largada)
+      const cap = this.fpsCap(), want = (cap ? Math.min(cap, 60) : 60) * 0.9;
       p.bad = fps < want ? p.bad + 1 : 0;
       if (p.bad < 2) return;
       const i = TIERS.indexOf(r.preset); if (i <= 0) { r.auto = false; this.save(); return; }
